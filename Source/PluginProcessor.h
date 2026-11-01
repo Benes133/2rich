@@ -64,6 +64,7 @@ public:
  }
  float getOutputPeak() const noexcept { return outputPeak.load(std::memory_order_relaxed); }
  double getHostTempoBpm() const noexcept { return hostTempoBpm.load(std::memory_order_relaxed); }
+ double getHostBeatsPerBar() const noexcept { return hostBeatsPerBar.load(std::memory_order_relaxed); }
 private:
  struct StepData { bool enabled = true; int pitch = 0; float velocity = 127.0f; float gate = 100.0f; bool accent = false; };
  struct UserPattern {
@@ -97,6 +98,7 @@ private:
  int delayWrite=0;
  double sampleRate=44100.0;
  std::atomic<double> hostTempoBpm{120.0};
+ std::atomic<double> hostBeatsPerBar{4.0};
  float fxLfoPhase=0.0f;
  float compressorEnvelope=0.0f;
  std::array<std::array<std::vector<float>, 2>, 6> fxDelayBuffers;
