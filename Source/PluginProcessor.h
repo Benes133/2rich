@@ -86,6 +86,9 @@ private:
  std::array<int, 6> fxDelayWrites{};
  std::array<std::array<std::array<float, 4>, 2>, 6> phaserStates{};
  std::array<std::array<float, 2>, 6> multibandLowStates{}, multibandMidStates{};
+ std::array<std::array<float, 2>, 6> pingToneStates{}, bitCrusherHeld{};
+ std::array<int, 6> bitCrusherCounter{};
+ std::array<std::array<std::array<float, 2>, 2>, 6> fxFilterStates{};
  std::array<float, 6> fxPhases{};
  float limiterGain=1.0f;
  std::atomic<float> outputPeak{0.0f};

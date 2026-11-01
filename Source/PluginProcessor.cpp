@@ -851,7 +851,49 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const float reverbRoom = value("fxReverbRoom");
     const float reverbDamping = value("fxReverbDamping");
     const float limiterCeiling = std::pow(10.0f, value("fxLimiterCeiling") / 20.0f);
-    const float limiterReleaseCoeff = (float)std::exp(-1.0 / (sampleRate * 0.060));
+    const float limiterInputGain = std::pow(10.0f, value("fxLimiterInput") / 20.0f);
+    const float limiterMix = juce::jlimit(0.0f, 1.0f, value("fxLimiterMix"));
+    const float limiterReleaseCoeff = (float)std::exp(-1.0 /
+        (sampleRate * juce::jmax(10.0f, value("fxLimiterRelease")) * 0.001));
+    const float satToneGain = std::pow(10.0f, value("fxSatTone") * 9.0f / 20.0f);
+    const float satMix = juce::jlimit(0.0f, 1.0f, value("fxSatMix"));
+    const float satToneCoeff = std::exp(-juce::MathConstants<float>::twoPi * 1100.0f / (float)sampleRate);
+    const float phaserFeedback = value("fxPhaserFeedback");
+    const float pingToneCutoff = juce::jmap(value("fxPingTone"), 650.0f, 18000.0f);
+    const float pingToneCoeff = std::exp(-juce::MathConstants<float>::twoPi * pingToneCutoff / (float)sampleRate);
+    const float chorusRate = value("fxChorusRate");
+    const float chorusDepth = value("fxChorusDepth");
+    const float chorusWidth = value("fxChorusWidth");
+    const float mbLowDrive = value("fxMbLow");
+    const float mbMidDrive = value("fxMbMid");
+    const float mbHighDrive = value("fxMbHigh");
+    const float mbMix = value("fxMbMix");
+    const float bitDepth = value("fxBitDepth");
+    const int bitRate = juce::jlimit(1, 32, (int)std::round(value("fxBitRate")));
+    const float bitMix = value("fxBitMix");
+    const float stereoWidth = value("fxStereoWidth");
+    const float stereoPan = value("fxStereoPan");
+    const float stereoMix = value("fxStereoMix");
+    const float tremRate = value("fxTremRate");
+    const float tremDepth = value("fxTremDepth");
+    const float tremStereoPhase = value("fxTremStereo") * juce::MathConstants<float>::pi / 180.0f;
+    const float tremMix = value("fxTremMix");
+    const float ringFrequency = value("fxRingFreq");
+    const float ringMix = value("fxRingMix");
+    const float ringStereoPhase = value("fxRingStereo") * juce::MathConstants<float>::pi / 180.0f;
+    const float filterCutoff = juce::jlimit(20.0f, (float)sampleRate * 0.45f, value("fxFilterCutoff"));
+    const float filterG = std::tan(juce::MathConstants<float>::pi * filterCutoff / (float)sampleRate);
+    const float filterK = 2.0f * (1.0f - value("fxFilterRes")) + 0.05f;
+    const float filterA1 = 1.0f / (1.0f + filterG * (filterG + filterK));
+    const float filterA2 = filterG * filterA1;
+    const float filterA3 = filterG * filterA2;
+    const int filterType = juce::jlimit(0, 2, (int)value("fxFilterType"));
+    const float filterMix = value("fxFilterMix");
+    const float flangerRate = value("fxFlangerRate");
+    const float flangerDepth = value("fxFlangerDepth");
+    const float flangerFeedback = value("fxFlangerFeedback");
+    const float flangerBaseSamples = value("fxFlangerTime") * (float)sampleRate * 0.001f;
+    const float flangerMix = value("fxFlangerMix");
     const float lowCoeff = std::exp(-juce::MathConstants<float>::twoPi * 180.0f / (float)sampleRate);
     const float midCoeff = std::exp(-juce::MathConstants<float>::twoPi * 2200.0f / (float)sampleRate);
 
@@ -886,7 +928,7 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             rp.damping = reverbDamping;
             rp.wetLevel = activeReverbMix * 0.42f;
             rp.dryLevel = 1.0f;
-            rp.width = 1.0f;
+            rp.width = value("fxReverbWidth");
             reverb.setParameters(rp);
             juce::dsp::AudioBlock<float> reverbBlock(buffer);
             reverb.process(juce::dsp::ProcessContextReplacing<float>(reverbBlock));
@@ -897,8 +939,10 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         const int slotSize = (int)slotBuffer[0].size();
         int& write = fxDelayWrites[(size_t)slot];
         for (int i = 0; i < samples; ++i) {
-            float left = buffer.getSample(0, i);
-            float right = buffer.getSample(1, i);
+            const float dryLeft = buffer.getSample(0, i);
+            const float dryRight = buffer.getSample(1, i);
+            float left = dryLeft;
+            float right = dryRight;
             switch (effect) {
                 case 1: { // Stereo-linked feed-forward compressor.
                     if (compressorEnabled) {
@@ -915,60 +959,73 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                     }
                     break;
                 }
-                case 2: { // Saturation.
-                    if (saturation > 0.001f) {
-                        left = std::tanh(left * saturationGain) / saturationNormaliser;
-                        right = std::tanh(right * saturationGain) / saturationNormaliser;
+                case 2: { // Saturation with tone tilt and parallel blend.
+                    for (int ch = 0; ch < 2; ++ch) {
+                        const float input = ch == 0 ? dryLeft : dryRight;
+                        auto& toneState = multibandLowStates[(size_t)slot][(size_t)ch];
+                        toneState = (1.0f - satToneCoeff) * input + satToneCoeff * toneState;
+                        const float toned = toneState + (input - toneState) * satToneGain;
+                        const float shaped = saturation > 0.001f
+                            ? std::tanh(toned * saturationGain) / saturationNormaliser : toned;
+                        const float output = juce::jmap(satMix, input, shaped);
+                        if (ch == 0) left = output;
+                        else right = output;
                     }
                     break;
                 }
-                case 3: { // Four cascaded all-pass stages with a swept centre.
+                case 3: { // Four cascaded all-pass stages with rate, depth and feedback.
                     const float lfo = 0.5f + 0.5f * std::sin(fxPhases[(size_t)slot]);
                     const float depth = juce::jlimit(0.0f, 1.0f, phaserMix);
                     const float coefficient = 0.12f + depth * (0.72f + 0.10f * lfo);
                     for (int ch = 0; ch < 2; ++ch) {
-                        float x = ch == 0 ? left : right;
+                        const float dry = ch == 0 ? dryLeft : dryRight;
+                        float x = dry + phaserStates[(size_t)slot][(size_t)ch][3] * phaserFeedback;
                         for (int stage = 0; stage < 4; ++stage) {
                             auto& z = phaserStates[(size_t)slot][(size_t)ch][(size_t)stage];
                             const float y = -coefficient * x + z;
                             z = x + coefficient * y;
                             x = y;
                         }
-                        if (ch == 0) left = juce::jmap(depth, left, x);
-                        else right = juce::jmap(depth, right, x);
+                        if (ch == 0) left = juce::jmap(depth, dry, x);
+                        else right = juce::jmap(depth, dry, x);
                     }
                     fxPhases[(size_t)slot] += juce::MathConstants<float>::twoPi * phaserRate / (float)sampleRate;
                     if (fxPhases[(size_t)slot] >= juce::MathConstants<float>::twoPi)
                         fxPhases[(size_t)slot] -= juce::MathConstants<float>::twoPi;
                     break;
                 }
-                case 4: { // Ping-pong delay: each side feeds the opposite channel.
+                case 4: { // Tone-shaped ping-pong delay.
                     const int tap = juce::jlimit(1, slotSize - 1, (int)pingTimeSamples);
                     const int read = (write - tap + slotSize) % slotSize;
-                    const float delayedLeft = slotBuffer[0][(size_t)read];
-                    const float delayedRight = slotBuffer[1][(size_t)read];
-                    slotBuffer[0][(size_t)write] = left + delayedRight * pingFeedback;
-                    slotBuffer[1][(size_t)write] = right + delayedLeft * pingFeedback;
-                    left = juce::jmap(activePingMix, left, delayedRight);
-                    right = juce::jmap(activePingMix, right, delayedLeft);
+                    const float rawLeft = slotBuffer[0][(size_t)read];
+                    const float rawRight = slotBuffer[1][(size_t)read];
+                    auto& toneLeft = pingToneStates[(size_t)slot][0];
+                    auto& toneRight = pingToneStates[(size_t)slot][1];
+                    toneLeft += (1.0f - pingToneCoeff) * (rawLeft - toneLeft);
+                    toneRight += (1.0f - pingToneCoeff) * (rawRight - toneRight);
+                    slotBuffer[0][(size_t)write] = dryLeft + toneRight * pingFeedback;
+                    slotBuffer[1][(size_t)write] = dryRight + toneLeft * pingFeedback;
+                    left = juce::jmap(activePingMix, dryLeft, toneRight);
+                    right = juce::jmap(activePingMix, dryRight, toneLeft);
                     write = (write + 1) % slotSize;
                     break;
                 }
-                case 6: { // Stereo chorus using a modulated delay.
+                case 6: { // Stereo chorus with independent rate, depth and width.
                     const float phase = fxPhases[(size_t)slot];
                     const float base = (float)sampleRate * 0.014f;
-                    const float swing = (float)sampleRate * 0.018f * (0.5f + 0.5f * std::sin(phase));
+                    const float swing = (float)sampleRate * 0.018f * chorusDepth
+                        * (0.5f + 0.5f * std::sin(phase));
                     const int tapL = juce::jlimit(1, slotSize - 1, (int)(base + swing));
                     const int tapR = juce::jlimit(1, slotSize - 1,
-                        (int)(base + swing * (0.5f + 0.5f * std::sin(phase + 1.2f))));
+                        (int)(base + swing * (0.5f + 0.5f * std::sin(phase + 0.6f + chorusWidth * 2.0f))));
                     const float delayedL = slotBuffer[0][(size_t)((write - tapL + slotSize) % slotSize)];
                     const float delayedR = slotBuffer[1][(size_t)((write - tapR + slotSize) % slotSize)];
-                    slotBuffer[0][(size_t)write] = left + delayedL * 0.12f;
-                    slotBuffer[1][(size_t)write] = right + delayedR * 0.12f;
-                    left = juce::jmap(activeChorusMix, left, left * 0.55f + delayedL * 0.45f);
-                    right = juce::jmap(activeChorusMix, right, right * 0.55f + delayedR * 0.45f);
+                    slotBuffer[0][(size_t)write] = dryLeft + delayedL * 0.12f;
+                    slotBuffer[1][(size_t)write] = dryRight + delayedR * 0.12f;
+                    left = juce::jmap(activeChorusMix, dryLeft, dryLeft * 0.55f + delayedL * 0.45f);
+                    right = juce::jmap(activeChorusMix, dryRight, dryRight * 0.55f + delayedR * 0.45f);
                     write = (write + 1) % slotSize;
-                    fxPhases[(size_t)slot] += juce::MathConstants<float>::twoPi * 0.23f / (float)sampleRate;
+                    fxPhases[(size_t)slot] += juce::MathConstants<float>::twoPi * chorusRate / (float)sampleRate;
                     if (fxPhases[(size_t)slot] >= juce::MathConstants<float>::twoPi)
                         fxPhases[(size_t)slot] -= juce::MathConstants<float>::twoPi;
                     break;
@@ -983,25 +1040,108 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                         const float lowBand = lowState;
                         const float midBand = midState - lowState;
                         const float highBand = input - midState;
-                        const float driveLow = 1.0f + saturation * 5.0f;
-                        const float driveMid = 1.0f + saturation * 10.0f;
-                        const float driveHigh = 1.0f + saturation * 7.0f;
+                        const float driveLow = 1.0f + saturation * mbLowDrive;
+                        const float driveMid = 1.0f + saturation * mbMidDrive;
+                        const float driveHigh = 1.0f + saturation * mbHighDrive;
                         const float shaped = std::tanh(lowBand * driveLow) * 0.45f
                             + std::tanh(midBand * driveMid) * 0.35f
                             + std::tanh(highBand * driveHigh) * 0.30f;
-                        if (ch == 0) left = juce::jmap(saturation, input, shaped);
-                        else right = juce::jmap(saturation, input, shaped);
+                        const float output = juce::jmap(mbMix, input, shaped);
+                        if (ch == 0) left = output;
+                        else right = output;
                     }
                     break;
                 }
-                case 8: { // Linked peak limiter with smoothed release.
-                    const float peak = juce::jmax(std::abs(left), std::abs(right));
+                case 8: { // Linked peak limiter with adjustable input, release and parallel mix.
+                    const float drivenLeft = dryLeft * limiterInputGain;
+                    const float drivenRight = dryRight * limiterInputGain;
+                    const float peak = juce::jmax(std::abs(drivenLeft), std::abs(drivenRight));
                     const float desired = peak > limiterCeiling
                         ? limiterCeiling / juce::jmax(peak, 1.0e-8f) : 1.0f;
                     if (desired < limiterGain) limiterGain = desired;
                     else limiterGain = limiterReleaseCoeff * limiterGain + (1.0f - limiterReleaseCoeff);
-                    left = juce::jlimit(-limiterCeiling, limiterCeiling, left * limiterGain);
-                    right = juce::jlimit(-limiterCeiling, limiterCeiling, right * limiterGain);
+                    const float limitedLeft = juce::jlimit(-limiterCeiling, limiterCeiling, drivenLeft * limiterGain);
+                    const float limitedRight = juce::jlimit(-limiterCeiling, limiterCeiling, drivenRight * limiterGain);
+                    left = juce::jmap(limiterMix, dryLeft, limitedLeft);
+                    right = juce::jmap(limiterMix, dryRight, limitedRight);
+                    break;
+                }
+                case 9: { // Bit depth and sample-rate reduction.
+                    if (bitCrusherCounter[(size_t)slot] <= 0) {
+                        const float levels = std::pow(2.0f, juce::jlimit(2.0f, 16.0f, bitDepth) - 1.0f);
+                        bitCrusherHeld[(size_t)slot][0] = std::round(juce::jlimit(-1.0f, 1.0f, dryLeft) * levels) / levels;
+                        bitCrusherHeld[(size_t)slot][1] = std::round(juce::jlimit(-1.0f, 1.0f, dryRight) * levels) / levels;
+                        bitCrusherCounter[(size_t)slot] = bitRate;
+                    }
+                    --bitCrusherCounter[(size_t)slot];
+                    left = juce::jmap(bitMix, dryLeft, bitCrusherHeld[(size_t)slot][0]);
+                    right = juce::jmap(bitMix, dryRight, bitCrusherHeld[(size_t)slot][1]);
+                    break;
+                }
+                case 10: { // Mid/side width with stereo balance.
+                    const float midSample = (dryLeft + dryRight) * 0.5f;
+                    const float sideSample = (dryLeft - dryRight) * 0.5f * stereoWidth;
+                    const float panLeft = stereoPan > 0.0f ? 1.0f - stereoPan : 1.0f;
+                    const float panRight = stereoPan < 0.0f ? 1.0f + stereoPan : 1.0f;
+                    left = juce::jmap(stereoMix, dryLeft, (midSample + sideSample) * panLeft);
+                    right = juce::jmap(stereoMix, dryRight, (midSample - sideSample) * panRight);
+                    break;
+                }
+                case 11: { // Stereo tremolo with phase offset.
+                    const float phase = fxPhases[(size_t)slot];
+                    const float modL = 1.0f - tremDepth * (0.5f + 0.5f * std::sin(phase));
+                    const float modR = 1.0f - tremDepth * (0.5f + 0.5f * std::sin(phase + tremStereoPhase));
+                    left = juce::jmap(tremMix, dryLeft, dryLeft * modL);
+                    right = juce::jmap(tremMix, dryRight, dryRight * modR);
+                    fxPhases[(size_t)slot] += juce::MathConstants<float>::twoPi * tremRate / (float)sampleRate;
+                    if (fxPhases[(size_t)slot] >= juce::MathConstants<float>::twoPi)
+                        fxPhases[(size_t)slot] -= juce::MathConstants<float>::twoPi;
+                    break;
+                }
+                case 12: { // Ring modulation with stereo phase.
+                    const float phase = fxPhases[(size_t)slot];
+                    const float modL = std::sin(phase);
+                    const float modR = std::sin(phase + ringStereoPhase);
+                    left = juce::jmap(ringMix, dryLeft, dryLeft * modL);
+                    right = juce::jmap(ringMix, dryRight, dryRight * modR);
+                    fxPhases[(size_t)slot] += juce::MathConstants<float>::twoPi * ringFrequency / (float)sampleRate;
+                    if (fxPhases[(size_t)slot] >= juce::MathConstants<float>::twoPi)
+                        fxPhases[(size_t)slot] -= juce::MathConstants<float>::twoPi;
+                    break;
+                }
+                case 13: { // Resonant state-variable low-pass, high-pass or band-pass filter.
+                    for (int ch = 0; ch < 2; ++ch) {
+                        const float input = ch == 0 ? dryLeft : dryRight;
+                        auto& state = fxFilterStates[(size_t)slot][(size_t)ch];
+                        const float v3 = input - state[1];
+                        const float v1 = filterA1 * state[0] + filterA2 * v3;
+                        const float v2 = state[1] + filterA2 * state[0] + filterA3 * v3;
+                        state[0] = 2.0f * v1 - state[0];
+                        state[1] = 2.0f * v2 - state[1];
+                        const float filtered = filterType == 0 ? v2 : (filterType == 1 ? input - filterK * v1 - v2 : v1);
+                        const float output = juce::jmap(filterMix, input, filtered);
+                        if (ch == 0) left = output;
+                        else right = output;
+                    }
+                    break;
+                }
+                case 14: { // Through-zero style flanger with variable feedback.
+                    const float phase = fxPhases[(size_t)slot];
+                    const float modulation = (float)sampleRate * 0.0045f * flangerDepth
+                        * (0.5f + 0.5f * std::sin(phase));
+                    const int tapL = juce::jlimit(1, slotSize - 1, (int)(flangerBaseSamples + modulation));
+                    const int tapR = juce::jlimit(1, slotSize - 1,
+                        (int)(flangerBaseSamples + modulation * (0.5f + 0.5f * std::sin(phase + 1.1f))));
+                    const float delayedL = slotBuffer[0][(size_t)((write - tapL + slotSize) % slotSize)];
+                    const float delayedR = slotBuffer[1][(size_t)((write - tapR + slotSize) % slotSize)];
+                    slotBuffer[0][(size_t)write] = dryLeft + delayedL * flangerFeedback;
+                    slotBuffer[1][(size_t)write] = dryRight + delayedR * flangerFeedback;
+                    left = juce::jmap(flangerMix, dryLeft, 0.5f * (dryLeft + delayedL));
+                    right = juce::jmap(flangerMix, dryRight, 0.5f * (dryRight + delayedR));
+                    write = (write + 1) % slotSize;
+                    fxPhases[(size_t)slot] += juce::MathConstants<float>::twoPi * flangerRate / (float)sampleRate;
+                    if (fxPhases[(size_t)slot] >= juce::MathConstants<float>::twoPi)
+                        fxPhases[(size_t)slot] -= juce::MathConstants<float>::twoPi;
                     break;
                 }
                 default: break;

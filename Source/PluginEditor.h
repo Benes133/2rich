@@ -28,6 +28,21 @@ private:
     juce::Slider fxEq, fxLow, fxMid, fxHigh, fxDist, fxChorus, fxFlange, fxDelay, fxReverb;
     juce::Slider fxCompThreshold, fxCompRatio, fxCompAttack, fxCompRelease, fxCompMakeup, fxCompMix;
     juce::Slider fxPhaserRate, fxPingTime, fxPingFeedback, fxReverbRoom, fxReverbDamping, fxLimiterCeiling;
+    enum FxExtraControl {
+        fxSatTone, fxSatMix, fxPhaserFeedback, fxPingTone, fxReverbWidth,
+        fxLimiterRelease, fxLimiterInput, fxLimiterMix,
+        fxMbLow, fxMbMid, fxMbHigh, fxMbMix,
+        fxBitDepth, fxBitRate, fxBitMix,
+        fxStereoWidth, fxStereoPan, fxStereoMix,
+        fxTremRate, fxTremDepth, fxTremStereo, fxTremMix,
+        fxRingFreq, fxRingMix, fxRingStereo,
+        fxFilterCutoff, fxFilterRes, fxFilterMix,
+        fxFlangerRate, fxFlangerDepth, fxFlangerFeedback, fxFlangerTime, fxFlangerMix,
+        fxChorusRate, fxChorusDepth, fxChorusWidth,
+        fxExtraCount
+    };
+    std::array<juce::Slider, fxExtraCount> fxExtraKnobs;
+    juce::ComboBox fxFilterTypeBox;
     std::array<juce::ComboBox, 6> fxSlots;
     std::array<juce::TextButton, 6> fxSlotSelectButtons, fxMoveUpButtons, fxMoveDownButtons;
     int selectedFxSlot = 0;

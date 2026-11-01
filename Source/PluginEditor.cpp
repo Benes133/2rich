@@ -17,11 +17,14 @@ public:
     void drawRotarySlider(juce::Graphics& g, int x, int y, int w, int h,
                           float sliderPos, float startAngle, float endAngle,
                           juce::Slider&) override {
-        const float size = juce::jmax(30.0f, (float)juce::jmin(w, h) - 24.0f);
-        const float cx = x + w * 0.5f, cy = y + h * 0.405f, radius = size * 0.5f;
+        // Keep the complete bezel, tick ring and glow inside the rotary drawing area.
+        const float side = (float)juce::jmin(w, h);
+        const float radius = juce::jmax(7.0f, side * 0.5f - 11.0f);
+        const float size = radius * 2.0f;
+        const float cx = x + w * 0.5f, cy = y + h * 0.5f;
         const float angle = startAngle + sliderPos * (endAngle - startAngle);
         g.setColour(juce::Colour(0xff08090d));
-        g.fillEllipse(cx-radius-3.0f,cy-radius-3.0f,size+6.0f,size+6.0f);
+        g.fillEllipse(cx-radius-1.5f,cy-radius-1.5f,size+3.0f,size+3.0f);
         juce::ColourGradient bezel(juce::Colour(0xff858892),cx,cy-radius,
                                    juce::Colour(0xff20232a),cx,cy+radius,false);
         g.setGradientFill(bezel);
@@ -30,19 +33,19 @@ public:
         g.drawEllipse(cx-radius+1,cy-radius+1,size-2,size-2,1.0f);
         for(int i=0;i<=24;++i){
             const float a=startAngle+(float)i/24.0f*(endAngle-startAngle);
-            const float inner=radius+5.0f, outer=inner+(i%3==0?5.0f:2.5f);
+            const float inner=radius+2.0f, outer=inner+(i%3==0?3.5f:2.0f);
             juce::Path tick;
             tick.startNewSubPath(cx+std::cos(a)*inner,cy+std::sin(a)*inner);
             tick.lineTo(cx+std::cos(a)*outer,cy+std::sin(a)*outer);
             g.setColour((float)i/24.0f<=sliderPos?violetHi:juce::Colour(0xff77737f).withAlpha(0.8f));
-            g.strokePath(tick,juce::PathStrokeType(i%3==0?1.5f:0.8f));
+            g.strokePath(tick,juce::PathStrokeType(i%3==0?1.35f:0.8f));
         }
         juce::Path arc;
-        arc.addCentredArc(cx,cy,radius+7.0f,radius+7.0f,0.0f,startAngle,angle,true);
+        arc.addCentredArc(cx,cy,radius+3.0f,radius+3.0f,0.0f,startAngle,angle,true);
         g.setColour(violet.withAlpha(0.18f));
-        g.strokePath(arc,juce::PathStrokeType(5.0f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+        g.strokePath(arc,juce::PathStrokeType(3.5f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
         g.setColour(violetHi);
-        g.strokePath(arc,juce::PathStrokeType(2.0f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+        g.strokePath(arc,juce::PathStrokeType(1.7f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
         juce::ColourGradient cap(juce::Colour(0xff5b606b),cx-radius*0.35f,cy-radius*0.75f,
                                  juce::Colour(0xff171a22),cx+radius*0.45f,cy+radius*0.85f,false);
         g.setGradientFill(cap);
@@ -50,12 +53,12 @@ public:
         g.setColour(juce::Colour(0xffc1c3cb).withAlpha(0.3f));
         g.drawEllipse(cx-radius+7,cy-radius+7,size-14,size-14,1.0f);
         juce::Path pointer;
-        pointer.addRoundedRectangle(-1.5f,-radius+10.0f,3.0f,radius*0.46f,1.2f);
+        pointer.addRoundedRectangle(-1.35f,-radius+8.0f,2.7f,radius*0.45f,1.1f);
         g.setColour(juce::Colour(0xff07090e).withAlpha(0.7f));
         g.fillPath(pointer,juce::AffineTransform::rotation(angle+0.04f).translated(cx+1,cy+1));
         g.setColour(juce::Colour(0xfff5efff));
         g.fillPath(pointer,juce::AffineTransform::rotation(angle).translated(cx,cy));
-        g.setColour(violetHi); g.fillEllipse(cx-2.2f,cy-2.2f,4.4f,4.4f);
+        g.setColour(violetHi); g.fillEllipse(cx-2.0f,cy-2.0f,4.0f,4.0f);
     }
 
     void drawButtonBackground(juce::Graphics& g, juce::Button& button,
@@ -297,7 +300,8 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addChoice(oscModeBox, { "Classic", "FM", "Ring Mod", "Hard Sync", "Super Saw" }, "oscMode");
     addChoice(filterTypeBox, { "Low Pass", "Band Pass", "High Pass" }, "filterType");
     const juce::StringArray fxTypeNames = { "Off", "Compressor", "Saturation", "Phaser",
-        "Ping-Pong", "Reverb", "Chorus", "Multiband Dist.", "Limiter" };
+        "Ping-Pong", "Reverb", "Chorus", "Multiband Dist.", "Limiter",
+        "Bitcrusher", "Stereo Width", "Tremolo", "Ring Mod", "Filter", "Flanger" };
     auto moveFxSlot = [this](int index, int direction) {
         const int other = index + direction;
         if (other < 0 || other >= 6) return;
@@ -393,7 +397,13 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
     }
     addExtra(fxEq,"fxEq","EQ MIX"); addExtra(fxLow,"fxLow","LOW"); addExtra(fxMid,"fxMid","MID"); addExtra(fxHigh,"fxHigh","HIGH");
-    addExtra(fxDist,"fxDist","SATURATION"); addExtra(fxChorus,"fxChorus","CHORUS"); addExtra(fxFlange,"fxFlange","FLANGER"); addExtra(fxDelay,"fxDelay","DELAY"); addExtra(fxReverb,"fxReverb","REVERB");
+    for (auto* slider : { &fxEq, &fxLow, &fxMid, &fxHigh }) {
+        slider->setSliderStyle(juce::Slider::LinearHorizontal);
+        slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 18);
+        slider->setColour(juce::Slider::trackColourId, violet);
+        slider->setColour(juce::Slider::thumbColourId, violetHi);
+    }
+    addExtra(fxDist,"fxDist","DRIVE"); addExtra(fxChorus,"fxChorus","MIX"); addExtra(fxFlange,"fxFlange","DEPTH"); addExtra(fxDelay,"fxDelay","MIX"); addExtra(fxReverb,"fxReverb","MIX");
     addExtra(fxCompThreshold,"fxCompThreshold","THRESHOLD");
     addExtra(fxCompRatio,"fxCompRatio","RATIO");
     addExtra(fxCompAttack,"fxCompAttack","ATTACK");
@@ -406,6 +416,24 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addExtra(fxReverbRoom,"fxReverbRoom","ROOM SIZE");
     addExtra(fxReverbDamping,"fxReverbDamping","DAMPING");
     addExtra(fxLimiterCeiling,"fxLimiterCeiling","CEILING");
+
+    const std::array<std::array<const char*, 2>, fxExtraCount> fxExtraDefinitions {{
+        { "fxSatTone", "TONE" }, { "fxSatMix", "MIX" }, { "fxPhaserFeedback", "FEEDBACK" },
+        { "fxPingTone", "TONE" }, { "fxReverbWidth", "WIDTH" },
+        { "fxLimiterRelease", "RELEASE" }, { "fxLimiterInput", "INPUT" }, { "fxLimiterMix", "MIX" },
+        { "fxMbLow", "LOW DRIVE" }, { "fxMbMid", "MID DRIVE" }, { "fxMbHigh", "HIGH DRIVE" }, { "fxMbMix", "MIX" },
+        { "fxBitDepth", "BIT DEPTH" }, { "fxBitRate", "RATE REDUCE" }, { "fxBitMix", "MIX" },
+        { "fxStereoWidth", "WIDTH" }, { "fxStereoPan", "BALANCE" }, { "fxStereoMix", "MIX" },
+        { "fxTremRate", "RATE" }, { "fxTremDepth", "DEPTH" }, { "fxTremStereo", "STEREO PHASE" }, { "fxTremMix", "MIX" },
+        { "fxRingFreq", "FREQUENCY" }, { "fxRingMix", "MIX" }, { "fxRingStereo", "STEREO" },
+        { "fxFilterCutoff", "CUTOFF" }, { "fxFilterRes", "RESONANCE" }, { "fxFilterMix", "MIX" },
+        { "fxFlangerRate", "RATE" }, { "fxFlangerDepth", "DEPTH" }, { "fxFlangerFeedback", "FEEDBACK" },
+        { "fxFlangerTime", "TIME" }, { "fxFlangerMix", "MIX" },
+        { "fxChorusRate", "RATE" }, { "fxChorusDepth", "DEPTH" }, { "fxChorusWidth", "WIDTH" }
+    }};
+    for (size_t i = 0; i < fxExtraKnobs.size(); ++i)
+        addExtra(fxExtraKnobs[i], fxExtraDefinitions[i][0], fxExtraDefinitions[i][1]);
+    addChoice(fxFilterTypeBox, { "Low Pass", "High Pass", "Band Pass" }, "fxFilterType");
 
     addExtra(lfo1Rate,"lfo1Rate","RATE"); addExtra(lfo2Rate,"lfo2Rate","RATE");
     addExtra(lfo3Rate,"lfo3Rate","RATE");
@@ -523,6 +551,8 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
 AuroraEditor::~AuroraEditor() {
     for (const auto* id : { "wave1", "wave2", "wtTable", "wtPosition" })
         proc.params.removeParameterListener(id, this);
+    for (auto& slider : fxExtraKnobs)
+        slider.setLookAndFeel(nullptr);
     for (auto* slider : { &mix, &detune, &sub, &cutoff, &res, &attack, &decay, &sustain,
                           &release, &master, &drive, &width, &wtPosition, &unison, &uniDetune,
                           &uniSpread, &fmAmount, &syncRatio, &fxEq, &fxLow, &fxMid, &fxHigh, &fxDist, &fxChorus,
@@ -543,6 +573,7 @@ AuroraEditor::~AuroraEditor() {
         button->setLookAndFeel(nullptr);
     fxCompEnabledButton.setLookAndFeel(nullptr);
     lfo1Shape.setLookAndFeel(nullptr); lfo2Shape.setLookAndFeel(nullptr); lfo3Shape.setLookAndFeel(nullptr);
+    fxFilterTypeBox.setLookAndFeel(nullptr);
     oscModeBox.setLookAndFeel(nullptr); filterTypeBox.setLookAndFeel(nullptr);
     importWavetableButton.setLookAndFeel(nullptr); clearWavetableButton.setLookAndFeel(nullptr);
     wavetableChooser.reset();
@@ -832,27 +863,43 @@ void AuroraEditor::updateFxEditor() {
             &fxPingFeedback, &fxReverbRoom, &fxReverbDamping,
             &fxLimiterCeiling, &fxCompEnabledButton })
         component->setVisible(false);
+    for (auto& knob : fxExtraKnobs) knob.setVisible(false);
+    fxFilterTypeBox.setVisible(false);
 
     for (int i = 0; i < 6; ++i)
         fxSlotSelectButtons[(size_t)i].setToggleState(i == selectedFxSlot, juce::dontSendNotification);
 
     if (!fxPage) return;
 
-    const int effect = juce::jlimit(0, 8, fxSlots[(size_t)selectedFxSlot].getSelectedId() - 1);
+    const int effect = juce::jlimit(0, 14, fxSlots[(size_t)selectedFxSlot].getSelectedId() - 1);
     auto show = [](std::initializer_list<juce::Component*> components) {
         for (auto* component : components) component->setVisible(true);
     };
 
+    auto showExtra = [&](std::initializer_list<int> indices) {
+        for (const int index : indices)
+            if (index >= 0 && index < fxExtraCount)
+                fxExtraKnobs[(size_t)index].setVisible(true);
+    };
     switch (effect) {
         case 1: show({ &fxCompEnabledButton, &fxCompThreshold, &fxCompRatio, &fxCompAttack,
                        &fxCompRelease, &fxCompMakeup, &fxCompMix }); break;
-        case 2: show({ &fxDist }); break;
-        case 3: show({ &fxPhaserRate, &fxFlange }); break;
-        case 4: show({ &fxPingTime, &fxPingFeedback, &fxDelay }); break;
-        case 5: show({ &fxReverbRoom, &fxReverbDamping, &fxReverb }); break;
-        case 6: show({ &fxChorus }); break;
-        case 7: show({ &fxDist }); break;
-        case 8: show({ &fxLimiterCeiling }); break;
+        case 2: show({ &fxDist }); showExtra({ fxSatTone, fxSatMix }); break;
+        case 3: show({ &fxPhaserRate, &fxFlange }); showExtra({ fxPhaserFeedback }); break;
+        case 4: show({ &fxPingTime, &fxPingFeedback, &fxDelay }); showExtra({ fxPingTone }); break;
+        case 5: show({ &fxReverbRoom, &fxReverbDamping, &fxReverb }); showExtra({ fxReverbWidth }); break;
+        case 6: show({ &fxChorus }); showExtra({ fxChorusRate, fxChorusDepth, fxChorusWidth }); break;
+        case 7: show({ &fxDist }); showExtra({ fxMbLow, fxMbMid, fxMbHigh, fxMbMix }); break;
+        case 8: show({ &fxLimiterCeiling }); showExtra({ fxLimiterInput, fxLimiterRelease, fxLimiterMix }); break;
+        case 9: showExtra({ fxBitDepth, fxBitRate, fxBitMix }); break;
+        case 10: showExtra({ fxStereoWidth, fxStereoPan, fxStereoMix }); break;
+        case 11: showExtra({ fxTremRate, fxTremDepth, fxTremStereo, fxTremMix }); break;
+        case 12: showExtra({ fxRingFreq, fxRingStereo, fxRingMix }); break;
+        case 13:
+            showExtra({ fxFilterCutoff, fxFilterRes, fxFilterMix });
+            fxFilterTypeBox.setVisible(true);
+            break;
+        case 14: showExtra({ fxFlangerRate, fxFlangerDepth, fxFlangerFeedback, fxFlangerTime, fxFlangerMix }); break;
         default: break;
     }
 }
@@ -1019,7 +1066,8 @@ void AuroraEditor::paint(juce::Graphics& g) {
 
         label(48,194,264,"PROCESSING ORDER");
         const juce::StringArray fxNames = { "OFF", "COMPRESSOR", "SATURATION", "PHASER",
-            "PING-PONG DELAY", "REVERB", "CHORUS", "MULTIBAND DIST.", "LIMITER" };
+            "PING-PONG DELAY", "REVERB", "CHORUS", "MULTIBAND DIST.", "LIMITER",
+            "BITCRUSHER", "STEREO WIDTH", "TREMOLO", "RING MOD", "FILTER", "FLANGER" };
         for (int i = 0; i < 6; ++i) {
             const int rowY = 208 + i * 70;
             const bool selected = i == selectedFxSlot;
@@ -1036,13 +1084,16 @@ void AuroraEditor::paint(juce::Graphics& g) {
                        48, rowY - 13, 110, 11, juce::Justification::centredLeft);
         }
 
-        const int effect = juce::jlimit(0, 8, fxSlots[(size_t)selectedFxSlot].getSelectedId() - 1);
+        const int effect = juce::jlimit(0, 14, fxSlots[(size_t)selectedFxSlot].getSelectedId() - 1);
         const juce::String selectedName = fxNames[effect];
         g.setColour(violetHi);
         g.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
         g.drawText("INSERT " + juce::String::formatted("%02d", selectedFxSlot + 1)
                    + "  /  " + selectedName, 374, 207, 760, 24, juce::Justification::centredLeft);
 
+        auto fxLabel = [&](int column, const juce::String& text) {
+            label(370 + column * 126, 286, 110, text);
+        };
         switch (effect) {
             case 0:
                 g.setColour(muted); g.setFont(juce::Font(juce::FontOptions(11.0f)));
@@ -1050,18 +1101,24 @@ void AuroraEditor::paint(juce::Graphics& g) {
                                  380, 330, 740, 42, juce::Justification::centred, 1);
                 break;
             case 1:
-                label(370,286,110,"THRESHOLD");label(496,286,110,"RATIO");label(622,286,110,"ATTACK");
-                label(748,286,110,"RELEASE");label(874,286,110,"MAKEUP");label(1000,286,110,"MIX"); break;
-            case 2: label(660,286,140,"DRIVE"); break;
-            case 3: label(520,286,140,"RATE");label(690,286,140,"DEPTH"); break;
-            case 4: label(450,286,125,"TIME");label(595,286,125,"FEEDBACK");label(740,286,125,"MIX"); break;
-            case 5: label(450,286,125,"ROOM SIZE");label(595,286,125,"DAMPING");label(740,286,125,"MIX"); break;
-            case 6: label(660,286,140,"MIX"); break;
-            case 7: label(660,286,140,"DRIVE"); break;
-            case 8: label(660,286,140,"CEILING"); break;
+                fxLabel(0,"THRESHOLD");fxLabel(1,"RATIO");fxLabel(2,"ATTACK");
+                fxLabel(3,"RELEASE");fxLabel(4,"MAKEUP");fxLabel(5,"MIX"); break;
+            case 2: fxLabel(0,"DRIVE");fxLabel(1,"TONE");fxLabel(2,"MIX"); break;
+            case 3: fxLabel(0,"RATE");fxLabel(1,"DEPTH");fxLabel(2,"FEEDBACK"); break;
+            case 4: fxLabel(0,"TIME");fxLabel(1,"FEEDBACK");fxLabel(2,"TONE");fxLabel(3,"MIX"); break;
+            case 5: fxLabel(0,"ROOM SIZE");fxLabel(1,"DAMPING");fxLabel(2,"MIX");fxLabel(3,"WIDTH"); break;
+            case 6: fxLabel(0,"RATE");fxLabel(1,"DEPTH");fxLabel(2,"WIDTH");fxLabel(3,"MIX"); break;
+            case 7: fxLabel(0,"DRIVE");fxLabel(1,"LOW DRIVE");fxLabel(2,"MID DRIVE");fxLabel(3,"HIGH DRIVE");fxLabel(4,"MIX"); break;
+            case 8: fxLabel(0,"INPUT");fxLabel(1,"CEILING");fxLabel(2,"RELEASE");fxLabel(3,"MIX"); break;
+            case 9: fxLabel(0,"BIT DEPTH");fxLabel(1,"RATE REDUCE");fxLabel(2,"MIX"); break;
+            case 10: fxLabel(0,"WIDTH");fxLabel(1,"BALANCE");fxLabel(2,"MIX"); break;
+            case 11: fxLabel(0,"RATE");fxLabel(1,"DEPTH");fxLabel(2,"STEREO PHASE");fxLabel(3,"MIX"); break;
+            case 12: fxLabel(0,"FREQUENCY");fxLabel(1,"STEREO");fxLabel(2,"MIX"); break;
+            case 13: fxLabel(0,"CUTOFF");fxLabel(1,"RESONANCE");fxLabel(2,"TYPE");fxLabel(3,"MIX"); break;
+            case 14: fxLabel(0,"RATE");fxLabel(1,"DEPTH");fxLabel(2,"FEEDBACK");fxLabel(3,"TIME");fxLabel(4,"MIX"); break;
             default: break;
         }
-        label(422,626,126,"EQ MIX");label(592,626,126,"LOW");label(762,626,126,"MID");label(932,626,126,"HIGH");
+        label(420,636,150,"EQ AMOUNT");label(600,636,150,"LOW");label(780,636,150,"MID");label(960,636,150,"HIGH");
     }
     g.setColour(juce::Colour(0xff9398a3).withAlpha(0.28f));g.drawLine(32,778,1168,778,0.8f);
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(7.8f,juce::Font::bold)));
@@ -1114,7 +1171,7 @@ void AuroraEditor::resized() {
     place(seqPageBox,{930,620,100,28});place(seqPatternSlotBox,{1040,620,110,28});
     place(savePatternButton,{930,652,100,28});place(loadPatternButton,{1040,652,110,28});place(patternStatusLabel,{930,690,220,18});
 
-    // FX rack: ordered inserts at left, selected module editor at right.
+    // FX rack: safe, roomy rotary bounds and compact horizontal master-EQ faders.
     for (int i = 0; i < 6; ++i) {
         const int y = 214 + i * 70;
         place(fxSlotSelectButtons[(size_t)i], {48,y,28,32});
@@ -1122,16 +1179,37 @@ void AuroraEditor::resized() {
         place(fxMoveUpButtons[(size_t)i], {238,y,23,32});
         place(fxMoveDownButtons[(size_t)i], {265,y,23,32});
     }
+    const int fxColumnX[6] = { 370, 496, 622, 748, 874, 1000 };
+    auto placeFxKnob = [&](juce::Slider& slider, int column) {
+        place(slider, {fxColumnX[column], 316, 110, 182});
+    };
     place(fxCompEnabledButton,{370,238,180,28});
-    place(fxCompThreshold,{370,318,110,156});place(fxCompRatio,{496,318,110,156});
-    place(fxCompAttack,{622,318,110,156});place(fxCompRelease,{748,318,110,156});
-    place(fxCompMakeup,{874,318,110,156});place(fxCompMix,{1000,318,110,156});
-    place(fxDist,{660,318,140,156});
-    place(fxPhaserRate,{520,318,140,156});place(fxFlange,{690,318,140,156});
-    place(fxPingTime,{450,318,125,156});place(fxPingFeedback,{595,318,125,156});place(fxDelay,{740,318,125,156});
-    place(fxReverbRoom,{450,318,125,156});place(fxReverbDamping,{595,318,125,156});place(fxReverb,{740,318,125,156});
-    place(fxChorus,{660,318,140,156});place(fxLimiterCeiling,{660,318,140,156});
-    place(fxEq,{422,644,126,76});place(fxLow,{592,644,126,76});
-    place(fxMid,{762,644,126,76});place(fxHigh,{932,644,126,76});
+    placeFxKnob(fxCompThreshold,0);placeFxKnob(fxCompRatio,1);placeFxKnob(fxCompAttack,2);
+    placeFxKnob(fxCompRelease,3);placeFxKnob(fxCompMakeup,4);placeFxKnob(fxCompMix,5);
+
+    placeFxKnob(fxDist,0);placeFxKnob(fxExtraKnobs[(size_t)fxSatTone],1);placeFxKnob(fxExtraKnobs[(size_t)fxSatMix],2);
+    placeFxKnob(fxPhaserRate,0);placeFxKnob(fxFlange,1);placeFxKnob(fxExtraKnobs[(size_t)fxPhaserFeedback],2);
+    placeFxKnob(fxPingTime,0);placeFxKnob(fxPingFeedback,1);placeFxKnob(fxExtraKnobs[(size_t)fxPingTone],2);placeFxKnob(fxDelay,3);
+    placeFxKnob(fxReverbRoom,0);placeFxKnob(fxReverbDamping,1);placeFxKnob(fxReverb,2);placeFxKnob(fxExtraKnobs[(size_t)fxReverbWidth],3);
+    placeFxKnob(fxExtraKnobs[(size_t)fxChorusRate],0);placeFxKnob(fxExtraKnobs[(size_t)fxChorusDepth],1);
+    placeFxKnob(fxExtraKnobs[(size_t)fxChorusWidth],2);placeFxKnob(fxChorus,3);
+    placeFxKnob(fxDist,0);placeFxKnob(fxExtraKnobs[(size_t)fxMbLow],1);placeFxKnob(fxExtraKnobs[(size_t)fxMbMid],2);
+    placeFxKnob(fxExtraKnobs[(size_t)fxMbHigh],3);placeFxKnob(fxExtraKnobs[(size_t)fxMbMix],4);
+    placeFxKnob(fxExtraKnobs[(size_t)fxLimiterInput],0);placeFxKnob(fxLimiterCeiling,1);
+    placeFxKnob(fxExtraKnobs[(size_t)fxLimiterRelease],2);placeFxKnob(fxExtraKnobs[(size_t)fxLimiterMix],3);
+
+    placeFxKnob(fxExtraKnobs[(size_t)fxBitDepth],0);placeFxKnob(fxExtraKnobs[(size_t)fxBitRate],1);placeFxKnob(fxExtraKnobs[(size_t)fxBitMix],2);
+    placeFxKnob(fxExtraKnobs[(size_t)fxStereoWidth],0);placeFxKnob(fxExtraKnobs[(size_t)fxStereoPan],1);placeFxKnob(fxExtraKnobs[(size_t)fxStereoMix],2);
+    placeFxKnob(fxExtraKnobs[(size_t)fxTremRate],0);placeFxKnob(fxExtraKnobs[(size_t)fxTremDepth],1);
+    placeFxKnob(fxExtraKnobs[(size_t)fxTremStereo],2);placeFxKnob(fxExtraKnobs[(size_t)fxTremMix],3);
+    placeFxKnob(fxExtraKnobs[(size_t)fxRingFreq],0);placeFxKnob(fxExtraKnobs[(size_t)fxRingStereo],1);placeFxKnob(fxExtraKnobs[(size_t)fxRingMix],2);
+    placeFxKnob(fxExtraKnobs[(size_t)fxFilterCutoff],0);placeFxKnob(fxExtraKnobs[(size_t)fxFilterRes],1);
+    placeFxKnob(fxExtraKnobs[(size_t)fxFilterMix],3);place(fxFilterTypeBox,{622,382,110,30});
+    placeFxKnob(fxExtraKnobs[(size_t)fxFlangerRate],0);placeFxKnob(fxExtraKnobs[(size_t)fxFlangerDepth],1);
+    placeFxKnob(fxExtraKnobs[(size_t)fxFlangerFeedback],2);placeFxKnob(fxExtraKnobs[(size_t)fxFlangerTime],3);
+    placeFxKnob(fxExtraKnobs[(size_t)fxFlangerMix],4);
+
+    place(fxEq,{420,660,150,28});place(fxLow,{600,660,150,28});
+    place(fxMid,{780,660,150,28});place(fxHigh,{960,660,150,28});
 }
 
