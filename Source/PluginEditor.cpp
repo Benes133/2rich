@@ -1616,19 +1616,14 @@ void AuroraEditor::paint(juce::Graphics& g) {
             default: break;
         }
         label(420,636,150,"EQ AMOUNT");label(600,636,150,"LOW");label(780,636,150,"MID");label(960,636,150,"HIGH");
-    } else {
-        panel(32,128,1136,598,"SAMPLE LAB","AUDIO SLICER  /  KEY DETECTION  /  GRANULAR ENGINE");
-        label(52,190,180,"AUDIO SOURCE");
-        label(250,190,870,"FILE / KEY ANALYSIS / AUTOMATIC SLICE COUNT");
-        label(52,258,220,"PLAYBACK ENGINE");
-        label(310,258,210,"ROOT NOTE  /  AUTO KEY");
-        label(550,258,200,"SAMPLE LEVEL");
-        label(800,258,250,"SLICE TRIGGER MAP");
-        label(52,507,110,"GRAIN SIZE");
-        label(178,507,110,"DENSITY");
-        label(304,507,110,"POSITION");
-        label(430,507,110,"SPRAY");
-        label(556,507,110,"PITCH");
+    } else if (currentPage == 3) {
+        panel(32,128,1136,598,"SAMPLER","PITCH TRACKING  /  TRANSIENT SLICING  /  HOST TEMPO MATCH");
+        label(52,190,180,"SOURCE AUDIO");
+        label(390,190,700,"DETECTED ROOT / SOURCE TEMPO / SLICE MAP");
+        label(52,245,170,"PLAYBACK OPTIONS");
+        label(52,504,160,"PITCH & GAIN");
+        label(52,636,160,"TRIM & SLICE DETAIL");
+        label(750,504,360,"SYNC WINDOW / FINE TUNING");
 
         juce::ColourGradient sampleScreen(juce::Colour(0xff080d13),52,330,
                                            juce::Colour(0xff151c27),52,480,false);
@@ -1644,38 +1639,97 @@ void AuroraEditor::paint(juce::Graphics& g) {
         g.setColour(juce::Colour(0xff8793a2).withAlpha(0.28f));
         g.drawLine(60,405,1140,405,0.7f);
         if (const auto sample = proc.getSampleAsset(); sample && !sample->thumbnail.empty()) {
-            const float centerY = 405.0f;
+            const int totalSamples = juce::jmax(1,(int)sample->left.size());
             for (size_t i = 0; i < sample->thumbnail.size(); ++i) {
                 const float x = 60.0f + (float)i * 1078.0f / (float)sample->thumbnail.size();
                 const float amplitude = juce::jlimit(0.0f,1.0f,sample->thumbnail[i]) * 61.0f;
-                g.setColour(violetHi.withAlpha(0.72f));
-                g.drawLine(x,centerY-amplitude,x,centerY+amplitude,1.0f);
+                g.setColour(violetHi.withAlpha(0.78f));
+                g.drawLine(x,405.0f-amplitude,x,405.0f+amplitude,1.0f);
             }
-            const int totalSamples = juce::jmax(1,(int)sample->left.size());
             for (size_t slice = 1; slice + 1 < sample->sliceStarts.size(); ++slice) {
                 const float x = 60.0f + (float)sample->sliceStarts[slice] * 1078.0f / (float)totalSamples;
-                g.setColour(neon.withAlpha(0.9f));
+                g.setColour(neon.withAlpha(0.88f));
                 g.drawLine(x,337,x,473,1.0f);
                 g.fillEllipse(x-2.5f,334.5f,5.0f,5.0f);
             }
-            g.setColour(white);
-            g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
-            g.drawText(sample->keyName + "  /  " + juce::String(sample->sliceStarts.size()-1)
-                       + " SLICES  /  MIDI C2 AND UP",68,336,500,12,
-                       juce::Justification::centredLeft);
+            g.setColour(white);g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
+            g.drawText(sample->keyName + "  /  " + juce::String(sample->sourceBpm,1)
+                       + " BPM  /  " + juce::String(sample->sliceStarts.size()-1) + " SLICES",
+                       68,336,500,12,juce::Justification::centredLeft);
         } else {
-            g.setColour(muted);
-            g.setFont(juce::Font(juce::FontOptions(12.0f,juce::Font::bold)));
-            g.drawFittedText("DROP A LOOP, VOCAL, DRUM BREAK OR FULL SONG HERE VIA LOAD AUDIO",
+            g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(12.0f,juce::Font::bold)));
+            g.drawFittedText("LOAD A LOOP, VOCAL, DRUM BREAK OR FULL TRACK TO BEGIN",
                              80,385,1040,36,juce::Justification::centred,1);
         }
         g.setColour(juce::Colour(0xffa1a5ae).withAlpha(0.22f));
         g.drawLine(52,492,1148,492,0.8f);
-        g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.0f)));
-        g.drawFittedText("GRANULAR: overlapping windowed grains with position, density, size, spray and pitch controls. "
-                         "SAMPLER: MIDI slices from C2; detected root note sets pitch tracking.",
-                         690,540,450,100,juce::Justification::centredLeft,3);
+        g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(8.2f)));
+        g.drawFittedText("PRESERVE PITCH uses overlapping windows for basic tempo fitting. Disable it for classic varispeed playback. "
+                         "Target key is selectable because the standard JUCE VST3 playhead does not report the DAW key signature.",
+                         740,674,390,42,juce::Justification::centredLeft,3);
+    } else if (currentPage == 4) {
+        panel(32,128,1136,598,"GRANULAR ENGINE","GRAIN CLOUD SYNTHESIS  /  TEMPO-LOCKED WINDOWS  /  DEDICATED PATCHES");
+        label(52,190,180,"SOURCE AUDIO");
+        label(390,190,700,"DETECTED ROOT / SOURCE TEMPO / ACTIVE SLICES");
+        label(52,245,170,"GRAIN PLAYBACK");
+        label(52,504,160,"GRAIN SHAPE");
+        label(52,636,160,"PITCH & MOTION");
+
+        juce::ColourGradient grainScreen(juce::Colour(0xff080d13),52,330,
+                                          juce::Colour(0xff151c27),52,480,false);
+        g.setGradientFill(grainScreen);
+        g.fillRoundedRectangle(52,330,1096,150,6);
+        g.setColour(juce::Colour(0xff778393).withAlpha(0.55f));
+        g.drawRoundedRectangle(52.5f,330.5f,1095,149,6,0.8f);
+        for(int i=1;i<16;++i){
+            const float gx=52.0f+(float)i*1096.0f/16.0f;
+            g.setColour(juce::Colour(0xff8793a2).withAlpha(0.16f));
+            g.drawLine(gx,340,gx,470,0.55f);
+        }
+        g.setColour(juce::Colour(0xff8793a2).withAlpha(0.28f));
+        g.drawLine(60,405,1140,405,0.7f);
+        if (const auto sample = proc.getSampleAsset(); sample && !sample->thumbnail.empty()) {
+            const int totalSamples = juce::jmax(1,(int)sample->left.size());
+            for (size_t i = 0; i < sample->thumbnail.size(); ++i) {
+                const float x = 60.0f + (float)i * 1078.0f / (float)sample->thumbnail.size();
+                const float amplitude = juce::jlimit(0.0f,1.0f,sample->thumbnail[i]) * 61.0f;
+                g.setColour(violetHi.withAlpha(0.65f));
+                g.drawLine(x,405.0f-amplitude,x,405.0f+amplitude,1.0f);
+            }
+            g.setColour(neon.withAlpha(0.85f));
+            const float position = (float)grainPosition.getValue();
+            const float cursorX = 60.0f + position * 1078.0f;
+            g.drawLine(cursorX,337,cursorX,473,1.5f);
+            g.fillEllipse(cursorX-3.0f,334.0f,6.0f,6.0f);
+            g.setColour(white);g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
+            g.drawText(sample->keyName + "  /  " + juce::String(sample->sourceBpm,1)
+                       + " BPM  /  GRAIN SOURCE POSITION " + juce::String(position*100.0f,1) + "%",
+                       68,336,650,12,juce::Justification::centredLeft);
+        } else {
+            g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(12.0f,juce::Font::bold)));
+            g.drawFittedText("LOAD AUDIO IN SAMPLER OR HERE TO CREATE A GRAIN CLOUD",
+                             80,385,1040,36,juce::Justification::centred,1);
+        }
+        g.setColour(juce::Colour(0xffa1a5ae).withAlpha(0.22f));
+        g.drawLine(52,492,1148,492,0.8f);
+        g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(8.2f)));
+        g.drawFittedText("Use the Preset menu for dedicated granular starting points. Click or drag the waveform to move the grain source position.",
+                         720,675,420,36,juce::Justification::centredLeft,2);
+    } else {
+        panel(32,128,760,598,"FACTORY PRESET LIBRARY","500 PATCHES  /  FILTER BY FAMILY  /  SEARCH / FAVOURITES");
+        panel(808,128,360,598,"PATCH DETAILS","SELECT A SOUND TO LOAD IT");
+        g.setColour(violetHi);g.setFont(juce::Font(juce::FontOptions(14.0f,juce::Font::bold)));
+        g.drawText("2RICH FACTORY BANK",836,220,300,26,juce::Justification::centredLeft);
+        g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(9.0f)));
+        g.drawFittedText("Browse by instrument family, search all names, or type fav: in the search field to filter favourites.",
+                         836,254,300,58,juce::Justification::topLeft,3);
+        g.setColour(juce::Colour(0xff353044));
+        g.fillRoundedRectangle(836,330,300,1,0.5f);
+        g.setColour(white);g.setFont(juce::Font(juce::FontOptions(9.0f,juce::Font::bold)));
+        g.drawText("CURRENT PATCH",836,350,300,16,juce::Justification::centredLeft);
+        g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(8.0f)));
+        g.drawFittedText("Favorites are stored with the DAW project. SAVE exports the current complete patch as a .2richpreset file.",
+                         836,470,300,70,juce::Justification::topLeft,4);
     }
     g.setColour(juce::Colour(0xff9398a3).withAlpha(0.28f));g.drawLine(32,778,1168,778,0.8f);
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(7.8f,juce::Font::bold)));
