@@ -227,6 +227,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     presetSelectedLabel.setColour(juce::Label::textColourId, violetHi);
     presetSelectedLabel.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
     addAndMakeVisible(presetSelectedLabel);
+    rebuildPresetList();
 
     for (auto* button : { &presetFavoriteButton, &savePresetButton, &loadPresetButton }) {
         button->setLookAndFeel(&richLook);
@@ -426,7 +427,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     };
     addChoice(oscModeBox, { "Classic", "FM", "Ring Mod", "Hard Sync", "Super Saw" }, "oscMode");
     addChoice(filterTypeBox, { "Low Pass", "Band Pass", "High Pass" }, "filterType");
-    addChoice(sampleSyncBarsBox, { "AUTO LENGTH", "1 BAR", "2 BARS", "4 BARS", "8 BARS", "16 BARS" }, "sampleSyncBars");
+    addChoice(sampleSyncBarsBox, { "AUTO LENGTH", "1/16", "1/8", "1/4", "1/2", "1 BAR", "2 BARS", "4 BARS", "8 BARS", "16 BARS" }, "sampleSyncBars");
     addChoice(sampleTargetKeyBox, { "AUTO / SOURCE KEY", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, "sampleTargetKey");
     addChoice(grainTargetKeyBox, { "AUTO / SOURCE KEY", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, "grainTargetKey");
     addChoice(grainSyncDivisionBox, { "1/16", "1/8", "1/4", "1/2", "1 BAR", "2 BARS" }, "grainSyncDivision");
