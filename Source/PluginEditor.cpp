@@ -730,7 +730,10 @@ AuroraEditor::~AuroraEditor() {
         slider.setLookAndFeel(nullptr);
     for (auto* slider : { &mix, &detune, &sub, &cutoff, &res, &attack, &decay, &sustain,
                           &release, &master, &drive, &width, &wtPosition, &sampleRootNote, &sampleMix,
+                          &sampleTranspose, &sampleFineTune, &sampleStart, &sampleEnd,
+                          &sampleSliceSensitivity, &sampleSliceMinGap, &sampleMaxSlices, &sampleStretchGrainMs,
                           &grainSize, &grainDensity, &grainPosition, &grainSpray, &grainPitch,
+                          &grainTranspose, &grainFineTune, &grainJitter, &grainWindow, &grainStereo,
                           &unison, &uniDetune, &uniSpread, &fmAmount, &syncRatio, &fxEq, &fxLow, &fxMid, &fxHigh, &fxDist, &fxChorus,
                           &fxFlange, &fxDelay, &fxReverb, &fxCompThreshold, &fxCompRatio, &fxCompAttack,
                           &fxCompRelease, &fxCompMakeup, &fxCompMix, &fxPhaserRate, &fxPingTime,
@@ -759,6 +762,7 @@ AuroraEditor::~AuroraEditor() {
     sampleLoadButton.setLookAndFeel(nullptr); sampleClearButton.setLookAndFeel(nullptr); sampleResliceButton.setLookAndFeel(nullptr);
     wavetableChooser.reset();
     sampleChooser.reset();
+    presetBrowserList.setModel(nullptr);
     for (auto& box : modSources) box.setLookAndFeel(nullptr);
     for (auto& box : modTargets) box.setLookAndFeel(nullptr);
     for (auto& button : stepButtons) button.setLookAndFeel(nullptr);
@@ -1353,6 +1357,7 @@ void AuroraEditor::updateSampleStatus() {
     const int sliceCount = juce::jmax(0, (int)sample->sliceStarts.size() - 1);
     const juce::String info = "FILE: " + sample->fileName + "   /   KEY: "
         + sample->keyName + "   /   SOURCE BPM: " + juce::String(sample->sourceBpm, 1)
+        + "   /   PROJECT BPM: " + juce::String(proc.getHostTempoBpm(), 1)
         + "   /   " + juce::String(sliceCount) + " SLICES";
     sampleStatusLabel.setText(info, juce::dontSendNotification);
     granularStatusLabel.setText(info, juce::dontSendNotification);
@@ -1395,9 +1400,9 @@ void AuroraEditor::applyGranularPreset(int presetId) {
     set("grainStereo",p.stereo);set("grainSyncDivision",(float)p.division);
     set("grainTargetKey",(float)p.targetKey);set("grainTempoSync",p.tempoSync?1.0f:0.0f);
     set("grainKeySync",p.keySync?1.0f:0.0f);
-    grainTempoButton.setToggleState(p.tempoSync,dontSendNotification);
-    grainKeyButton.setToggleState(p.keySync,dontSendNotification);
-    granularPresetBox.setSelectedId(presetId,dontSendNotification);
+    grainTempoButton.setToggleState(p.tempoSync,juce::dontSendNotification);
+    grainKeyButton.setToggleState(p.keySync,juce::dontSendNotification);
+    granularPresetBox.setSelectedId(presetId,juce::dontSendNotification);
     repaint();
 }
 
@@ -1439,7 +1444,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
     g.drawText("TIMAUDIO  /  VIRTUAL ANALOG SYNTH",52,67,195,12,juce::Justification::centredLeft);
     g.setColour(white);g.setFont(juce::Font(juce::FontOptions(9.5f,juce::Font::bold)));
-    g.drawText("PATCH",758,17,54,12,juce::Justification::centredLeft);
+    g.drawText("ACTIVE WORKSPACE",758,17,140,12,juce::Justification::centredLeft);
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
     g.drawText("OUT",1008,67,30,12,juce::Justification::centredLeft);
     g.setColour(juce::Colour(0xff080b11));g.fillRoundedRectangle(1040,70,112,6,3);
@@ -1621,9 +1626,16 @@ void AuroraEditor::paint(juce::Graphics& g) {
         label(52,190,180,"SOURCE AUDIO");
         label(390,190,700,"DETECTED ROOT / SOURCE TEMPO / SLICE MAP");
         label(52,245,170,"PLAYBACK OPTIONS");
-        label(52,504,160,"PITCH & GAIN");
-        label(52,636,160,"TRIM & SLICE DETAIL");
-        label(750,504,360,"SYNC WINDOW / FINE TUNING");
+        label(52,504,180,"ROOT NOTE");
+        label(270,504,190,"LEVEL / TRANSPOSE");
+        label(488,504,190,"FINE TUNE");
+        label(706,504,190,"START POSITION");
+        label(924,504,190,"TRIM / SLICING");
+        label(52,636,180,"END POSITION");
+        label(270,636,190,"SLICE SENSITIVITY");
+        label(488,636,190,"MINIMUM GAP");
+        label(706,636,190,"MAXIMUM SLICES");
+        label(924,636,190,"PITCH-PRESERVE WINDOW");
 
         juce::ColourGradient sampleScreen(juce::Colour(0xff080d13),52,330,
                                            juce::Colour(0xff151c27),52,480,false);
@@ -1672,8 +1684,16 @@ void AuroraEditor::paint(juce::Graphics& g) {
         label(52,190,180,"SOURCE AUDIO");
         label(390,190,700,"DETECTED ROOT / SOURCE TEMPO / ACTIVE SLICES");
         label(52,245,170,"GRAIN PLAYBACK");
-        label(52,504,160,"GRAIN SHAPE");
-        label(52,636,160,"PITCH & MOTION");
+        label(52,504,190,"GRAIN SIZE");
+        label(270,504,190,"DENSITY");
+        label(488,504,190,"SOURCE POSITION");
+        label(706,504,190,"SPRAY");
+        label(924,504,190,"PITCH");
+        label(52,636,190,"TRANSPOSE");
+        label(270,636,190,"FINE TUNE");
+        label(488,636,190,"TIMING JITTER");
+        label(706,636,190,"WINDOW");
+        label(924,636,190,"STEREO SPREAD");
 
         juce::ColourGradient grainScreen(juce::Colour(0xff080d13),52,330,
                                           juce::Colour(0xff151c27),52,480,false);
@@ -1734,7 +1754,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
     g.setColour(juce::Colour(0xff9398a3).withAlpha(0.28f));g.drawLine(32,778,1168,778,0.8f);
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(7.8f,juce::Font::bold)));
     g.drawText("2RICH  /  TIMAUDIO",36,784,260,12,juce::Justification::centredLeft);
-    g.drawText("VOICE  /  MOTION  /  FX  /  SAMPLE",850,784,318,12,juce::Justification::centredRight);
+    g.drawText("VOICE  /  MOTION  /  FX  /  SAMPLER  /  GRANULAR  /  PRESETS",760,784,408,12,juce::Justification::centredRight);
 }
 
 void AuroraEditor::resized() {
