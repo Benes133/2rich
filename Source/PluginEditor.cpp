@@ -200,6 +200,9 @@ void AuroraEditor::applyPreset(int id) {
 
 void AuroraEditor::setPage(int page) {
     currentPage=page;
+    synthTab.setToggleState(page==0,juce::dontSendNotification);
+    wtTab.setToggleState(page==1,juce::dontSendNotification);
+    fxTab.setToggleState(page==2,juce::dontSendNotification);
     auto show=[page](std::initializer_list<juce::Component*> list,bool visible){for(auto* c:list)c->setVisible(visible);};
     show({&mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,&wave1,&wave2},page==0);
     show({&wtTable,&wtPosition,&unison,&uniDetune,&uniSpread},page==1);
@@ -302,7 +305,7 @@ void AuroraEditor::resized() {
     auto place = [&](juce::Component& c, juce::Rectangle<int> r) { c.setBounds(scaledBounds(r,scale,ox,oy)); };
 
     place(heading,{34,24,100,45});
-    place(synthTab,{145,78,105,30}); place(wtTab,{258,78,135,30}); place(fxTab,{401,78,78,30});
+    place(synthTab,{145,65,105,27}); place(wtTab,{258,65,135,27}); place(fxTab,{401,65,78,27});
     place(presets,{610,33,205,29});
     place(wave1,{49,170,132,27}); place(wave2,{220,170,132,27});
     place(mix,{385,151,82,145}); place(detune,{477,151,82,145});
