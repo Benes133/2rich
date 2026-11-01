@@ -193,6 +193,17 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     };
     addChoice(oscModeBox, { "Classic", "FM", "Ring Mod", "Hard Sync" }, "oscMode");
     addChoice(filterTypeBox, { "Low Pass", "Band Pass", "High Pass" }, "filterType");
+    for (int i = 0; i < 4; ++i) {
+        addChoice(fxSlots[(size_t)i], { "Off", "Compressor", "Saturation" },
+                  "fxSlot" + juce::String(i + 1));
+        fxSlots[(size_t)i].setTooltip("FX Chain slot " + juce::String(i + 1) + ". Signal flows from slot 1 to slot 4.");
+    }
+
+    fxCompEnabledButton.setLookAndFeel(&richLook);
+    fxCompEnabledButton.setColour(juce::ToggleButton::textColourId, white);
+    fxCompEnabledButton.setTooltip("Enable or bypass the compressor wherever it appears in the FX chain.");
+    addAndMakeVisible(fxCompEnabledButton);
+    aFxCompEnabled = std::make_unique<ButtonAttach>(ap, "fxCompEnabled", fxCompEnabledButton);
 
     const juce::StringArray lfoShapes = { "Sine", "Triangle", "Saw", "Square", "Sample & Hold" };
     addChoice(lfo1Shape, lfoShapes, "lfo1Shape");
@@ -225,7 +236,13 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
     }
     addExtra(fxEq,"fxEq","EQ MIX"); addExtra(fxLow,"fxLow","LOW"); addExtra(fxMid,"fxMid","MID"); addExtra(fxHigh,"fxHigh","HIGH");
-    addExtra(fxDist,"fxDist","DISTORT"); addExtra(fxChorus,"fxChorus","CHORUS"); addExtra(fxFlange,"fxFlange","FLANGER"); addExtra(fxDelay,"fxDelay","DELAY"); addExtra(fxReverb,"fxReverb","REVERB");
+    addExtra(fxDist,"fxDist","SATURATION"); addExtra(fxChorus,"fxChorus","CHORUS"); addExtra(fxFlange,"fxFlange","FLANGER"); addExtra(fxDelay,"fxDelay","DELAY"); addExtra(fxReverb,"fxReverb","REVERB");
+    addExtra(fxCompThreshold,"fxCompThreshold","THRESHOLD");
+    addExtra(fxCompRatio,"fxCompRatio","RATIO");
+    addExtra(fxCompAttack,"fxCompAttack","ATTACK");
+    addExtra(fxCompRelease,"fxCompRelease","RELEASE");
+    addExtra(fxCompMakeup,"fxCompMakeup","MAKEUP");
+    addExtra(fxCompMix,"fxCompMix","MIX");
     addExtra(lfo1Rate,"lfo1Rate","RATE"); addExtra(lfo2Rate,"lfo2Rate","RATE");
     addExtra(lfo3Rate,"lfo3Rate","RATE");
     addExtra(filterAttack,"filterAttack","ATTACK"); addExtra(filterDecay,"filterDecay","DECAY");
@@ -556,7 +573,11 @@ void AuroraEditor::setPage(int page) {
            &oscModeBox,&filterTypeBox,&fmAmount,&syncRatio }, page == 0);
     show({ &wtTable,&wtPosition,&unison,&uniDetune,&uniSpread,&importWavetableButton,
            &clearWavetableButton,&wavetableStatusLabel }, page == 1);
-    show({ &fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb }, page == 2);
+    show({ &fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb,
+            &fxCompThreshold,&fxCompRatio,&fxCompAttack,&fxCompRelease,&fxCompMakeup,&fxCompMix,
+            &fxCompEnabledButton }, page == 2);
+    for (auto& slot : fxSlots)
+        slot.setVisible(page == 2);
     show({ &lfo1Rate,&lfo2Rate,&lfo3Rate,&filterAttack,&filterDecay,&filterSustain,&filterRelease,&filterEnvAmount,
            &lfo1Shape,&lfo2Shape,&lfo3Shape }, page == 3);
     for (int i = 0; i < 4; ++i) {
@@ -775,28 +796,42 @@ void AuroraEditor::paint(juce::Graphics& g) {
                          768,463,122,65,juce::Justification::centred,4);
     }
     else if (currentPage == 2) {
-        panel(32,106,286,474,"TONE / EQ","FOUR CONTROLS / FREQUENCY BALANCE");
-        panel(337,106,286,474,"SATURATION","HARMONICS / DRIVE AMOUNT");
-        panel(642,106,286,474,"MODULATION / SPACE","MOVEMENT / DEPTH / AMBIENCE");
-        knobLabel(51,239,104,"EQ MIX");
-        knobLabel(175,239,104,"LOW");
-        knobLabel(51,395,104,"MID");
-        knobLabel(175,395,104,"HIGH");
-        knobLabel(423,270,112,"DISTORTION");
-        knobLabel(660,239,104,"CHORUS");
-        knobLabel(784,239,104,"FLANGER");
-        knobLabel(660,395,104,"DELAY");
-        knobLabel(784,395,104,"REVERB");
+        g.setColour(card);
+        g.fillRoundedRectangle(32.0f,106.0f,896.0f,74.0f,12.0f);
+        g.setColour(border);
+        g.drawRoundedRectangle(32.5f,106.5f,895.0f,73.0f,12.0f,1.0f);
+        g.setColour(violet);
+        g.fillRoundedRectangle(46.0f,121.0f,3.0f,17.0f,1.5f);
+        g.setColour(white);
+        g.setFont(juce::Font(juce::FontOptions(13.0f,juce::Font::bold)));
+        g.drawText("FX CHAIN",57,115,180,19,juce::Justification::centredLeft);
         g.setColour(muted);
         g.setFont(juce::Font(juce::FontOptions(8.5f)));
-        g.drawFittedText("Blend the equalizer, then shape low, mid and high frequencies.",
-                         52,178,244,44,juce::Justification::centredLeft,3);
-        g.drawFittedText("Add controlled harmonic density. Keep the amount subtle for cleaner patches.",
-                         357,178,244,58,juce::Justification::centredLeft,4);
-        g.drawFittedText("Use modulation for motion and time effects for depth.",
-                         662,178,244,44,juce::Justification::centredLeft,3);
+        g.drawText("ORDERED SIGNAL FLOW  /  SLOT 1 TO SLOT 4",57,135,350,13,juce::Justification::centredLeft);
+
+        panel(32,194,286,386,"TONE / SATURATION","EQ SHAPING / HARMONIC DRIVE");
+        panel(337,194,286,386,"DYNAMICS / COMPRESSOR","STEREO-LINKED LEVEL CONTROL");
+        panel(642,194,286,386,"MODULATION / SPACE","MOVEMENT / TIME EFFECTS");
+
+        knobLabel(47,250,80,"EQ MIX");
+        knobLabel(137,250,80,"LOW");
+        knobLabel(227,250,80,"MID");
+        knobLabel(95,405,80,"HIGH");
+        knobLabel(185,405,80,"SATURATION");
+
+        knobLabel(351,282,80,"THRESHOLD");
+        knobLabel(443,282,80,"RATIO");
+        knobLabel(535,282,80,"ATTACK");
+        knobLabel(351,420,80,"RELEASE");
+        knobLabel(443,420,80,"MAKEUP");
+        knobLabel(535,420,80,"MIX");
+
+        knobLabel(660,270,104,"CHORUS");
+        knobLabel(784,270,104,"FLANGER");
+        knobLabel(660,420,104,"DELAY");
+        knobLabel(784,420,104,"REVERB");
         g.setColour(neon.withAlpha(0.8f));
-        g.fillRoundedRectangle(357,532,246,2,1.0f);
+        g.fillRoundedRectangle(357,557,246,2,1.0f);
     }
     else if (currentPage == 3) {
         panel(32,106,286,174,"LFO 1","GLOBAL MODULATOR / RATE AND SHAPE");
@@ -926,15 +961,24 @@ void AuroraEditor::resized() {
     place(uniDetune,{322,430,160,136});
     place(uniSpread,{556,430,160,136});
 
-    place(fxEq,{51,253,104,132});
-    place(fxLow,{175,253,104,132});
-    place(fxMid,{51,409,104,132});
-    place(fxHigh,{175,409,104,132});
-    place(fxDist,{423,299,112,150});
-    place(fxChorus,{660,253,104,132});
-    place(fxFlange,{784,253,104,132});
-    place(fxDelay,{660,409,104,132});
-    place(fxReverb,{784,409,104,132});
+    for (int i = 0; i < 4; ++i)
+        place(fxSlots[(size_t)i],{52 + i * 216,146,188,26});
+    place(fxCompEnabledButton,{360,254,240,22});
+    place(fxEq,{47,267,80,122});
+    place(fxLow,{137,267,80,122});
+    place(fxMid,{227,267,80,122});
+    place(fxHigh,{95,422,80,122});
+    place(fxDist,{185,422,80,122});
+    place(fxCompThreshold,{351,299,80,116});
+    place(fxCompRatio,{443,299,80,116});
+    place(fxCompAttack,{535,299,80,116});
+    place(fxCompRelease,{351,437,80,116});
+    place(fxCompMakeup,{443,437,80,116});
+    place(fxCompMix,{535,437,80,116});
+    place(fxChorus,{660,287,104,125});
+    place(fxFlange,{784,287,104,125});
+    place(fxDelay,{660,437,104,125});
+    place(fxReverb,{784,437,104,125});
 
     place(lfo1Rate,{45,180,76,86});
     place(lfo1Shape,{128,188,145,34});
@@ -989,8 +1033,11 @@ void AuroraEditor::resized() {
         for(auto* control:controls) control->setVisible(false);
     }
     if(currentPage!=2) {
-        juce::Component* controls[]={&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb};
+        juce::Component* controls[]={&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb,
+            &fxCompThreshold,&fxCompRatio,&fxCompAttack,&fxCompRelease,&fxCompMakeup,&fxCompMix,
+            &fxCompEnabledButton};
         for(auto* control:controls) control->setVisible(false);
+        for(auto& slot:fxSlots) slot.setVisible(false);
     }
     if(currentPage!=3) {
         juce::Component* controls[]={&lfo1Rate,&lfo2Rate,&lfo3Rate,&filterAttack,&filterDecay,&filterSustain,

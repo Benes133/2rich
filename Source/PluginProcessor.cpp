@@ -450,6 +450,19 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("fxLow", "EQ Low", -12.0f, 12.0f, 0.0f);
     f("fxMid", "EQ Mid", -12.0f, 12.0f, 0.0f);
     f("fxHigh", "EQ High", -12.0f, 12.0f, 0.0f);
+
+    // FX Chain slots execute from left to right and are saved with the project.
+    choice("fxSlot1", "FX Slot 1", { "Off", "Compressor", "Saturation" }, 2);
+    choice("fxSlot2", "FX Slot 2", { "Off", "Compressor", "Saturation" }, 1);
+    choice("fxSlot3", "FX Slot 3", { "Off", "Compressor", "Saturation" }, 0);
+    choice("fxSlot4", "FX Slot 4", { "Off", "Compressor", "Saturation" }, 0);
+    layout.add(std::make_unique<juce::AudioParameterBool>("fxCompEnabled", "Compressor Enabled", false));
+    f("fxCompThreshold", "Compressor Threshold", -36.0f, 0.0f, -18.0f);
+    f("fxCompRatio", "Compressor Ratio", 1.0f, 20.0f, 4.0f);
+    f("fxCompAttack", "Compressor Attack", 0.1f, 100.0f, 10.0f, 0.5f);
+    f("fxCompRelease", "Compressor Release", 10.0f, 500.0f, 120.0f, 0.5f);
+    f("fxCompMakeup", "Compressor Makeup", 0.0f, 18.0f, 0.0f);
+    f("fxCompMix", "Compressor Mix", 0.0f, 1.0f, 1.0f);
     return layout;
 }
 
@@ -474,6 +487,7 @@ void AuroraProcessor::prepareToPlay(double sr, int maximumBlockSize) {
     for (auto& channel : delayBuffer)
         channel.assign((size_t)juce::jmax(1, (int)sr * 2), 0.0f);
     delayWrite = 0;
+    compressorEnvelope = 0.0f;
 
     juce::dsp::Reverb::Parameters reverbParameters;
     reverbParameters.roomSize = 0.45f;
@@ -772,14 +786,59 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         synth.renderNextBlock(buffer, sequencedMidi, 0, samples);
     }
 
-    const float drive = juce::jmax(value("drive"), value("fxDist"));
-    if (drive > 0.001f) {
-        const float gain = 1.0f + drive * 15.0f;
-        const float normalizer = std::tanh(gain);
-        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
-            for (int i = 0; i < samples; ++i)
-                buffer.setSample(channel, i,
-                    std::tanh(buffer.getSample(channel, i) * gain) / normalizer);
+    // Four ordered FX slots. Slot 1 is processed first, slot 4 last.
+    const int fxSlots[4] = {
+        (int)value("fxSlot1"), (int)value("fxSlot2"),
+        (int)value("fxSlot3"), (int)value("fxSlot4")
+    };
+    const float saturation = juce::jmax(value("drive"), value("fxDist"));
+    const float saturationGain = 1.0f + saturation * 15.0f;
+    const float saturationNormaliser = std::tanh(saturationGain);
+
+    const bool compressorEnabled = value("fxCompEnabled") > 0.5f;
+    const float compThreshold = value("fxCompThreshold");
+    const float compRatio = juce::jmax(1.0f, value("fxCompRatio"));
+    const float compAttack = juce::jmax(0.1f, value("fxCompAttack"));
+    const float compRelease = juce::jmax(10.0f, value("fxCompRelease"));
+    const float compMakeup = value("fxCompMakeup");
+    const float compMix = juce::jlimit(0.0f, 1.0f, value("fxCompMix"));
+    const float compThresholdLinear = std::pow(10.0f, compThreshold / 20.0f);
+    const float compMakeupLinear = std::pow(10.0f, compMakeup / 20.0f);
+    const float compAttackCoeff = (float)std::exp(-1.0 / (sampleRate * compAttack * 0.001));
+    const float compReleaseCoeff = (float)std::exp(-1.0 / (sampleRate * compRelease * 0.001));
+
+    for (int i = 0; i < samples; ++i) {
+        float left = buffer.getSample(0, i);
+        float right = buffer.getSample(1, i);
+        for (int slot = 0; slot < 4; ++slot) {
+            switch (fxSlots[slot]) {
+                case 1: // Stereo-linked feed-forward compressor.
+                    if (compressorEnabled) {
+                        const float detector = juce::jmax(std::abs(left), std::abs(right));
+                        const float coeff = detector > compressorEnvelope
+                            ? compAttackCoeff : compReleaseCoeff;
+                        compressorEnvelope = coeff * compressorEnvelope + (1.0f - coeff) * detector;
+                        const float envelope = juce::jmax(compressorEnvelope, 1.0e-8f);
+                        const float overThresholdDb = juce::jmax(
+                            0.0f, 20.0f * std::log10(envelope / juce::jmax(compThresholdLinear, 1.0e-8f)));
+                        const float reductionDb = overThresholdDb * (1.0f - 1.0f / compRatio);
+                        const float compressedGain = compMakeupLinear * std::pow(10.0f, -reductionDb / 20.0f);
+                        left = juce::jmap(compMix, left, left * compressedGain);
+                        right = juce::jmap(compMix, right, right * compressedGain);
+                    }
+                    break;
+                case 2: // Existing saturation/drive, now movable in the chain.
+                    if (saturation > 0.001f) {
+                        left = std::tanh(left * saturationGain) / saturationNormaliser;
+                        right = std::tanh(right * saturationGain) / saturationNormaliser;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+        buffer.setSample(0, i, left);
+        buffer.setSample(1, i, right);
     }
 
     const float low = value("fxLow");

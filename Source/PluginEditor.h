@@ -23,6 +23,10 @@ private:
     juce::Label wavetableStatusLabel;
     std::unique_ptr<juce::FileChooser> wavetableChooser;
     juce::Slider fxEq, fxLow, fxMid, fxHigh, fxDist, fxChorus, fxFlange, fxDelay, fxReverb;
+    juce::Slider fxCompThreshold, fxCompRatio, fxCompAttack, fxCompRelease, fxCompMakeup, fxCompMix;
+    std::array<juce::ComboBox, 4> fxSlots;
+    juce::ToggleButton fxCompEnabledButton { "COMPRESSOR" };
+    std::unique_ptr<ButtonAttach> aFxCompEnabled;
     juce::TextButton synthTab{"SYNTH"}, wtTab{"WAVETABLE"}, fxTab{"FX"}, modTab{"MOD"}, seqTab{"SEQ"};
     juce::ComboBox seqModeBox, arpStyleBox, seqRateBox, seqDirectionBox, seqLengthBox;
     juce::ComboBox seqPageBox, seqPatternSlotBox;

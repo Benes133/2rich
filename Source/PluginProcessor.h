@@ -77,5 +77,6 @@ private:
  int delayWrite=0;
  double sampleRate=44100.0;
  float fxLfoPhase=0.0f;
+ float compressorEnvelope=0.0f;
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AuroraProcessor)
 };
