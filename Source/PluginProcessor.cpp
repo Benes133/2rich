@@ -186,12 +186,14 @@ public:
             liveSampleIncrement *= sampleTempoSync ? sampleTempoRatio : 1.0;
         const double direction = sampleReverseNow ? -1.0 : 1.0;
         const int syncedGrainDivision = juce::jlimit(0, 5, (int)value("grainSyncDivision"));
-        static const double grainBeatDivisions[6] = { 0.25, 0.5, 1.0, 2.0, 4.0, 8.0 };
+        static const double fractionalGrainBeats[4] = { 0.25, 0.5, 1.0, 2.0 };
+        const double grainBeats = syncedGrainDivision < 4
+            ? fractionalGrainBeats[syncedGrainDivision]
+            : beatsPerBar * (double)(syncedGrainDivision - 3);
         const int grainLength = grainTempoSync
-            ? juce::jlimit(64, (int)(sr * 1.5),
-                (int)(sr * 60.0 / juce::jlimit(20.0,400.0,hostBpm)
-                    * grainBeatDivisions[syncedGrainDivision]))
-            : juce::jlimit(64, (int)(sr * 1.5), (int)(sr * grainSizeMs * 0.001f));
+            ? juce::jlimit(16, (int)(sr * 8.0),
+                (int)(sr * 60.0 / juce::jlimit(20.0,400.0,hostBpm) * grainBeats))
+            : juce::jlimit(64, (int)(sr * 0.5), (int)(sr * grainSizeMs * 0.001f));
 
         if (filterType != activeFilterType) {
             const auto type = filterType == 1
