@@ -673,6 +673,7 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     layout.add(std::make_unique<juce::AudioParameterBool>("sampleSliceMode", "Auto Slice Mapping", true));
     layout.add(std::make_unique<juce::AudioParameterBool>("sampleTempoSync", "Sampler Tempo Sync", true));
     layout.add(std::make_unique<juce::AudioParameterBool>("sampleKeySync", "Sampler Key Sync", true));
+    layout.add(std::make_unique<juce::AudioParameterBool>("samplePreservePitch", "Sampler Preserve Pitch", true));
     layout.add(std::make_unique<juce::AudioParameterBool>("sampleLoop", "Sampler Loop", false));
     layout.add(std::make_unique<juce::AudioParameterBool>("sampleReverse", "Sampler Reverse", false));
     choice("sampleSyncBars", "Sampler Sync Length", { "Auto", "1 Bar", "2 Bars", "4 Bars", "8 Bars", "16 Bars" }, 0);
@@ -686,9 +687,11 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("sampleSliceSensitivity", "Slice Sensitivity", 0.01f, 0.8f, 0.12f);
     f("sampleSliceMinGap", "Slice Minimum Gap", 20.0f, 500.0f, 80.0f);
     f("sampleMaxSlices", "Maximum Slices", 1.0f, 32.0f, 32.0f);
+    f("sampleStretchGrainMs", "Sampler Stretch Window", 20.0f, 200.0f, 80.0f, 0.65f);
     // GRANULAR: dedicated tempo/key controls and independent performance settings.
     layout.add(std::make_unique<juce::AudioParameterBool>("grainTempoSync", "Granular Tempo Sync", true));
     layout.add(std::make_unique<juce::AudioParameterBool>("grainKeySync", "Granular Key Sync", true));
+    choice("grainTargetKey", "Granular Target Key", { "Auto", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0);
     choice("grainSyncDivision", "Grain Sync Division", { "1/16", "1/8", "1/4", "1/2", "1 Bar", "2 Bars" }, 2);
     f("grainSize", "Grain Size", 20.0f, 500.0f, 120.0f, 0.5f);
     f("grainDensity", "Grain Density", 2.0f, 60.0f, 18.0f, 0.5f);
@@ -776,6 +779,14 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         if (const auto position = playHead->getPosition()) {
             if (const auto bpm = position->getBpm(); bpm && std::isfinite(*bpm))
                 hostTempoBpm.store(juce::jlimit(20.0, 400.0, *bpm), std::memory_order_relaxed);
+            if (const auto signature = position->getTimeSignature()) {
+                if (signature->numerator > 0 && signature->denominator > 0) {
+                    const double beatsPerBar = (double)signature->numerator
+                        * 4.0 / (double)signature->denominator;
+                    hostBeatsPerBar.store(juce::jlimit(1.0, 16.0, beatsPerBar),
+                                          std::memory_order_relaxed);
+                }
+            }
         }
     }
 
