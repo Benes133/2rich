@@ -586,7 +586,8 @@ void AuroraEditor::setPage(int page) {
            &clearWavetableButton,&wavetableStatusLabel }, page == 1);
     show({ &fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb,
             &fxCompThreshold,&fxCompRatio,&fxCompAttack,&fxCompRelease,&fxCompMakeup,&fxCompMix,
-            &fxCompEnabledButton }, page == 2);
+            &fxCompEnabledButton,&fxPhaserRate,&fxPingTime,&fxPingFeedback,&fxReverbRoom,
+            &fxReverbDamping,&fxLimiterCeiling }, page == 2);
     for (auto& slot : fxSlots)
         slot.setVisible(page == 2);
     show({ &lfo1Rate,&lfo2Rate,&lfo3Rate,&filterAttack,&filterDecay,&filterSustain,&filterRelease,&filterEnvAmount,
