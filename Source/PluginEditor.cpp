@@ -475,6 +475,8 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addExtra(grainPitch, "grainPitch", "PITCH");
     sampleRootNote.setSliderStyle(juce::Slider::LinearHorizontal);
     sampleRootNote.setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
+    sampleMix.setSliderStyle(juce::Slider::LinearHorizontal);
+    sampleMix.setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
     sampleRootNote.setNumDecimalPlacesToDisplay(0);
     addExtra(wtPosition,"wtPosition","POSITION"); wtPosition.setSliderStyle(juce::Slider::LinearHorizontal); wtPosition.setTextBoxStyle(juce::Slider::TextBoxRight,false,42,18); addExtra(unison,"unison","VOICES"); addExtra(uniDetune,"uniDetune","DETUNE"); addExtra(uniSpread,"uniSpread","SPREAD");
     addExtra(fmAmount,"fmAmount","FM AMOUNT"); addExtra(syncRatio,"syncRatio","SYNC RATIO");
@@ -839,6 +841,19 @@ void AuroraEditor::writeSelectedStepParameter(const juce::String& baseId, float 
 }
 
 void AuroraEditor::mouseDown(const juce::MouseEvent& event) {
+    if (currentPage == 3) {
+        const float scale = juce::jmin(getWidth()/1200.0f,getHeight()/820.0f);
+        const int ox = (getWidth()-juce::roundToInt(1200.0f*scale))/2;
+        const int oy = (getHeight()-juce::roundToInt(820.0f*scale))/2;
+        const float x = ((float)event.x-(float)ox)/scale;
+        const float y = ((float)event.y-(float)oy)/scale;
+        if (proc.getSampleAsset() && x >= 52.0f && x <= 1148.0f && y >= 330.0f && y <= 480.0f) {
+            sampleScrubbing = true;
+            grainPosition.setValue(juce::jlimit(0.0,1.0,(double)((x-52.0f)/1096.0f)),
+                                   juce::sendNotification);
+        }
+        return;
+    }
     if(currentPage!=0)return;
     const float scale=juce::jmin(getWidth()/1200.0f,getHeight()/820.0f);
     const int ox=(getWidth()-juce::roundToInt(1200.0f*scale))/2;
@@ -855,12 +870,20 @@ void AuroraEditor::mouseDown(const juce::MouseEvent& event) {
 }
 
 void AuroraEditor::mouseDrag(const juce::MouseEvent& event) {
-    if (drawingWavetable)
+    if (sampleScrubbing && currentPage == 3) {
+        const float scale = juce::jmin(getWidth()/1200.0f,getHeight()/820.0f);
+        const int ox = (getWidth()-juce::roundToInt(1200.0f*scale))/2;
+        const float x = ((float)event.x-(float)ox)/scale;
+        grainPosition.setValue(juce::jlimit(0.0,1.0,(double)((x-52.0f)/1096.0f)),
+                               juce::sendNotification);
+    } else if (drawingWavetable) {
         editWavetableFromMouse(event);
+    }
 }
 
 void AuroraEditor::mouseUp(const juce::MouseEvent&) {
     drawingWavetable = false;
+    sampleScrubbing = false;
 }
 
 void AuroraEditor::editWavetableFromMouse(const juce::MouseEvent& event) {
@@ -1302,7 +1325,7 @@ void AuroraEditor::resized() {
     const int ox=(getWidth()-juce::roundToInt(1200.0f*scale))/2,oy=(getHeight()-juce::roundToInt(820.0f*scale))/2;
     auto place=[&](juce::Component& c,juce::Rectangle<int> b){c.setBounds(scaledBounds(b,scale,ox,oy));};
 
-    place(heading,{52,26,176,40});place(synthTab,{258,35,86,32});place(wtTab,{352,35,124,32});place(fxTab,{484,35,72,32});
+    place(heading,{52,26,176,40});place(synthTab,{258,35,86,32});place(wtTab,{352,35,124,32});place(fxTab,{484,35,72,32});place(sampleTab,{564,35,88,32});
     place(presetSearch,{758,34,142,29});place(presets,{908,34,244,29});
     place(presetFavoriteButton,{758,70,66,22});place(savePresetButton,{832,70,66,22});place(loadPresetButton,{906,70,66,22});
     modTab.setVisible(false);seqTab.setVisible(false);
@@ -1382,5 +1405,17 @@ void AuroraEditor::resized() {
 
     place(fxEq,{420,660,150,28});place(fxLow,{600,660,150,28});
     place(fxMid,{780,660,150,28});place(fxHigh,{960,660,150,28});
+
+    // Sample Lab: source controls, waveform display, detected key and granular rack.
+    place(sampleLoadButton,{52,204,132,30});
+    place(sampleClearButton,{194,204,96,30});
+    place(sampleStatusLabel,{306,204,842,30});
+    place(sampleModeBox,{52,280,220,30});
+    place(sampleRootNote,{310,280,210,30});
+    place(sampleMix,{550,280,200,30});
+    place(sampleSliceButton,{800,280,210,30});
+    const int grainX[5]={52,178,304,430,556};
+    juce::Slider* grainControls[5]={&grainSize,&grainDensity,&grainPosition,&grainSpray,&grainPitch};
+    for(int i=0;i<5;++i)place(*grainControls[i],{grainX[i],526,110,178});
 }
 
