@@ -157,6 +157,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         const int id = presets.getSelectedId();
         if (id > 0)
             proc.setPresetFavorite(id, presetFavoriteButton.getToggleState());
+        rebuildPresetList();
         updateFavoriteButton();
     };
 
@@ -197,6 +198,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
                     juce::MemoryBlock state;
                     if (input->readIntoMemoryBlock(state) && state.getSize() > 0)
                         proc.setStateInformation(state.getData(), (int)state.getSize());
+                    rebuildPresetList();
                     updateFavoriteButton();
                     repaint();
                 }
