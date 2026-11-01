@@ -68,6 +68,9 @@ public:
         const int wave2 = (int)value("wave2");
         const int table = (int)value("wtTable");
         const float baseMix = value("mix");
+        const float baseWTPosition = value("wtPosition");
+        const float baseCutoff = value("cutoff");
+        const float baseResonance = value("res");
         const float detune = value("detune");
         const float sub = value("sub");
         const int unisonVoices = juce::jlimit(1, 7, (int)value("unison"));
@@ -161,11 +164,12 @@ public:
             }
 
             const float currentMix = juce::jlimit(0.0f, 1.0f, baseMix + mixMod);
-            const float position = juce::jlimit(0.0f, 1.0f, value("wtPosition") + positionMod);
-            const float cutoffHz = juce::jlimit(25.0f, 19000.0f,
-                value("cutoff") * std::pow(2.0f, juce::jlimit(-7.0f, 7.0f, cutoffOctaves)));
+            const float position = juce::jlimit(0.0f, 1.0f, baseWTPosition + positionMod);
+            const float maxCutoff = juce::jmin(19000.0f, (float)sr * 0.45f);
+            const float cutoffHz = juce::jlimit(25.0f, maxCutoff,
+                baseCutoff * std::pow(2.0f, juce::jlimit(-7.0f, 7.0f, cutoffOctaves)));
             const float resonance = juce::jlimit(0.1f, 1.0f,
-                value("res") + resonanceMod);
+                baseResonance + resonanceMod);
 
             float left = 0.0f;
             float right = 0.0f;
@@ -198,8 +202,11 @@ public:
             left *= gain;
             right *= gain;
 
-            voiceFilter.setCutoffFrequency(cutoffHz);
-            voiceFilter.setResonance(resonance);
+            // Recalculate filter coefficients every four samples to reduce per-voice DSP cost.
+            if ((i & 3) == 0) {
+                voiceFilter.setCutoffFrequency(cutoffHz);
+                voiceFilter.setResonance(resonance);
+            }
             left = voiceFilter.processSample(0, left);
             right = voiceFilter.processSample(1, right);
 
