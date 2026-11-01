@@ -1,4 +1,4 @@
-# 2rich 1.1.0 — TIMAUDIO
+# 2rich 1.2.0 — TIMAUDIO
 
 2rich is a JUCE-based polyphonic virtual analog synthesizer for Windows VST3.
 
@@ -24,14 +24,20 @@
 - Six ordered FX insert slots: Compressor, Saturation, Phaser, Ping-Pong Delay, Reverb, Chorus, Multiband Distortion and Limiter.
 - Four modulation routes with LFO, velocity, envelope and MIDI expression sources.
 - Host-synchronised arpeggiator and 32-step sequencer with per-step pitch, velocity, gate and accent.
-- 25 factory presets, search, favourites and external .2richpreset save/load.
+- 500 factory presets across leads, pads, atmospheres, keys, pianos, plucks, basses, synths, sound effects and textures.
+- Preset search and favourites across the complete factory bank, plus external .2richpreset save/load.
+- Integrated audio Sample Lab with WAV/AIFF import, estimated musical-key detection, transient-based slicing and MIDI slice mapping from C2.
+- Polyphonic sample playback with automatic root-note pitch tracking.
+- Granular engine with adjustable grain size, density, position, spray and pitch.
+- Sample source paths are stored with DAW state; the original audio file must remain accessible at the saved path.
+- Sample playback uses varispeed pitch tracking; it does not yet provide Serato-style transient-preserving time-stretch or beat-grid warping.
 
 ## Build
 
 - Framework: JUCE 8.0.6.
 - Build system: CMake.
 - Plugin format: Windows VST3.
-- Current version: 1.1.0.
+- Current version: 1.2.0.
 - Company/manufacturer display name: TIMAUDIO.
 
 GitHub Actions builds the Windows VST3 when changes are pushed to main. Download the 2rich-Windows-VST3 artifact from a successful workflow run.
