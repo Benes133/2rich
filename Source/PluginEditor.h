@@ -3,7 +3,8 @@
 #include "PluginProcessor.h"
 #include <array>
 
-class AuroraEditor : public juce::AudioProcessorEditor, private juce::AudioProcessorValueTreeState::Listener, private juce::Timer {
+class AuroraEditor : public juce::AudioProcessorEditor, private juce::AudioProcessorValueTreeState::Listener,
+                     private juce::Timer, private juce::ListBoxModel {
 public:
     explicit AuroraEditor(AuroraProcessor&);
     ~AuroraEditor() override;
@@ -12,6 +13,9 @@ public:
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
+    int getNumRows() override;
+    void paintListBoxItem(int rowNumber, juce::Graphics&, int width, int height, bool rowIsSelected) override;
+    void selectedRowsChanged(int lastRowSelected) override;
 
 private:
     AuroraProcessor& proc;
@@ -25,11 +29,20 @@ private:
     juce::TextButton importWavetableButton{"IMPORT WAV"}, clearWavetableButton{"CLEAR"};
     juce::Label wavetableStatusLabel;
     std::unique_ptr<juce::FileChooser> wavetableChooser;
-    juce::TextButton sampleTab{"SAMPLE"}, sampleLoadButton{"LOAD AUDIO"}, sampleClearButton{"CLEAR"};
-    juce::ToggleButton sampleSliceButton{"AUTO SLICE MAP"};
-    juce::ComboBox sampleModeBox;
-    juce::Slider sampleRootNote, sampleMix, grainSize, grainDensity, grainPosition, grainSpray, grainPitch;
-    juce::Label sampleStatusLabel;
+    juce::TextButton samplerTab{"SAMPLER"}, granularTab{"GRANULAR"}, presetsTab{"PRESETS"};
+    juce::TextButton sampleLoadButton{"LOAD AUDIO"}, sampleClearButton{"CLEAR"}, sampleResliceButton{"RE-SLICE"};
+    juce::ToggleButton sampleSliceButton{"AUTO SLICE MAP"}, sampleTempoButton{"SYNC TO DAW"},
+        sampleKeyButton{"KEY MATCH"}, samplePreservePitchButton{"PRESERVE PITCH"},
+        sampleLoopButton{"LOOP"}, sampleReverseButton{"REVERSE"},
+        grainTempoButton{"SYNC GRAINS"}, grainKeyButton{"KEY MATCH"};
+    juce::ComboBox sampleSyncBarsBox, sampleTargetKeyBox, grainTargetKeyBox,
+        grainSyncDivisionBox, granularPresetBox;
+    juce::Slider sampleRootNote, sampleMix, sampleTranspose, sampleFineTune,
+        sampleStart, sampleEnd, sampleSliceSensitivity, sampleSliceMinGap,
+        sampleMaxSlices, sampleStretchGrainMs;
+    juce::Slider grainSize, grainDensity, grainPosition, grainSpray, grainPitch,
+        grainTranspose, grainFineTune, grainJitter, grainWindow, grainStereo;
+    juce::Label sampleStatusLabel, granularStatusLabel;
     std::unique_ptr<juce::FileChooser> sampleChooser;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aSampleSlice;
     juce::Slider fxEq, fxLow, fxMid, fxHigh, fxDist, fxChorus, fxFlange, fxDelay, fxReverb;
@@ -56,6 +69,10 @@ private:
     juce::ToggleButton fxCompEnabledButton { "COMPRESSOR" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aFxCompEnabled;
     juce::TextButton synthTab{"VOICE"}, wtTab{"MOTION"}, fxTab{"FX"}, modTab{"MOD"}, seqTab{"SEQ"};
+    juce::ListBox presetBrowserList;
+    juce::ComboBox presetCategoryFilter;
+    juce::Label presetCountLabel, presetSelectedLabel;
+    std::vector<int> filteredPresetIds;
     juce::ComboBox seqModeBox, arpStyleBox, seqRateBox, seqDirectionBox, seqLengthBox;
     juce::ComboBox seqPageBox, seqPatternSlotBox;
     juce::Slider seqOctaves, seqGate, seqSwing;
@@ -83,6 +100,7 @@ private:
     using ButtonAttach = juce::AudioProcessorValueTreeState::ButtonAttachment;
     std::vector<std::unique_ptr<Attach>> attachments;
     std::vector<std::unique_ptr<ChoiceAttach>> choiceAttachments;
+    std::vector<std::unique_ptr<ButtonAttach>> buttonAttachments;
     std::unique_ptr<ChoiceAttach> aWave1, aWave2, aWtTable;
 
     void addKnob(juce::Slider&, const juce::String&, const juce::String&);
@@ -92,7 +110,10 @@ private:
     void setPage(int page);
     void updateFxEditor();
     void updateSampleEditor();
+    void updateGranularEditor();
+    void updatePresetBrowser();
     void updateSampleStatus();
+    void applyGranularPreset(int presetId);
     void refreshSelectedStepControls();
     void writeSelectedStepParameter(const juce::String& baseId, float value);
     void editWavetableFromMouse(const juce::MouseEvent&);
