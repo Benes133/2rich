@@ -1200,33 +1200,54 @@ void AuroraEditor::timerCallback() {
 }
 
 void AuroraEditor::setPage(int page) {
-    currentPage=juce::jlimit(0,3,page);
-    synthTab.setToggleState(currentPage==0,juce::dontSendNotification);
-    wtTab.setToggleState(currentPage==1,juce::dontSendNotification);
-    fxTab.setToggleState(currentPage==2,juce::dontSendNotification);
-    sampleTab.setToggleState(currentPage==3,juce::dontSendNotification);
-    modTab.setVisible(false); seqTab.setVisible(false);
-    auto show=[](std::initializer_list<juce::Component*> list,bool visible){
-        for(auto* c:list)c->setVisible(visible);
-    };
-    show({&mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,
-          &wave1,&wave2,&oscModeBox,&filterTypeBox,&fmAmount,&syncRatio,&wtTable,&wtPosition,
-          &unison,&uniDetune,&uniSpread,&importWavetableButton,&clearWavetableButton,&wavetableStatusLabel},currentPage==0);
-    show({&lfo1Rate,&lfo2Rate,&lfo3Rate,&filterAttack,&filterDecay,&filterSustain,&filterRelease,
-          &filterEnvAmount,&lfo1Shape,&lfo2Shape,&lfo3Shape},currentPage==1);
-    for(int i=0;i<4;++i){
-        modSources[(size_t)i].setVisible(currentPage==1);
-        modTargets[(size_t)i].setVisible(currentPage==1);
-        modAmounts[(size_t)i].setVisible(currentPage==1);
+    currentPage = juce::jlimit(0, 5, page);
+    synthTab.setToggleState(currentPage == 0, juce::dontSendNotification);
+    wtTab.setToggleState(currentPage == 1, juce::dontSendNotification);
+    fxTab.setToggleState(currentPage == 2, juce::dontSendNotification);
+    samplerTab.setToggleState(currentPage == 3, juce::dontSendNotification);
+    granularTab.setToggleState(currentPage == 4, juce::dontSendNotification);
+    presetsTab.setToggleState(currentPage == 5, juce::dontSendNotification);
+
+    // Each workspace selects its engine explicitly; the old Oscillator/Sampler/Granular
+    // combo box is gone, so users never edit the wrong engine by accident.
+    if (auto* parameter = proc.params.getParameter("sampleMode")) {
+        const float mode = currentPage == 3 ? 1.0f : (currentPage == 4 ? 2.0f : 0.0f);
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(mode));
     }
-    show({&seqModeBox,&arpStyleBox,&seqRateBox,&seqDirectionBox,&seqLengthBox,&seqPageBox,
-          &seqPatternSlotBox,&seqOctaves,&seqGate,&seqSwing,&stepPitch,&stepVelocity,&stepGate,
-          &stepAccentButton,&savePatternButton,&loadPatternButton,&selectedStepLabel,&patternStatusLabel},currentPage==1);
-    for(auto& b:stepButtons)b.setVisible(currentPage==1);
+
+    auto show = [](std::initializer_list<juce::Component*> list, bool visible) {
+        for (auto* component : list) component->setVisible(visible);
+    };
+    show({ &mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,
+           &wave1,&wave2,&oscModeBox,&filterTypeBox,&fmAmount,&syncRatio,&wtTable,&wtPosition,
+           &unison,&uniDetune,&uniSpread,&importWavetableButton,&clearWavetableButton,&wavetableStatusLabel },
+         currentPage == 0);
+    show({ &lfo1Rate,&lfo2Rate,&lfo3Rate,&filterAttack,&filterDecay,&filterSustain,&filterRelease,
+           &filterEnvAmount,&lfo1Shape,&lfo2Shape,&lfo3Shape }, currentPage == 1);
+    for (int i = 0; i < 4; ++i) {
+        modSources[(size_t)i].setVisible(currentPage == 1);
+        modTargets[(size_t)i].setVisible(currentPage == 1);
+        modAmounts[(size_t)i].setVisible(currentPage == 1);
+    }
+    show({ &seqModeBox,&arpStyleBox,&seqRateBox,&seqDirectionBox,&seqLengthBox,&seqPageBox,
+           &seqPatternSlotBox,&seqOctaves,&seqGate,&seqSwing,&stepPitch,&stepVelocity,&stepGate,
+           &stepAccentButton,&savePatternButton,&loadPatternButton,&selectedStepLabel,&patternStatusLabel },
+         currentPage == 1);
+    for (auto& button : stepButtons) button.setVisible(currentPage == 1);
+
+    // Header controls belong to the Presets workspace, not the tiny top strip.
+    show({ &presetSearch,&presetCategoryFilter,&presetBrowserList,&presetCountLabel,
+           &presetSelectedLabel,&presetFavoriteButton,&savePresetButton,&loadPresetButton },
+         currentPage == 5);
+    presets.setVisible(false);
     updateFxEditor();
     updateSampleEditor();
-    if(currentPage==1)refreshSelectedStepControls();
-    startTimerHz(30); repaint(); resized();
+    updateGranularEditor();
+    updatePresetBrowser();
+    if (currentPage == 1) refreshSelectedStepControls();
+    startTimerHz(30);
+    resized();
+    repaint();
 }
 
 
@@ -1290,25 +1311,94 @@ void AuroraEditor::updateFxEditor() {
 
 void AuroraEditor::updateSampleEditor() {
     const bool visible = currentPage == 3;
-    for (juce::Component* component : std::array<juce::Component*, 12>{
-            &sampleLoadButton, &sampleClearButton, &sampleSliceButton, &sampleModeBox,
-            &sampleRootNote, &sampleMix, &grainSize, &grainDensity,
-            &grainPosition, &grainSpray, &grainPitch, &sampleStatusLabel })
+    for (juce::Component* component : std::array<juce::Component*, 22>{
+            &sampleLoadButton,&sampleClearButton,&sampleResliceButton,&sampleStatusLabel,
+            &sampleSliceButton,&sampleTempoButton,&sampleKeyButton,&samplePreservePitchButton,
+            &sampleLoopButton,&sampleReverseButton,&sampleSyncBarsBox,&sampleTargetKeyBox,
+            &sampleRootNote,&sampleMix,&sampleTranspose,&sampleFineTune,&sampleStart,&sampleEnd,
+            &sampleSliceSensitivity,&sampleSliceMinGap,&sampleMaxSlices,&sampleStretchGrainMs })
         component->setVisible(visible);
+}
+
+void AuroraEditor::updateGranularEditor() {
+    const bool visible = currentPage == 4;
+    for (juce::Component* component : std::array<juce::Component*, 16>{
+            &sampleLoadButton,&sampleClearButton,&granularStatusLabel,&sampleSliceButton,
+            &sampleLoopButton,&sampleReverseButton,&grainTempoButton,&grainKeyButton,
+            &grainTargetKeyBox,&grainSyncDivisionBox,&granularPresetBox,&grainSize,
+            &grainDensity,&grainPosition,&grainSpray,&grainPitch })
+        component->setVisible(visible);
+    for (juce::Component* component : std::array<juce::Component*, 4>{
+            &grainTranspose,&grainFineTune,&grainJitter,&grainWindow })
+        component->setVisible(visible);
+    grainStereo.setVisible(visible);
+}
+
+void AuroraEditor::updatePresetBrowser() {
+    const bool visible = currentPage == 5;
+    for (juce::Component* component : std::array<juce::Component*, 9>{
+            &presetSearch,&presetCategoryFilter,&presetBrowserList,&presetCountLabel,
+            &presetSelectedLabel,&presetFavoriteButton,&savePresetButton,&loadPresetButton,&presets })
+        component->setVisible(visible && component != &presets);
 }
 
 void AuroraEditor::updateSampleStatus() {
     const auto sample = proc.getSampleAsset();
     if (!sample) {
-        sampleStatusLabel.setText("NO AUDIO LOADED  /  IMPORT A WAV OR AIFF LOOP OR SONG",
-                                  juce::dontSendNotification);
+        const juce::String empty = "NO AUDIO LOADED  /  IMPORT A WAV OR AIFF FILE";
+        sampleStatusLabel.setText(empty, juce::dontSendNotification);
+        granularStatusLabel.setText(empty, juce::dontSendNotification);
         return;
     }
     const int sliceCount = juce::jmax(0, (int)sample->sliceStarts.size() - 1);
-    sampleStatusLabel.setText("FILE: " + sample->fileName + "   /   DETECTED KEY: "
-        + sample->keyName + "   /   " + juce::String(sliceCount) + " SLICES"
-        + (sample->left.size() >= 10000000u ? "   /   FIRST 10M FRAMES LOADED" : ""),
-        juce::dontSendNotification);
+    const juce::String info = "FILE: " + sample->fileName + "   /   KEY: "
+        + sample->keyName + "   /   SOURCE BPM: " + juce::String(sample->sourceBpm, 1)
+        + "   /   " + juce::String(sliceCount) + " SLICES";
+    sampleStatusLabel.setText(info, juce::dontSendNotification);
+    granularStatusLabel.setText(info, juce::dontSendNotification);
+}
+
+void AuroraEditor::applyGranularPreset(int presetId) {
+    struct GrainPatch {
+        float size, density, position, spray, pitch, transpose, fine, jitter, window, stereo;
+        int division, targetKey;
+        bool tempoSync, keySync;
+    };
+    static const GrainPatch patches[] = {
+        {120,18,.50f,.15f,0,0,0,0,0,.25f,2,0,true,true},
+        {75,26,.38f,.32f,12,0,-4,0.12f,0,.55f,1,0,true,true},
+        {240,9,.58f,.62f,-12,0,0,.35f,2,.82f,4,0,true,true},
+        {95,32,.44f,.24f,7,12,3,.18f,1,.65f,2,0,true,true},
+        {80,20,.50f,.04f,0,0,0,0,0,.20f,3,0,true,true},
+        {280,8,.65f,.55f,19,0,-7,.28f,2,.92f,4,0,true,true},
+        {48,40,.22f,.44f,-5,-12,0,.48f,1,1.0f,0,0,false,false},
+        {180,14,.82f,.95f,-24,-12,12,.55f,0,.72f,5,0,true,false},
+        {340,7,.50f,.8f,0,0,0,.32f,2,.9f,5,0,true,true},
+        {55,48,.5f,.2f,24,0,2,.12f,1,.4f,0,0,false,true},
+        {35,54,.16f,.18f,-12,12,0,.62f,1,.7f,1,0,true,false},
+        {210,12,.65f,.26f,-7,0,-12,.08f,2,.5f,3,0,true,true},
+        {115,24,.75f,.5f,12,7,0,.44f,0,1.0f,2,0,true,true},
+        {30,60,.35f,1.0f,-24,-12,18,.7f,1,1.0f,0,0,false,false},
+        {165,20,.48f,.12f,5,0,0,.05f,3,.45f,2,0,true,true},
+        {320,10,.62f,.68f,7,0,-3,.4f,2,.88f,4,0,true,true},
+        {420,6,.7f,.85f,-5,0,0,.52f,0,1.0f,5,0,true,true}
+    };
+    if (presetId < 1 || presetId > (int)std::size(patches)) return;
+    const auto& p = patches[presetId - 1];
+    auto set = [this](const char* id, float value) {
+        if (auto* parameter = proc.params.getParameter(id))
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+    };
+    set("grainSize",p.size);set("grainDensity",p.density);set("grainPosition",p.position);
+    set("grainSpray",p.spray);set("grainPitch",p.pitch);set("grainTranspose",p.transpose);
+    set("grainFineTune",p.fine);set("grainJitter",p.jitter);set("grainWindow",p.window);
+    set("grainStereo",p.stereo);set("grainSyncDivision",(float)p.division);
+    set("grainTargetKey",(float)p.targetKey);set("grainTempoSync",p.tempoSync?1.0f:0.0f);
+    set("grainKeySync",p.keySync?1.0f:0.0f);
+    grainTempoButton.setToggleState(p.tempoSync,dontSendNotification);
+    grainKeyButton.setToggleState(p.keySync,dontSendNotification);
+    granularPresetBox.setSelectedId(presetId,dontSendNotification);
+    repaint();
 }
 
 void AuroraEditor::parameterChanged(const juce::String& parameterID, float) {
