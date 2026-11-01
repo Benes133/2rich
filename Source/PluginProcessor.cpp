@@ -26,9 +26,9 @@ public:
     const float norm=voices==1?0.0f:((float)u/(voices-1)-.5f)*2.0f;
     const double ratio=std::pow(2.0,(det+norm*uniDet)/1200.0);
     const double ratio2=std::pow(2.0,(det+norm*uniDet+norm*4.0f)/1200.0);
-    const float p1=(float)(phase1+norm*.13),p2=(float)(phase2+norm*.19);
+    const float p1=(float)(phase1[u]+norm*.13),p2=(float)(phase2[u]+norm*.19);
     float x1=wave(p1,w1,table,position),x2=wave(p2,w2,table,position);
-    const float sample=((1.0f-mix)*x1+mix*x2+sub*std::sin((float)phase1*.5f));
+    const float sample=((1.0f-mix)*x1+mix*x2+sub*std::sin((float)phase1[u]*.5f));
     const float pan=norm*spread*.85f;
     left+=sample*std::sqrt(.5f*(1.0f-pan))*vel*env;
     right+=sample*std::sqrt(.5f*(1.0f+pan))*vel*env;
