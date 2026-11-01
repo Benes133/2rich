@@ -103,11 +103,14 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p)
     add(decay, "decay", "DECAY");
     add(sustain, "sustain", "SUSTAIN");
     add(release, "release", "RELEASE");
+    add(master, "master", "MASTER");
+    add(drive, "drive", "DRIVE");
+    add(width, "width", "WIDTH");
 }
 
 AuroraEditor::~AuroraEditor()
 {
-    for (auto* slider : { &mix, &detune, &sub, &cutoff, &res, &attack, &decay, &sustain, &release })
+    for (auto* slider : { &mix, &detune, &sub, &cutoff, &res, &attack, &decay, &sustain, &release, &master, &drive, &width })
         slider->setLookAndFeel(nullptr);
     wave1.setLookAndFeel(nullptr);
     wave2.setLookAndFeel(nullptr);
@@ -164,7 +167,8 @@ void AuroraEditor::paint(juce::Graphics& g)
 
     panel(30, 96, 550, 236, "OSCILLATORS", "SHAPE  /  BLEND  /  TUNING");
     panel(594, 96, 336, 236, "FILTER", "LOW PASS  /  RESONANCE");
-    panel(30, 348, 900, 250, "AMPLIFIER ENVELOPE", "ADSR  /  AMP MODULATION");
+    panel(30, 348, 620, 250, "AMPLIFIER ENVELOPE", "ADSR  /  AMP MODULATION");
+    panel(664, 348, 266, 250, "OUTPUT", "LEVEL  /  SATURATION  /  STEREO");
 
     g.setColour(muted);
     g.setFont(10.0f);
@@ -172,7 +176,7 @@ void AuroraEditor::paint(juce::Graphics& g)
     g.drawText("OSC 2", 220, 143, 100, 16, juce::Justification::centredLeft);
 
     const juce::String labels[] = { "MIX", "DETUNE", "SUB", "CUTOFF", "RESONANCE",
-                                    "ATTACK", "DECAY", "SUSTAIN", "RELEASE" };
+                                    "ATTACK", "DECAY", "SUSTAIN", "RELEASE", "MASTER", "DRIVE", "WIDTH" };
     const juce::Rectangle<int> b[] = {
         mix.getBounds(), detune.getBounds(), sub.getBounds(), cutoff.getBounds(), res.getBounds(),
         attack.getBounds(), decay.getBounds(), sustain.getBounds(), release.getBounds()
