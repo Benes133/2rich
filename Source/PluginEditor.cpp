@@ -7,7 +7,7 @@ const juce::Colour card     (0xff1c1928);
 const juce::Colour cardHi   (0xff242033);
 const juce::Colour border   (0xff302943);
 const juce::Colour violet   (0xffa78bfa);
-const juce::Colour violetHi (0xffc4b5fd);
+const juce::Colour violetHi (0xffc4b5fd);\nconst juce::Colour neon (0xff8b5cf6);
 const juce::Colour white    (0xfff4f0ff);
 const juce::Colour muted    (0xff8f899f);
 
@@ -96,11 +96,11 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     presets.addSectionHeading("KEYS");
     presets.addItem("Digital Keys", 7);
     presets.addItem("Soft Piano-ish", 8);
-    presets.addItem("Pluck Keys", 9);
+    presets.addItem("Pluck Keys", 9);\n    presets.addSectionHeading("BASS");\n    presets.addItem("Sub Pressure",10); presets.addItem("Reese Machine",11); presets.addItem("Acid Bloom",12); presets.addItem("Neon Bass",13);\n    presets.addSectionHeading("PLUCKS");\n    presets.addItem("Glass Pluck",14); presets.addItem("Cyber Mallet",15); presets.addItem("Crystal Keys",16);\n    presets.addSectionHeading("ATMOSPHERE");\n    presets.addItem("Aurora Drift",17); presets.addItem("Deep Space",18); presets.addItem("Ethereal Choir",19); presets.addItem("Frozen Sky",20);\n    presets.addSectionHeading("FX & SYNTH");\n    presets.addItem("Laser Bloom",21); presets.addItem("Retro Pulse",22); presets.addItem("Wide Unison",23); presets.addItem("Dirty Motion",24); presets.addItem("Dream Sequence",25);
     presets.setTextWhenNothingSelected("SELECT PRESET");
     presets.onChange = [this] { if (presets.getSelectedId() > 0) applyPreset(presets.getSelectedId()); };
 
-    add(mix, "mix", "MIX"); add(detune, "detune", "DETUNE"); add(sub, "sub", "SUB");
+    wtTable.setLookAndFeel(&richLook); wtTable.setColour(juce::ComboBox::textColourId,white);\n    wtTable.addItemList({"Basic","Harmonics","Triangle Morph","Digital","Octave","Fold"},1);\n    addAndMakeVisible(wtTable); aWtTable=std::make_unique<ChoiceAttach>(ap,"wtTable",wtTable);\n    auto addExtra=[&](juce::Slider& s,const juce::String& id,const juce::String& label){addKnob(s,label,id);attachments.push_back(std::make_unique<Attach>(ap,id,s));};\n    addExtra(wtPosition,"wtPosition","POSITION"); addExtra(unison,"unison","VOICES"); addExtra(uniDetune,"uniDetune","DETUNE"); addExtra(uniSpread,"uniSpread","SPREAD");\n    addExtra(fxEq,"fxEq","EQ MIX"); addExtra(fxLow,"fxLow","LOW"); addExtra(fxMid,"fxMid","MID"); addExtra(fxHigh,"fxHigh","HIGH");\n    addExtra(fxDist,"fxDist","DISTORT"); addExtra(fxChorus,"fxChorus","CHORUS"); addExtra(fxFlange,"fxFlange","FLANGER"); addExtra(fxDelay,"fxDelay","DELAY"); addExtra(fxReverb,"fxReverb","REVERB");\n    for(auto* tab:{&synthTab,&wtTab,&fxTab}){tab->setLookAndFeel(&richLook);tab->setColour(juce::TextButton::textColourOffId,white);tab->setColour(juce::TextButton::textColourOnId,violetHi);tab->setClickingTogglesState(false);addAndMakeVisible(*tab);}\n    synthTab.onClick=[this]{setPage(0);};wtTab.onClick=[this]{setPage(1);};fxTab.onClick=[this]{setPage(2);};\n    unison.setRange(1,7,1); unison.setNumDecimalPlacesToDisplay(0);\n    add(mix, "mix", "MIX"); add(detune, "detune", "DETUNE"); add(sub, "sub", "SUB");
     add(cutoff, "cutoff", "CUTOFF"); add(res, "res", "RES");
     add(attack, "attack", "ATTACK"); add(decay, "decay", "DECAY");
     add(sustain, "sustain", "SUSTAIN"); add(release, "release", "RELEASE");
@@ -110,7 +110,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
 AuroraEditor::~AuroraEditor() {
     for (auto* slider : { &mix, &detune, &sub, &cutoff, &res, &attack, &decay, &sustain,
                           &release, &master, &drive, &width }) slider->setLookAndFeel(nullptr);
-    wave1.setLookAndFeel(nullptr); wave2.setLookAndFeel(nullptr); presets.setLookAndFeel(nullptr);
+    wave1.setLookAndFeel(nullptr); wave2.setLookAndFeel(nullptr); presets.setLookAndFeel(nullptr); wtTable.setLookAndFeel(nullptr);\n    synthTab.setLookAndFeel(nullptr);wtTab.setLookAndFeel(nullptr);fxTab.setLookAndFeel(nullptr);
 }
 
 void AuroraEditor::addKnob(juce::Slider& s, const juce::String&, const juce::String&) {
@@ -148,11 +148,11 @@ void AuroraEditor::applyPreset(int id) {
     set("mix",p.mix); set("detune",p.detune); set("sub",p.sub);
     set("cutoff",p.cutoff); set("res",p.res);
     set("attack",p.a); set("decay",p.d); set("sustain",p.s); set("release",p.r);
-    set("drive",p.drive); set("width",p.width); set("master",.8f);
+    set("drive",p.drive); set("width",p.width); set("master",.8f);\n    set("unison",id>=21?7.0f:(id>=10?3.0f:1.0f)); set("uniDetune",id>=21?24.0f:12.0f); set("uniSpread",id>=21?.9f:.65f);\n    set("wtTable",(float)((id*3)%6)); set("wtPosition",id>=17?.65f:.2f);\n    set("fxEq",id>=10?.45f:.2f);set("fxDist",p.drive);set("fxChorus",id>=17?.45f:.15f);set("fxFlange",id==21||id==24?.35f:0.0f);set("fxDelay",id>=14?.3f:.08f);set("fxReverb",id>=4?.38f:.12f);
     repaint();
 }
 
-void AuroraEditor::paint(juce::Graphics& g) {
+void AuroraEditor::setPage(int page) {\n    currentPage=page;\n    auto show=[page](std::initializer_list<juce::Component*> list,bool visible){for(auto* c:list)c->setVisible(visible);};\n    show({&mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,&wave1,&wave2},page==0);\n    show({&wtTable,&wtPosition,&unison,&uniDetune,&uniSpread},page==1);\n    show({&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb},page==2);\n    repaint();resized();\n}\n\nvoid AuroraEditor::paint(juce::Graphics& g) {
     g.fillAll(bg);
     const float scale = juce::jmin(getWidth() / 960.0f, getHeight() / 640.0f);
     const int ox = (getWidth() - juce::roundToInt(960.0f * scale)) / 2;
@@ -173,7 +173,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
         g.setColour(white); g.setFont(13); g.drawText(title,x+16,y+13,w-32,19,juce::Justification::centredLeft);
         g.setColour(muted); g.setFont(10); g.drawText(subtitle,x+16,y+34,w-32,15,juce::Justification::centredLeft);
     };
-    panel(30,96,550,236,"OSCILLATORS","SHAPE  /  BLEND  /  TUNING");
+    panel(30,96,900,502,currentPage==0?"OSCILLATORS":(currentPage==1?"WAVETABLE LAB":"FX RACK"),currentPage==0?"SHAPE  /  BLEND  /  TUNING":(currentPage==1?"TABLE MORPHING  /  UNISON ENGINE":"SHAPE THE SOUND  /  INSERT EFFECTS"));\n    g.setColour(juce::Colour(0x228b5cf6));g.drawRoundedRectangle(30.5f,96.5f,899,501,13,2.0f);\n    if(currentPage==0){
     panel(594,96,336,236,"FILTER","LOW PASS  /  RESONANCE");
     panel(30,348,620,250,"AMPLIFIER ENVELOPE","ADSR  /  AMP MODULATION");
     panel(664,348,266,250,"OUTPUT","LEVEL  /  SATURATION  /  STEREO");
@@ -202,7 +202,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
     drawWave(49,204,132,72,wave1.getSelectedId()-1,"OSC 1");
     drawWave(220,204,132,72,wave2.getSelectedId()-1,"OSC 2");
 
-    const juce::String footer = "2RICH  •  SOUND WITHOUT LIMITS";
+    } else if(currentPage==1) {\n        g.setColour(muted);g.setFont(12);g.drawText("MORPH BETWEEN WAVETABLE FRAMES • BUILT-IN TABLE BANK",55,160,820,24,juce::Justification::centredLeft);\n        juce::Path wave;for(int i=0;i<=256;++i){float t=i/256.0f;float v=std::sin(t*juce::MathConstants<float>::twoPi)+.35f*std::sin(t*juce::MathConstants<float>::twoPi*3);float x=55+t*840,y=300-v*75;if(i==0)wave.startNewSubPath(x,y);else wave.lineTo(x,y);}g.setColour(juce::Colour(0x338b5cf6));g.strokePath(wave,juce::PathStrokeType(10));g.setColour(violetHi);g.strokePath(wave,juce::PathStrokeType(2.2f));\n        g.setColour(muted);g.setFont(10);g.drawText("OSCILLATOR UNISON • UP TO 7 VOICES",55,420,400,18,juce::Justification::centredLeft);\n    } else {\n        g.setColour(muted);g.setFont(12);g.drawText("EFFECTS ARE PROCESSED IN REAL TIME",55,160,800,20,juce::Justification::centredLeft);\n        g.setColour(violet);g.drawRoundedRectangle(55,198,840,320,12,1.5f);\n        g.setColour(juce::Colour(0x338b5cf6));g.drawRoundedRectangle(58,201,834,314,10,5);\n    }\n    const juce::String footer = "2RICH  •  SOUND WITHOUT LIMITS";
     g.setColour(juce::Colour(0xff393149)); g.drawLine(31,611,929,611,1);
     g.setColour(muted); g.setFont(9.5f); g.drawText(footer,34,614,300,12,juce::Justification::centredLeft);
 }
@@ -222,5 +222,5 @@ void AuroraEditor::resized() {
     const int gap=12, knobW=132;
     place(attack,{43,411,knobW,155}); place(decay,{43+knobW+gap,411,knobW,155});
     place(sustain,{43+(knobW+gap)*2,411,knobW,155}); place(release,{43+(knobW+gap)*3,411,knobW,155});
-    place(master,{676,405,78,154}); place(drive,{756,405,78,154}); place(width,{836,405,78,154});
+    place(master,{676,405,78,154}); place(drive,{756,405,78,154}); place(width,{836,405,78,154});\n    place(wtTable,{65,230,220,34});place(wtPosition,{70,340,160,155});place(unison,{300,340,145,155});place(uniDetune,{485,340,145,155});place(uniSpread,{670,340,145,155});\n    juce::Slider* fx[]={&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb};\n    for(int i=0;i<9;++i)place(*fx[i],{55+(i%5)*165,220+(i/5)*175,145,150});\n    if(currentPage!=0){for(auto* c:{(juce::Component*)&mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,&wave1,&wave2})c->setVisible(false);}\n    if(currentPage!=1){for(auto* c:{(juce::Component*)&wtTable,&wtPosition,&unison,&uniDetune,&uniSpread})c->setVisible(false);}\n    if(currentPage!=2){for(auto* c:{(juce::Component*)&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb})c->setVisible(false);}
 }
