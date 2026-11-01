@@ -1,17 +1,17 @@
-# AURORA Synth
-An original JUCE-based subtractive synthesizer prototype for Windows VST3.
+# 2rich
+An original JUCE-based synthesizer plugin for Windows VST3.
 
-## Current features
+## Current engine
 - 16-voice polyphonic MIDI instrument
-- Two oscillators (saw, square, triangle, sine)
-- Oscillator mix, detune and sub oscillator
+- Two basic oscillators: saw, square, triangle and sine
+- Oscillator blend, detune and sub oscillator
 - ADSR amplitude envelope
 - Low-pass filter with cutoff and resonance
-- Dark custom JUCE interface
 - Parameter state persistence
 
 ## Build
-GitHub Actions builds the Windows VST3 automatically on pushes to main or via Actions > Build AURORA VST3 (Windows) > Run workflow.
-Download the `AURORA-Windows-VST3` artifact from a successful run.
+GitHub Actions builds the Windows VST3 on pushes to main or manually from Actions.
+Download the `AURORA-Windows-VST3` artifact from a successful run. The internal artifact name will be renamed in a later cleanup; the plugin itself is now branded 2rich.
 
-This is an early original synth prototype, not a Serum clone. Wavetable editing, FM, unison, modulation matrix and effects are planned, not yet implemented.
+## Roadmap
+Wavetable import and editing, unison, FM, modulation matrix, LFOs, presets and an effects rack are planned. This is an early original synth, not a Serum clone.
