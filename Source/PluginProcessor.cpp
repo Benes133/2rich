@@ -918,7 +918,7 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const float activeReverbMix = juce::jlimit(0.0f, 1.0f, reverbMix + reverbModAverage * 0.5f);
 
     for (int slot = 0; slot < 6; ++slot) {
-        const int effect = juce::jlimit(0, 8, fxSlots[slot]);
+        const int effect = juce::jlimit(0, 14, fxSlots[slot]);
         if (effect == 0)
             continue;
 
