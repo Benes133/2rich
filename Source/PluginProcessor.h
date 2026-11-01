@@ -28,11 +28,16 @@ public:
  APVTS params;
  static APVTS::ParameterLayout createLayout();
  void saveUserPattern(int slot);
- void loadUserPattern(int slot);
+ bool loadUserPattern(int slot);
  int getSequencerCurrentStep() const noexcept { return sequenceCurrentStep.load(std::memory_order_relaxed); }
 private:
- struct StepData { bool enabled = true; int pitch = 0; float velocity = 100.0f; float gate = 100.0f; bool accent = false; };
- std::array<std::array<StepData, 32>, 8> userPatterns{};
+ struct StepData { bool enabled = true; int pitch = 0; float velocity = 127.0f; float gate = 100.0f; bool accent = false; };
+ struct UserPattern {
+  std::array<StepData, 32> steps{};
+  int direction = 0, length = 2, rate = 2;
+  float globalGate = 82.0f, swing = 0.0f;
+ };
+ std::array<UserPattern, 8> userPatterns{};
  std::array<bool, 8> userPatternValid{};
  class Voice;
  juce::Synthesiser synth;

@@ -329,7 +329,7 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
         layout.add(std::make_unique<juce::AudioParameterInt>(
             ("stepPitch" + suffix).toRawUTF8(), (stepName + "Pitch").toRawUTF8(),
             -12, 12, defaultStepPitches[step % 8]));
-        f(("stepVelocity" + suffix).toRawUTF8(), (stepName + "Velocity").toRawUTF8(), 1.0f, 127.0f, 100.0f);
+        f(("stepVelocity" + suffix).toRawUTF8(), (stepName + "Velocity").toRawUTF8(), 1.0f, 127.0f, 127.0f);
         f(("stepGate" + suffix).toRawUTF8(), (stepName + "Gate").toRawUTF8(), 10.0f, 100.0f, 100.0f);
         layout.add(std::make_unique<juce::AudioParameterBool>(
             ("stepAccent" + suffix).toRawUTF8(), (stepName + "Accent").toRawUTF8(), false));
@@ -446,6 +446,8 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         synth.renderNextBlock(buffer, midi, 0, samples);
     } else {
         sequencerWasRunning = true;
+        if (sequencerMode != 2)
+            sequenceCurrentStep.store(-1, std::memory_order_relaxed);
         juce::MidiBuffer sequencedMidi;
         auto inputIterator = midi.begin();
         const auto inputEnd = midi.end();
@@ -699,9 +701,16 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 
 void AuroraProcessor::saveUserPattern(int slot) {
     slot = juce::jlimit(0, 7, slot);
+    auto& pattern = userPatterns[(size_t)slot];
+    pattern.direction = (int)params.getRawParameterValue("seqDirection")->load();
+    pattern.length = (int)params.getRawParameterValue("seqLength")->load();
+    pattern.rate = (int)params.getRawParameterValue("seqRate")->load();
+    pattern.globalGate = params.getRawParameterValue("seqGate")->load();
+    pattern.swing = params.getRawParameterValue("seqSwing")->load();
+
     for (int step = 0; step < 32; ++step) {
         const auto suffix = juce::String(step);
-        auto& data = userPatterns[(size_t)slot][(size_t)step];
+        auto& data = pattern.steps[(size_t)step];
         data.enabled = params.getRawParameterValue(("stepOn" + suffix).toRawUTF8())->load() > 0.5f;
         data.pitch = (int)params.getRawParameterValue(("stepPitch" + suffix).toRawUTF8())->load();
         data.velocity = params.getRawParameterValue(("stepVelocity" + suffix).toRawUTF8())->load();
@@ -711,10 +720,10 @@ void AuroraProcessor::saveUserPattern(int slot) {
     userPatternValid[(size_t)slot] = true;
 }
 
-void AuroraProcessor::loadUserPattern(int slot) {
+bool AuroraProcessor::loadUserPattern(int slot) {
     slot = juce::jlimit(0, 7, slot);
     if (!userPatternValid[(size_t)slot])
-        return;
+        return false;
 
     auto setParameter = [this](const juce::String& id, float valueToSet) {
         if (auto* parameter = params.getParameter(id)) {
@@ -724,15 +733,23 @@ void AuroraProcessor::loadUserPattern(int slot) {
         }
     };
 
+    const auto& pattern = userPatterns[(size_t)slot];
+    setParameter("seqDirection", (float)pattern.direction);
+    setParameter("seqLength", (float)pattern.length);
+    setParameter("seqRate", (float)pattern.rate);
+    setParameter("seqGate", pattern.globalGate);
+    setParameter("seqSwing", pattern.swing);
+
     for (int step = 0; step < 32; ++step) {
         const auto suffix = juce::String(step);
-        const auto& data = userPatterns[(size_t)slot][(size_t)step];
+        const auto& data = pattern.steps[(size_t)step];
         setParameter("stepOn" + suffix, data.enabled ? 1.0f : 0.0f);
         setParameter("stepPitch" + suffix, (float)data.pitch);
         setParameter("stepVelocity" + suffix, data.velocity);
         setParameter("stepGate" + suffix, data.gate);
         setParameter("stepAccent" + suffix, data.accent ? 1.0f : 0.0f);
     }
+    return true;
 }
 
 void AuroraProcessor::getStateInformation(juce::MemoryBlock& destination) {
@@ -741,10 +758,16 @@ void AuroraProcessor::getStateInformation(juce::MemoryBlock& destination) {
     for (int slot = 0; slot < 8; ++slot) {
         if (!userPatternValid[(size_t)slot])
             continue;
+        const auto& patternData = userPatterns[(size_t)slot];
         auto* pattern = bank->createNewChildElement("PATTERN");
         pattern->setAttribute("slot", slot);
+        pattern->setAttribute("direction", patternData.direction);
+        pattern->setAttribute("length", patternData.length);
+        pattern->setAttribute("rate", patternData.rate);
+        pattern->setAttribute("globalGate", (double)patternData.globalGate);
+        pattern->setAttribute("swing", (double)patternData.swing);
         for (int step = 0; step < 32; ++step) {
-            const auto& data = userPatterns[(size_t)slot][(size_t)step];
+            const auto& data = patternData.steps[(size_t)step];
             auto* element = pattern->createNewChildElement("STEP");
             element->setAttribute("index", step);
             element->setAttribute("on", data.enabled ? 1 : 0);
@@ -768,21 +791,29 @@ void AuroraProcessor::setStateInformation(const void* data, int size) {
                 const int slot = pattern->getIntAttribute("slot", -1);
                 if (slot < 0 || slot >= 8)
                     continue;
+                auto& targetPattern = userPatterns[(size_t)slot];
+                targetPattern.direction = pattern->getIntAttribute("direction", 0);
+                targetPattern.length = pattern->getIntAttribute("length", 2);
+                targetPattern.rate = pattern->getIntAttribute("rate", 2);
+                targetPattern.globalGate = (float)pattern->getDoubleAttribute("globalGate", 82.0);
+                targetPattern.swing = (float)pattern->getDoubleAttribute("swing", 0.0);
                 for (auto* element = pattern->getFirstChildElement(); element != nullptr; element = element->getNextElement()) {
                     if (!element->hasTagName("STEP"))
                         continue;
                     const int step = element->getIntAttribute("index", -1);
                     if (step < 0 || step >= 32)
                         continue;
-                    auto& target = userPatterns[(size_t)slot][(size_t)step];
+                    auto& target = targetPattern.steps[(size_t)step];
                     target.enabled = element->getIntAttribute("on", 1) != 0;
                     target.pitch = element->getIntAttribute("pitch", 0);
-                    target.velocity = (float)element->getDoubleAttribute("velocity", 100.0);
+                    target.velocity = (float)element->getDoubleAttribute("velocity", 127.0);
                     target.gate = (float)element->getDoubleAttribute("gate", 100.0);
                     target.accent = element->getIntAttribute("accent", 0) != 0;
                 }
                 userPatternValid[(size_t)slot] = true;
             }
+            // Keep the custom pattern bank out of APVTS's parameter tree.
+            xml->removeChildElement(bank, true);
         }
         params.replaceState(juce::ValueTree::fromXml(*xml));
     }

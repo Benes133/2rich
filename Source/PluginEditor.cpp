@@ -211,6 +211,9 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     setupStepEditor(stepPitch, -12.0f, 12.0f, 1.0f, "stepPitch");
     setupStepEditor(stepVelocity, 1.0f, 127.0f, 1.0f, "stepVelocity");
     setupStepEditor(stepGate, 10.0f, 100.0f, 1.0f, "stepGate");
+    stepPitch.setNumDecimalPlacesToDisplay(0);
+    stepVelocity.setNumDecimalPlacesToDisplay(0);
+    stepGate.setNumDecimalPlacesToDisplay(0);
 
     stepAccentButton.setLookAndFeel(&richLook);
     stepAccentButton.setClickingTogglesState(false);
@@ -233,12 +236,13 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     loadPatternButton.setTooltip("Load the selected user pattern from this project.");
     savePatternButton.onClick = [this] {
         proc.saveUserPattern(juce::jmax(0, seqPatternSlotBox.getSelectedId() - 1));
-        patternStatusLabel.setText("SAVED TO PROJECT", juce::dontSendNotification);
+        patternStatusLabel.setText("SAVED WITH PROJECT STATE", juce::dontSendNotification);
     };
     loadPatternButton.onClick = [this] {
-        proc.loadUserPattern(juce::jmax(0, seqPatternSlotBox.getSelectedId() - 1));
+        const bool loaded = proc.loadUserPattern(juce::jmax(0, seqPatternSlotBox.getSelectedId() - 1));
         refreshSelectedStepControls();
-        patternStatusLabel.setText("PATTERN LOADED", juce::dontSendNotification);
+        patternStatusLabel.setText(loaded ? "PATTERN LOADED" : "EMPTY SLOT - SAVE FIRST",
+                                   juce::dontSendNotification);
         repaint();
     };
     selectedStepLabel.setColour(juce::Label::textColourId, white);
@@ -701,9 +705,9 @@ void AuroraEditor::paint(juce::Graphics& g) {
         g.drawRoundedRectangle(526.5f,348.5f,379.0f,182.0f,9.0f,1.0f);
         g.setColour(muted);
         g.setFont(juce::Font(juce::FontOptions(8.5f,juce::Font::bold)));
-        g.drawText("PITCH",548,389,58,12,juce::Justification::centredLeft);
-        g.drawText("VELOCITY",548,431,75,12,juce::Justification::centredLeft);
-        g.drawText("STEP GATE",548,473,75,12,juce::Justification::centredLeft);
+        g.drawText("PITCH",548,383,58,12,juce::Justification::centredLeft);
+        g.drawText("VELOCITY",548,425,75,12,juce::Justification::centredLeft);
+        g.drawText("STEP GATE",548,467,75,12,juce::Justification::centredLeft);
         g.drawText("USER PATTERN BANK",52,534,200,12,juce::Justification::centredLeft);
         const int pageOffset = seqPageBox.getSelectedId() == 2 ? 16 : 0;
         if (lastActiveStep >= pageOffset && lastActiveStep < pageOffset + 16) {
@@ -804,9 +808,9 @@ void AuroraEditor::resized() {
         place(stepButtons[(size_t)i],{x,y,104,29});
     }
     place(selectedStepLabel,{548,354,180,24});
-    place(stepPitch,{548,399,340,28});
-    place(stepVelocity,{548,441,340,28});
-    place(stepGate,{548,483,340,28});
+    place(stepPitch,{548,396,340,28});
+    place(stepVelocity,{548,438,340,28});
+    place(stepGate,{548,480,340,24});
     place(stepAccentButton,{548,507,112,24});
     place(seqPageBox,{52,548,160,24});
     place(seqPatternSlotBox,{222,548,150,24});
