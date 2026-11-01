@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 #include <atomic>
+#include <memory>
 class AuroraProcessor : public juce::AudioProcessor {
 public:
  using APVTS=juce::AudioProcessorValueTreeState;
@@ -29,6 +30,16 @@ public:
  static APVTS::ParameterLayout createLayout();
  void saveUserPattern(int slot);
  bool loadUserPattern(int slot);
+ bool loadWavetableFromFile(const juce::File& file, juce::String& error);
+ void clearImportedWavetable();
+ bool hasImportedWavetable() const noexcept {
+  return (bool)std::atomic_load_explicit(&importedWavetable, std::memory_order_acquire);
+ }
+ std::shared_ptr<const std::vector<float>> getImportedWavetable() const noexcept {
+  return std::atomic_load_explicit(&importedWavetable, std::memory_order_acquire);
+ }
+ float getImportedWavetableSample(float phase, float position) const noexcept;
+ const juce::String& getImportedWavetableName() const noexcept { return importedWavetableName; }
  int getSequencerCurrentStep() const noexcept { return sequenceCurrentStep.load(std::memory_order_relaxed); }
  float getModRouteActivity(int route) const noexcept {
   return route >= 0 && route < 4 ? modRouteActivity[(size_t)route].load(std::memory_order_relaxed) : 0.0f;
@@ -42,6 +53,8 @@ private:
  };
  std::array<UserPattern, 8> userPatterns{};
  std::array<bool, 8> userPatternValid{};
+ std::shared_ptr<const std::vector<float>> importedWavetable;
+ juce::String importedWavetableName;
  class Voice;
  juce::Synthesiser synth;
  std::vector<float> lfo1Block, lfo2Block, lfo3Block;

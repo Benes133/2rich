@@ -1,14 +1,23 @@
-# 2rich 0.7.0 — Modulation Pro
+# 2rich 0.8.0 — Sound Design
 
 2rich is an original JUCE-based polyphonic synthesizer for Windows VST3.
 
-## New in 0.7.0
+## New in 0.8.0
+
+- Oscillator modes: Classic, FM, Ring Mod and Hard Sync.
+- FM amount and Hard Sync ratio controls.
+- Filter types: Low Pass, Band Pass and High Pass.
+- WAV/AIFF wavetable import: audio is resampled into a 64-frame, 2048-sample wavetable.
+- Imported tables can be scanned with the existing wavetable position control.
+- Imported wavetable data is embedded in DAW project state and restored when the project is reopened.
+- Oscillator phase lookup uses normalized cycle position derived from oscillator radians.
+
+## Modulation (0.7.0)
 
 - Third global LFO with independent rate and waveform.
-- Modulation sources include LFO 3, Pitch Bend and Aftertouch; legacy source indices remain stable.
-- Four modulation routes can share the same destination.
-- New destinations: voice volume, FX Chorus, FX Delay and FX Reverb.
-- Live activity meters for all four modulation routes.
+- Modulation sources include LFO 3, Pitch Bend and Aftertouch.
+- Four routes with live activity indicators.
+- Destinations include voice volume, FX Chorus, FX Delay and FX Reverb.
 
 ## Sequencer (0.6.0)
 
@@ -16,34 +25,26 @@
 - Per-step pitch, velocity, gate length and accent.
 - Pattern lengths of 4, 8, 16 or 32 steps.
 - Forward, Reverse, Ping-Pong and Random playback directions.
-- Eight project-stored user pattern slots.
-
-## Previous modulation features
-
-- Two global LFOs with Sine, Triangle, Saw, Square and Sample & Hold shapes.
-- Four-slot modulation matrix with source, target and bipolar depth controls.
-- Modulation destinations: filter cutoff, oscillator mix, wavetable position, pitch, pan and resonance.
-- Per-voice Filter Envelope and Mod Wheel source.
+- Eight user pattern slots stored with the DAW project.
 
 ## Interface
 
-- **SYNTH** — two oscillators, live waveform previews, oscillator blend, detune, sub level, filter, ADSR and output.
-- **WAVETABLE** — built-in wavetable bank, morph-position preview and unison.
+- **SYNTH** — dual oscillators, synthesis mode, FM and sync controls, filter type, ADSR and output.
+- **WAVETABLE** — built-in tables, WAV/AIFF import, 64-frame morph preview, position control and unison.
 - **FX** — tone/EQ, saturation, modulation and space.
 - **MOD** — three LFOs, modulation matrix, MIDI expression and filter envelope.
-- **SEQ** — host-synced arpeggiator and 32-step sequencer with per-step sound shaping.
+- **SEQ** — host-synced arpeggiator and 32-step sequencer.
 
 ## Sound engine
 
 - 16-voice polyphonic MIDI instrument.
 - Saw, square, triangle and sine oscillator shapes.
-- Oscillator blend, detune and sub oscillator.
+- Classic oscillator blend, phase-modulation FM, ring modulation and hard sync.
+- Low-pass, band-pass and high-pass state-variable filter modes.
 - ADSR amplitude envelope and per-voice filter envelope.
-- Per-voice state-variable low-pass filter.
-- Built-in wavetable morphing.
 - Up to 7 unison voices with detune and stereo spread.
-- EQ, distortion, chorus, flanger, delay and reverb controls.
-- Parameter and user-pattern state persistence.
+- EQ, distortion, chorus, flanger, delay and reverb.
+- Parameter, pattern-bank, imported wavetable and DAW project state persistence.
 - 25 original factory presets.
 
 ## Build and download
@@ -57,4 +58,4 @@ Download the **`2rich-Windows-VST3`** artifact from a successful workflow run. T
 - Framework: JUCE 8.0.6.
 - Build system: CMake.
 - Plugin format: VST3.
-- Current version: 0.7.0.
+- Current version: 0.8.0.

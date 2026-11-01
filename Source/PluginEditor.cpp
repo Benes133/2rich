@@ -132,8 +132,49 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     presets.onChange = [this] { if (presets.getSelectedId() > 0) applyPreset(presets.getSelectedId()); };
 
     wtTable.setLookAndFeel(&richLook); wtTable.setColour(juce::ComboBox::textColourId,white);
-    wtTable.addItemList({"Basic","Harmonics","Triangle Morph","Digital","Octave","Fold"},1);
+    wtTable.addItemList({"Basic","Harmonics","Triangle Morph","Digital","Octave","Fold","Imported WAV"},1);
     addAndMakeVisible(wtTable); aWtTable=std::make_unique<ChoiceAttach>(ap,"wtTable",wtTable);
+
+    for (auto* button : { &importWavetableButton, &clearWavetableButton }) {
+        button->setLookAndFeel(&richLook);
+        button->setColour(juce::TextButton::textColourOffId, white);
+        button->setColour(juce::TextButton::textColourOnId, violetHi);
+        addAndMakeVisible(*button);
+    }
+    wavetableStatusLabel.setColour(juce::Label::textColourId, muted);
+    wavetableStatusLabel.setFont(juce::Font(juce::FontOptions(8.0f)));
+    wavetableStatusLabel.setText("64-FRAME WAV TABLE READY", juce::dontSendNotification);
+    addAndMakeVisible(wavetableStatusLabel);
+
+    importWavetableButton.onClick = [this] {
+        wavetableChooser = std::make_unique<juce::FileChooser>(
+            "Import Wavetable Audio", juce::File::getSpecialLocation(juce::File::userHomeDirectory),
+            "*.wav;*.aif;*.aiff");
+        wavetableChooser->launchAsync(juce::FileBrowserComponent::openMode
+                                      | juce::FileBrowserComponent::canSelectFiles,
+            [this](const juce::FileChooser& chooser) {
+                const auto file = chooser.getResult();
+                if (file == juce::File{})
+                    return;
+                juce::String error;
+                if (proc.loadWavetableFromFile(file, error)) {
+                    wtTable.setSelectedId(7, juce::sendNotification);
+                    wavetableStatusLabel.setText("IMPORTED: " + file.getFileName(),
+                                                 juce::dontSendNotification);
+                } else {
+                    wavetableStatusLabel.setText("IMPORT FAILED: " + error,
+                                                 juce::dontSendNotification);
+                }
+                repaint();
+            });
+    };
+    clearWavetableButton.onClick = [this] {
+        proc.clearImportedWavetable();
+        if (wtTable.getSelectedId() == 7)
+            wtTable.setSelectedId(1, juce::sendNotification);
+        wavetableStatusLabel.setText("IMPORTED TABLE CLEARED", juce::dontSendNotification);
+        repaint();
+    };
 
     auto addChoice = [&](juce::ComboBox& box, const juce::StringArray& items, const juce::String& id) {
         box.setLookAndFeel(&richLook);
@@ -143,6 +184,9 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         addAndMakeVisible(box);
         choiceAttachments.push_back(std::make_unique<ChoiceAttach>(ap, id, box));
     };
+    addChoice(oscModeBox, { "Classic", "FM", "Ring Mod", "Hard Sync" }, "oscMode");
+    addChoice(filterTypeBox, { "Low Pass", "Band Pass", "High Pass" }, "filterType");
+
     const juce::StringArray lfoShapes = { "Sine", "Triangle", "Saw", "Square", "Sample & Hold" };
     addChoice(lfo1Shape, lfoShapes, "lfo1Shape");
     addChoice(lfo2Shape, lfoShapes, "lfo2Shape");
@@ -168,6 +212,11 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
                                    "PATTERN 05", "PATTERN 06", "PATTERN 07", "PATTERN 08" }, "seqPatternSlot");
     auto addExtra=[&](juce::Slider& s,const juce::String& id,const juce::String& label){addKnob(s,label,id);attachments.push_back(std::make_unique<Attach>(ap,id,s));};
     addExtra(wtPosition,"wtPosition","POSITION"); addExtra(unison,"unison","VOICES"); addExtra(uniDetune,"uniDetune","DETUNE"); addExtra(uniSpread,"uniSpread","SPREAD");
+    addExtra(fmAmount,"fmAmount","FM AMOUNT"); addExtra(syncRatio,"syncRatio","SYNC RATIO");
+    for (auto* slider : { &fmAmount, &syncRatio }) {
+        slider->setSliderStyle(juce::Slider::LinearHorizontal);
+        slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
+    }
     addExtra(fxEq,"fxEq","EQ MIX"); addExtra(fxLow,"fxLow","LOW"); addExtra(fxMid,"fxMid","MID"); addExtra(fxHigh,"fxHigh","HIGH");
     addExtra(fxDist,"fxDist","DISTORT"); addExtra(fxChorus,"fxChorus","CHORUS"); addExtra(fxFlange,"fxFlange","FLANGER"); addExtra(fxDelay,"fxDelay","DELAY"); addExtra(fxReverb,"fxReverb","REVERB");
     addExtra(lfo1Rate,"lfo1Rate","RATE"); addExtra(lfo2Rate,"lfo2Rate","RATE");
@@ -284,7 +333,7 @@ AuroraEditor::~AuroraEditor() {
         proc.params.removeParameterListener(id, this);
     for (auto* slider : { &mix, &detune, &sub, &cutoff, &res, &attack, &decay, &sustain,
                           &release, &master, &drive, &width, &wtPosition, &unison, &uniDetune,
-                          &uniSpread, &fxEq, &fxLow, &fxMid, &fxHigh, &fxDist, &fxChorus,
+                          &uniSpread, &fmAmount, &syncRatio, &fxEq, &fxLow, &fxMid, &fxHigh, &fxDist, &fxChorus,
                           &fxFlange, &fxDelay, &fxReverb, &lfo1Rate, &lfo2Rate, &lfo3Rate, &filterAttack,
                           &filterDecay, &filterSustain, &filterRelease, &filterEnvAmount,
                           &modAmounts[0], &modAmounts[1], &modAmounts[2], &modAmounts[3],
@@ -292,6 +341,9 @@ AuroraEditor::~AuroraEditor() {
         slider->setLookAndFeel(nullptr);
     wave1.setLookAndFeel(nullptr); wave2.setLookAndFeel(nullptr); presets.setLookAndFeel(nullptr); wtTable.setLookAndFeel(nullptr);
     lfo1Shape.setLookAndFeel(nullptr); lfo2Shape.setLookAndFeel(nullptr); lfo3Shape.setLookAndFeel(nullptr);
+    oscModeBox.setLookAndFeel(nullptr); filterTypeBox.setLookAndFeel(nullptr);
+    importWavetableButton.setLookAndFeel(nullptr); clearWavetableButton.setLookAndFeel(nullptr);
+    wavetableChooser.reset();
     for (auto& box : modSources) box.setLookAndFeel(nullptr);
     for (auto& box : modTargets) box.setLookAndFeel(nullptr);
     for (auto& button : stepButtons) button.setLookAndFeel(nullptr);
@@ -444,8 +496,10 @@ void AuroraEditor::setPage(int page) {
     auto show = [page](std::initializer_list<juce::Component*> list, bool visible) {
         for (auto* component : list) component->setVisible(visible);
     };
-    show({ &mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,&wave1,&wave2 }, page == 0);
-    show({ &wtTable,&wtPosition,&unison,&uniDetune,&uniSpread }, page == 1);
+    show({ &mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,&wave1,&wave2,
+           &oscModeBox,&filterTypeBox,&fmAmount,&syncRatio }, page == 0);
+    show({ &wtTable,&wtPosition,&unison,&uniDetune,&uniSpread,&importWavetableButton,
+           &clearWavetableButton,&wavetableStatusLabel }, page == 1);
     show({ &fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb }, page == 2);
     show({ &lfo1Rate,&lfo2Rate,&lfo3Rate,&filterAttack,&filterDecay,&filterSustain,&filterRelease,&filterEnvAmount,
            &lfo1Shape,&lfo2Shape,&lfo3Shape }, page == 3);
@@ -568,8 +622,14 @@ void AuroraEditor::paint(juce::Graphics& g) {
 
         const int w1 = (int)proc.params.getRawParameterValue("wave1")->load();
         const int w2 = (int)proc.params.getRawParameterValue("wave2")->load();
-        drawWave(50,205,226,78,w1,"OSC 1 SHAPE",violetHi);
-        drawWave(322,205,226,78,w2,"OSC 2 SHAPE",neon);
+        drawWave(50,205,226,66,w1,"OSC 1 SHAPE",violetHi);
+        drawWave(322,205,226,66,w2,"OSC 2 SHAPE",neon);
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
+        g.drawText("ENGINE MODE",50,277,226,11,juce::Justification::centredLeft);
+        g.drawText("FM INDEX",322,268,226,11,juce::Justification::centredLeft);
+        g.drawText("SYNC RATIO",322,294,226,11,juce::Justification::centredLeft);
+        g.drawText("FILTER TYPE",49,348,214,12,juce::Justification::centredLeft);
         knobLabel(595,164,98,"OSC MIX");
         knobLabel(703,164,98,"DETUNE");
         knobLabel(811,164,98,"SUB LEVEL");
@@ -591,10 +651,15 @@ void AuroraEditor::paint(juce::Graphics& g) {
         panel(304,106,624,218,"WAVETABLE PREVIEW","LIVE SHAPE FROM SELECTED TABLE");
         panel(32,340,896,240,"UNISON ENGINE","VOICE COUNT / DETUNE / STEREO SPREAD");
         knobLabel(66,199,184,"TABLE POSITION");
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(7.5f,juce::Font::bold)));
+        g.drawText("IMPORT AUDIO AS 64 MORPH FRAMES",52,274,210,10,juce::Justification::centredLeft);
 
         const int table = (int)proc.params.getRawParameterValue("wtTable")->load();
         const float position = proc.params.getRawParameterValue("wtPosition")->load();
-        auto tableWave = [table, position](float t) {
+        auto tableWave = [this, table, position](float t) {
+            if (table == 6)
+                return proc.getImportedWavetableSample(t, position);
             const float saw = 2.0f*t-1.0f;
             const float sine = std::sin(t*juce::MathConstants<float>::twoPi);
             const float square = t < 0.5f ? 1.0f : -1.0f;
@@ -775,6 +840,10 @@ void AuroraEditor::resized() {
 
     place(wave1,{50,164,226,29});
     place(wave2,{322,164,226,29});
+    place(oscModeBox,{50,289,226,26});
+    place(fmAmount,{322,280,226,22});
+    place(syncRatio,{322,306,226,22});
+    place(filterTypeBox,{49,365,214,26});
     place(mix,{595,176,98,132});
     place(detune,{703,176,98,132});
     place(sub,{811,176,98,132});
@@ -789,7 +858,10 @@ void AuroraEditor::resized() {
     place(width,{854,412,68,145});
 
     place(wtTable,{54,164,216,29});
-    place(wtPosition,{66,211,184,112});
+    place(wtPosition,{66,211,184,76});
+    place(importWavetableButton,{52,290,104,24});
+    place(clearWavetableButton,{164,290,102,24});
+    place(wavetableStatusLabel,{52,313,212,10});
     place(unison,{88,430,160,136});
     place(uniDetune,{322,430,160,136});
     place(uniSpread,{556,430,160,136});

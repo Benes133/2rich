@@ -14,8 +14,11 @@ private:
     AuroraProcessor& proc;
     juce::Label heading;
     juce::Slider mix, detune, sub, cutoff, res, attack, decay, sustain, release, master, drive, width;
-    juce::ComboBox wave1, wave2, presets, wtTable;
-    juce::Slider wtPosition, unison, uniDetune, uniSpread;
+    juce::ComboBox wave1, wave2, presets, wtTable, oscModeBox, filterTypeBox;
+    juce::Slider wtPosition, unison, uniDetune, uniSpread, fmAmount, syncRatio;
+    juce::TextButton importWavetableButton{"IMPORT WAV"}, clearWavetableButton{"CLEAR"};
+    juce::Label wavetableStatusLabel;
+    std::unique_ptr<juce::FileChooser> wavetableChooser;
     juce::Slider fxEq, fxLow, fxMid, fxHigh, fxDist, fxChorus, fxFlange, fxDelay, fxReverb;
     juce::TextButton synthTab{"SYNTH"}, wtTab{"WAVETABLE"}, fxTab{"FX"}, modTab{"MOD"}, seqTab{"SEQ"};
     juce::ComboBox seqModeBox, arpStyleBox, seqRateBox, seqDirectionBox, seqLengthBox;

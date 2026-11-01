@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include <cstring>
 #include "PluginEditor.h"
 #include <cmath>
 #include <algorithm>
@@ -23,6 +24,7 @@ public:
         spec.numChannels = 2;
         voiceFilter.prepare(spec);
         voiceFilter.setType(juce::dsp::StateVariableTPTFilterType::lowpass);
+        activeFilterType = 0;
         voiceFilter.reset();
     }
 
@@ -69,6 +71,20 @@ public:
         const int wave1 = (int)value("wave1");
         const int wave2 = (int)value("wave2");
         const int table = (int)value("wtTable");
+        const int oscillatorMode = juce::jlimit(0, 3, (int)value("oscMode"));
+        const float fmAmount = value("fmAmount");
+        const float syncRatio = value("syncRatio");
+        const int filterType = juce::jlimit(0, 2, (int)value("filterType"));
+        const auto importedTable = processor->getImportedWavetable();
+
+        if (filterType != activeFilterType) {
+            const auto type = filterType == 1
+                ? juce::dsp::StateVariableTPTFilterType::bandpass
+                : (filterType == 2 ? juce::dsp::StateVariableTPTFilterType::highpass
+                                   : juce::dsp::StateVariableTPTFilterType::lowpass);
+            voiceFilter.setType(type);
+            activeFilterType = filterType;
+        }
         const float baseMix = value("mix");
         const float baseWTPosition = value("wtPosition");
         const float baseCutoff = value("cutoff");
@@ -199,19 +215,37 @@ public:
                 const double ratio2 = std::pow(2.0, (cents + normalized * 4.0f) / 1200.0);
                 const float phaseA = (float)(phase1[(size_t)voice] + normalized * 0.13f);
                 const float phaseB = (float)(phase2[(size_t)voice] + normalized * 0.19f);
-                const float oscA = wave(phaseA, wave1, table, position);
-                const float oscB = wave(phaseB, wave2, table, position);
-                const float sample = (1.0f - currentMix) * oscA + currentMix * oscB
-                    + sub * std::sin((float)phase1[(size_t)voice] * 0.5f);
+                const float oscA = wave(phaseA, wave1, table, position, importedTable.get());
+                const float oscB = wave(phaseB, wave2, table, position, importedTable.get());
+                float sample = (1.0f - currentMix) * oscA + currentMix * oscB;
+
+                if (oscillatorMode == 1) {
+                    // Phase modulation FM: oscillator 2 modulates oscillator 1's phase.
+                    const float fmCarrier = wave(phaseA + oscB * fmAmount, wave1, table,
+                                                 position, importedTable.get());
+                    sample = (1.0f - currentMix) * fmCarrier + currentMix * oscB;
+                } else if (oscillatorMode == 2) {
+                    // Bipolar ring modulation creates sum and difference sidebands.
+                    sample = oscA * oscB * 2.0f;
+                }
+
+                sample += sub * std::sin((float)phase1[(size_t)voice] * 0.5f);
                 const float pan = juce::jlimit(-0.95f, 0.95f,
                     normalized * unisonSpread * 0.85f + panMod * 0.85f);
 
                 left += sample * std::sqrt(0.5f * (1.0f - pan)) * vel * env;
                 right += sample * std::sqrt(0.5f * (1.0f + pan)) * vel * env;
 
-                phase1[(size_t)voice] += juce::MathConstants<double>::twoPi * hz * ratio1 / sr;
-                phase2[(size_t)voice] += juce::MathConstants<double>::twoPi * hz * ratio2 / sr;
-                phase1[(size_t)voice] = std::fmod(phase1[(size_t)voice], juce::MathConstants<double>::twoPi);
+                const double incrementA = juce::MathConstants<double>::twoPi * hz * ratio1 / sr;
+                const double slaveRatio = oscillatorMode == 3 ? syncRatio : 1.0f;
+                const double incrementB = juce::MathConstants<double>::twoPi * hz * ratio2 * slaveRatio / sr;
+                const double nextPhaseA = phase1[(size_t)voice] + incrementA;
+                const bool masterWrapped = nextPhaseA >= juce::MathConstants<double>::twoPi;
+                phase1[(size_t)voice] = std::fmod(nextPhaseA, juce::MathConstants<double>::twoPi);
+                if (oscillatorMode == 3 && masterWrapped)
+                    phase2[(size_t)voice] = 0.0;
+                else
+                    phase2[(size_t)voice] += incrementB;
                 phase2[(size_t)voice] = std::fmod(phase2[(size_t)voice], juce::MathConstants<double>::twoPi);
             }
 
@@ -253,8 +287,29 @@ public:
     void setProcessor(AuroraProcessor* p) { processor = p; }
 
 private:
-    float wave(float phase, int type, int table, float position) {
-        const float x = phase - std::floor(phase);
+    float wave(float phase, int type, int table, float position,
+               const std::vector<float>* importedTable) {
+        // Oscillator phases are stored in radians; convert to a normalized cycle.
+        const float phaseCycles = phase / juce::MathConstants<float>::twoPi;
+        const float x = phaseCycles - std::floor(phaseCycles);
+        if (table == 6 && importedTable != nullptr && importedTable->size() >= 64u * 2048u) {
+            constexpr int frameSize = 2048;
+            constexpr int frameCount = 64;
+            const float framePosition = juce::jlimit(0.0f, 1.0f, position) * (frameCount - 1);
+            const int frameA = (int)framePosition;
+            const int frameB = juce::jmin(frameCount - 1, frameA + 1);
+            const float frameBlend = framePosition - (float)frameA;
+            const float samplePosition = x * (float)frameSize;
+            const int sampleA = ((int)samplePosition) % frameSize;
+            const int sampleB = (sampleA + 1) % frameSize;
+            const float sampleBlend = samplePosition - std::floor(samplePosition);
+            const auto at = [importedTable](int frame, int index) {
+                return (*importedTable)[(size_t)(frame * frameSize + index)];
+            };
+            const float a = juce::jmap(sampleBlend, at(frameA, sampleA), at(frameA, sampleB));
+            const float b = juce::jmap(sampleBlend, at(frameB, sampleA), at(frameB, sampleB));
+            return juce::jmap(frameBlend, a, b);
+        }
         auto basic = [&](int shape) {
             switch (shape) {
                 case 1: return x < 0.5f ? 1.0f : -1.0f;
@@ -282,6 +337,7 @@ private:
 
     AuroraProcessor* processor = nullptr;
     juce::dsp::StateVariableTPTFilter<float> voiceFilter;
+    int activeFilterType = 0;
     double hz = 440.0;
     std::array<double, 7> phase1{}, phase2{};
     float vel = 0.0f, env = 0.0f, filterEnv = 0.0f, modWheel = 0.0f;
@@ -316,6 +372,10 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("sub", "Sub Level", 0.0f, 1.0f, 0.2f);
     f("cutoff", "Cutoff", 40.0f, 18000.0f, 12000.0f, 0.35f);
     f("res", "Resonance", 0.1f, 1.0f, 0.2f);
+    choice("filterType", "Filter Type", { "Low Pass", "Band Pass", "High Pass" }, 0);
+    choice("oscMode", "Oscillator Mode", { "Classic", "FM", "Ring Mod", "Hard Sync" }, 0);
+    f("fmAmount", "FM Amount", 0.0f, 12.0f, 2.5f);
+    f("syncRatio", "Hard Sync Ratio", 1.0f, 8.0f, 2.0f);
 
     f("attack", "Attack", 0.001f, 4.0f, 0.01f, 0.4f);
     f("decay", "Decay", 0.01f, 4.0f, 0.2f, 0.4f);
@@ -375,7 +435,7 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("master", "Master", 0.0f, 1.0f, 0.8f);
     f("drive", "Drive", 0.0f, 1.0f, 0.0f);
     f("width", "Stereo Width", 0.0f, 1.0f, 0.5f);
-    choice("wtTable", "Wavetable", { "Basic", "Harmonics", "Triangle Morph", "Digital", "Octave", "Fold" }, 0);
+    choice("wtTable", "Wavetable", { "Basic", "Harmonics", "Triangle Morph", "Digital", "Octave", "Fold", "Imported WAV" }, 0);
     f("wtPosition", "WT Position", 0.0f, 1.0f, 0.0f);
     layout.add(std::make_unique<juce::AudioParameterInt>("unison", "Unison Voices", 1, 7, 1));
     f("uniDetune", "Unison Detune", 0.0f, 50.0f, 12.0f);
@@ -858,6 +918,94 @@ bool AuroraProcessor::loadUserPattern(int slot) {
     return true;
 }
 
+bool AuroraProcessor::loadWavetableFromFile(const juce::File& file, juce::String& error) {
+    if (!file.existsAsFile()) {
+        error = "File not found";
+        return false;
+    }
+
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+    if (reader == nullptr || reader->lengthInSamples < 64 || reader->numChannels < 1) {
+        error = "Unsupported or empty audio file";
+        return false;
+    }
+
+    constexpr int frameCount = 64;
+    constexpr int frameSize = 2048;
+    const int sourceLength = (int)juce::jmin<int64_t>(4 * 1024 * 1024, reader->lengthInSamples);
+    juce::AudioBuffer<float> source(1, sourceLength);
+    source.clear();
+    if (!reader->read(&source, 0, 1, 0, sourceLength, true, false)) {
+        error = "Could not decode audio data";
+        return false;
+    }
+
+    std::vector<float> table((size_t)frameCount * (size_t)frameSize, 0.0f);
+    for (int frame = 0; frame < frameCount; ++frame) {
+        const int start = (int)((int64_t)frame * sourceLength / frameCount);
+        const int end = (int)((int64_t)(frame + 1) * sourceLength / frameCount);
+        const int length = juce::jmax(1, end - start);
+        float peak = 0.0f;
+
+        for (int i = 0; i < frameSize; ++i) {
+            const float position = (float)i * (float)length / (float)frameSize;
+            const int indexA = juce::jlimit(0, length - 1, (int)position);
+            const int indexB = (indexA + 1) % length;
+            const float blend = position - std::floor(position);
+            const float a = source.getSample(0, start + indexA);
+            const float b = source.getSample(0, start + indexB);
+            const float sample = juce::jmap(blend, a, b);
+            table[(size_t)frame * (size_t)frameSize + (size_t)i] = sample;
+            peak = juce::jmax(peak, std::abs(sample));
+        }
+
+        if (peak > 0.00001f) {
+            const float gain = 0.95f / peak;
+            for (int i = 0; i < frameSize; ++i)
+                table[(size_t)frame * (size_t)frameSize + (size_t)i] *= gain;
+        }
+    }
+
+    auto imported = std::make_shared<const std::vector<float>>(std::move(table));
+    std::atomic_store_explicit(&importedWavetable, imported, std::memory_order_release);
+    importedWavetableName = file.getFileName();
+    error.clear();
+    return true;
+}
+
+void AuroraProcessor::clearImportedWavetable() {
+    std::atomic_store_explicit(&importedWavetable,
+                               std::shared_ptr<const std::vector<float>>{},
+                               std::memory_order_release);
+    importedWavetableName.clear();
+}
+
+float AuroraProcessor::getImportedWavetableSample(float phase, float position) const noexcept {
+    const auto table = getImportedWavetable();
+    if (!table || table->size() < 64u * 2048u)
+        return std::sin(phase * juce::MathConstants<float>::twoPi);
+
+    constexpr int frameSize = 2048;
+    constexpr int frameCount = 64;
+    const float cycle = phase - std::floor(phase);
+    const float framePosition = juce::jlimit(0.0f, 1.0f, position) * (frameCount - 1);
+    const int frameA = (int)framePosition;
+    const int frameB = juce::jmin(frameCount - 1, frameA + 1);
+    const float frameBlend = framePosition - (float)frameA;
+    const float samplePosition = cycle * (float)frameSize;
+    const int sampleA = ((int)samplePosition) % frameSize;
+    const int sampleB = (sampleA + 1) % frameSize;
+    const float sampleBlend = samplePosition - std::floor(samplePosition);
+    const auto at = [&table](int frame, int index) {
+        return (*table)[(size_t)(frame * frameSize + index)];
+    };
+    const float a = juce::jmap(sampleBlend, at(frameA, sampleA), at(frameA, sampleB));
+    const float b = juce::jmap(sampleBlend, at(frameB, sampleA), at(frameB, sampleB));
+    return juce::jmap(frameBlend, a, b);
+}
+
 void AuroraProcessor::getStateInformation(juce::MemoryBlock& destination) {
     auto xml = params.copyState().createXml();
     auto* bank = xml->createNewChildElement("USER_PATTERNS");
@@ -883,6 +1031,12 @@ void AuroraProcessor::getStateInformation(juce::MemoryBlock& destination) {
             element->setAttribute("accent", data.accent ? 1 : 0);
         }
     }
+    if (const auto imported = getImportedWavetable(); imported && !imported->empty()) {
+        auto* wavetable = xml->createNewChildElement("IMPORTED_WAVETABLE");
+        wavetable->setAttribute("name", importedWavetableName);
+        const auto encoded = juce::Base64::toBase64(imported->data(), imported->size() * sizeof(float));
+        wavetable->addText(encoded);
+    }
     copyXmlToBinary(*xml, destination);
 }
 
@@ -890,6 +1044,19 @@ void AuroraProcessor::setStateInformation(const void* data, int size) {
     std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, size));
     if (xml && xml->hasTagName(params.state.getType())) {
         userPatternValid.fill(false);
+        clearImportedWavetable();
+        if (auto* wavetable = xml->getChildByName("IMPORTED_WAVETABLE")) {
+            juce::MemoryOutputStream decoded(0, true);
+            if (juce::Base64::convertFromBase64(decoded, wavetable->getAllSubText())
+                && decoded.getDataSize() == (size_t)(64 * 2048 * (int)sizeof(float))) {
+                std::vector<float> data(64u * 2048u);
+                std::memcpy(data.data(), decoded.getData(), decoded.getDataSize());
+                auto imported = std::make_shared<const std::vector<float>>(std::move(data));
+                std::atomic_store_explicit(&importedWavetable, imported, std::memory_order_release);
+                importedWavetableName = wavetable->getStringAttribute("name", "Imported WAV");
+            }
+            xml->removeChildElement(wavetable, true);
+        }
         if (auto* bank = xml->getChildByName("USER_PATTERNS")) {
             for (auto* pattern = bank->getFirstChildElement(); pattern != nullptr; pattern = pattern->getNextElement()) {
                 if (!pattern->hasTagName("PATTERN"))
