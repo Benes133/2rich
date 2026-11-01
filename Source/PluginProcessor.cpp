@@ -325,8 +325,6 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
 void AuroraProcessor::prepareToPlay(double sr, int blockSize) {
     sampleRate = sr;
     synth.setCurrentPlaybackSampleRate(sr);
-    filter.prepare({ sr, (juce::uint32)juce::jmax(1, blockSize), 2 });
-    filter.setType(juce::dsp::StateVariableTPTFilterType::lowpass);
 
     for (int i = 0; i < synth.getNumVoices(); ++i)
         if (auto* voice = dynamic_cast<Voice*>(synth.getVoice(i)))

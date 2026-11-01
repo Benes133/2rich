@@ -29,7 +29,6 @@ public:
 private:
  class Voice;
  juce::Synthesiser synth;
- juce::dsp::StateVariableTPTFilter<float> filter;
  std::vector<float> lfo1Block, lfo2Block;
  double lfo1Phase=0.0, lfo2Phase=0.0;
  float lfo1Hold=0.0f, lfo2Hold=0.0f;
