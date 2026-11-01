@@ -559,10 +559,8 @@ void AuroraEditor::paint(juce::Graphics& g) {
         knobLabel(720,382,52,"DEC");
         knobLabel(772,382,52,"SUS");
         knobLabel(824,382,52,"REL");
-        knobLabel(744,489,100,"FILTER ENV AMOUNT");
-        g.setColour(neon);
-        g.setFont(juce::Font(juce::FontOptions(9.0f,juce::Font::bold)));
-        g.drawText("UP TO 4 OCTAVES",678,550,230,16,juce::Justification::centred);
+        knobLabel(744,478,100,"FILTER ENV AMOUNT");
+
     }
 
     g.setColour(border);
@@ -626,7 +624,7 @@ void AuroraEditor::resized() {
     place(filterDecay,{719,398,53,90});
     place(filterSustain,{772,398,53,90});
     place(filterRelease,{825,398,53,90});
-    place(filterEnvAmount,{739,490,104,78});
+    place(filterEnvAmount,{739,494,104,76});
     for (int i = 0; i < 4; ++i) {
         const int rowY = 367 + i * 48;
         place(modSources[(size_t)i],{52,rowY,150,29});
