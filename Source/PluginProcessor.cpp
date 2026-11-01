@@ -1643,31 +1643,47 @@ bool AuroraProcessor::loadSampleFromFile(const juce::File& file, juce::String& e
     asset->rootMidiNote = 60 + bestRoot;
     asset->keyName = juce::String(noteNames[bestRoot]) + (bestMinor ? " minor" : " major");
 
-    // Build 10 ms energy windows and mark strong rising edges as slice points.
-    const int analysisWindow = juce::jmax(1, (int)std::round(reader->sampleRate * 0.01));
-    std::vector<float> rms;
-    rms.reserve((size_t)(frames / analysisWindow + 1));
-    float maximumRms = 0.0f;
-    for (int start = 0; start < frames; start += analysisWindow) {
-        const int end = juce::jmin(frames, start + analysisWindow);
-        double energy = 0.0;
-        for (int i = start; i < end; ++i) {
-            const float mono = 0.5f * (asset->left[(size_t)i] + asset->right[(size_t)i]);
-            energy += (double)mono * (double)mono;
-        }
-        const float level = (float)std::sqrt(energy / (double)juce::jmax(1, end - start));
-        rms.push_back(level);
-        maximumRms = juce::jmax(maximumRms, level);
-    }
+    // 10 ms onset envelope: positive RMS rises are more useful for tempo
+    // estimation than the raw energy curve.
+    std::vector<float> onset(rms.size(), 0.0f);
+    for (size_t i = 1; i < rms.size(); ++i)
+        onset[i] = juce::jmax(0.0f, rms[i] - rms[i - 1]);
 
+    double bestTempoScore = 0.0;
+    double estimatedTempo = 120.0;
+    if (onset.size() > 180u) {
+        for (int bpm = 60; bpm <= 180; ++bpm) {
+            const int lag = juce::jmax(1, (int)std::round(60.0 / ((double)bpm * 0.01)));
+            double score = 0.0, energyA = 0.0, energyB = 0.0;
+            for (size_t i = (size_t)lag; i < onset.size(); ++i) {
+                const double a = onset[i], b = onset[i - (size_t)lag];
+                score += a * b;
+                energyA += a * a;
+                energyB += b * b;
+            }
+            const double normalised = score / std::sqrt(energyA * energyB + 1.0e-20);
+            if (normalised > bestTempoScore) {
+                bestTempoScore = normalised;
+                estimatedTempo = (double)bpm;
+            }
+        }
+    }
+    asset->sourceBpm = bestTempoScore > 0.015 ? estimatedTempo : 120.0;
+
+    const float sensitivity = params.getRawParameterValue("sampleSliceSensitivity")->load();
+    const float minimumGapMs = params.getRawParameterValue("sampleSliceMinGap")->load();
+    const int maximumSlices = juce::jlimit(1, 32,
+        (int)std::round(params.getRawParameterValue("sampleMaxSlices")->load()));
     asset->sliceStarts.push_back(0);
     int lastSlice = 0;
-    const int minimumGap = (int)(reader->sampleRate * 0.08);
-    for (size_t i = 1; i < rms.size() && asset->sliceStarts.size() < 32u; ++i) {
+    const int minimumGap = (int)(reader->sampleRate * minimumGapMs * 0.001f);
+    for (size_t i = 1; i < rms.size()
+         && asset->sliceStarts.size() < (size_t)maximumSlices; ++i) {
         const float previous = rms[i - 1];
         const float current = rms[i];
         const int samplePosition = (int)i * analysisWindow;
-        if (current > maximumRms * 0.12f && current > previous * 1.5f
+        const float riseRatio = 1.08f + (1.0f - sensitivity) * 1.25f;
+        if (current > maximumRms * sensitivity && current > previous * riseRatio
             && samplePosition - lastSlice >= minimumGap
             && samplePosition < frames - minimumGap) {
             asset->sliceStarts.push_back(samplePosition);
