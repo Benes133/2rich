@@ -1,6 +1,8 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include <cmath>
+#include <algorithm>
+#include <iterator>
 
 class AuroraSound final : public juce::SynthesiserSound {
 public:

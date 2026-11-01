@@ -372,17 +372,17 @@ void AuroraEditor::paint(juce::Graphics& g) {
         g.setColour(violet);
         g.fillRoundedRectangle((float)x + 14.0f, (float)y + 15.0f, 3.0f, 17.0f, 1.5f);
         g.setColour(white);
-        g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
+        g.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
         g.drawText(title, x + 25, y + 12, w - 39, 19, juce::Justification::centredLeft);
         g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.5f)));
+        g.setFont(juce::Font(juce::FontOptions(9.0f)));
         g.drawText(sub, x + 25, y + 32, w - 39, 14, juce::Justification::centredLeft);
         g.setColour(border.withAlpha(0.65f));
         g.drawLine((float)x + 14.0f, (float)y + 54.0f, (float)(x + w - 14), (float)y + 54.0f, 1.0f);
     };
     auto knobLabel = [&](int x, int y, int w, const juce::String& label) {
         g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.8f, juce::Font::bold)));
+        g.setFont(juce::Font(juce::FontOptions(9.2f, juce::Font::bold)));
         g.drawFittedText(label, x, y, w, 14, juce::Justification::centred, 1);
     };
     auto drawWave = [&](int x, int y, int w, int h, int choice, const juce::String& label,
@@ -393,7 +393,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
         g.drawRoundedRectangle((float)x + 0.5f, (float)y + 0.5f, (float)w - 1.0f,
                                (float)h - 1.0f, 7.0f, 1.0f);
         g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.0f, juce::Font::bold)));
+        g.setFont(juce::Font(juce::FontOptions(8.8f, juce::Font::bold)));
         g.drawText(label, x + 9, y + 5, 90, 12, juce::Justification::centredLeft);
         const float mid = y + h * 0.60f, amp = h * 0.28f;
         g.setColour(border.withAlpha(0.9f));
