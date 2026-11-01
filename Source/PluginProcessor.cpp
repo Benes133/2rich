@@ -971,9 +971,6 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const float limiterMix = juce::jlimit(0.0f, 1.0f, value("fxLimiterMix"));
     const float limiterReleaseCoeff = (float)std::exp(-1.0 /
         (sampleRate * juce::jmax(10.0f, value("fxLimiterRelease")) * 0.001));
-    const float satToneGain = std::pow(10.0f, value("fxSatTone") * 9.0f / 20.0f);
-    const float satMix = juce::jlimit(0.0f, 1.0f, value("fxSatMix"));
-    const float satToneCoeff = std::exp(-juce::MathConstants<float>::twoPi * 1100.0f / (float)sampleRate);
     const float phaserFeedback = value("fxPhaserFeedback");
     const float pingToneCutoff = juce::jmap(value("fxPingTone"), 650.0f, 18000.0f);
     const float pingToneCoeff = std::exp(-juce::MathConstants<float>::twoPi * pingToneCutoff / (float)sampleRate);
@@ -1163,9 +1160,6 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                         const float lowBand = lowState;
                         const float midBand = midState - lowState;
                         const float highBand = input - midState;
-                        const float driveLow = 1.0f + saturation * mbLowDrive;
-                        const float driveMid = 1.0f + saturation * mbMidDrive;
-                        const float driveHigh = 1.0f + saturation * mbHighDrive;
                         const float shaped = std::tanh(lowBand * mbDriveLow) * 0.45f
                             + std::tanh(midBand * mbDriveMid) * 0.35f
                             + std::tanh(highBand * mbDriveHigh) * 0.30f;

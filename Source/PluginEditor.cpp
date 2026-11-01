@@ -765,17 +765,17 @@ int AuroraEditor::getNumRows() {
 }
 
 void AuroraEditor::paintListBoxItem(int rowNumber, juce::Graphics& g,
-                                    int width, int height, bool rowIsSelected) {
+                                    int rowWidth, int height, bool rowIsSelected) {
     if (rowNumber < 0 || rowNumber >= (int)filteredPresetIds.size()) return;
     const int presetId = filteredPresetIds[(size_t)rowNumber];
     if (rowIsSelected) {
         g.setColour(juce::Colour(0xff342747));
-        g.fillRoundedRectangle(3.0f, 1.0f, (float)width - 6.0f, (float)height - 2.0f, 5.0f);
+        g.fillRoundedRectangle(3.0f, 1.0f, (float)rowWidth - 6.0f, (float)height - 2.0f, 5.0f);
         g.setColour(violetHi.withAlpha(0.7f));
-        g.drawRoundedRectangle(3.5f, 1.5f, (float)width - 7.0f, (float)height - 3.0f, 5.0f, 1.0f);
+        g.drawRoundedRectangle(3.5f, 1.5f, (float)rowWidth - 7.0f, (float)height - 3.0f, 5.0f, 1.0f);
     } else if ((rowNumber & 1) != 0) {
         g.setColour(juce::Colour(0xff121621));
-        g.fillRect(0, 0, width, height);
+        g.fillRect(0, 0, rowWidth, height);
     }
 
     g.setColour(muted);
@@ -784,12 +784,12 @@ void AuroraEditor::paintListBoxItem(int rowNumber, juce::Graphics& g,
                juce::Justification::centredLeft);
     g.setColour(rowIsSelected ? white : juce::Colour(0xffd5d0df));
     g.setFont(juce::Font(juce::FontOptions(10.5f, rowIsSelected ? juce::Font::bold : juce::Font::plain)));
-    g.drawText(factoryPresetName(presetId), 58, 0, width - 106, height,
+    g.drawText(factoryPresetName(presetId), 58, 0, rowWidth - 106, height,
                juce::Justification::centredLeft, true);
     if (proc.isPresetFavorite(presetId)) {
         g.setColour(violetHi);
         g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
-        g.drawText("★", width - 34, 0, 22, height, juce::Justification::centred);
+        g.drawText("★", rowWidth - 34, 0, 22, height, juce::Justification::centred);
     }
 }
 
@@ -1286,7 +1286,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
     };
     auto waveform=[&](int x,int y,int w,int h,int shape,const juce::String& title){
         juce::ColourGradient screen(juce::Colour(0xff080d13),(float)x,(float)y,juce::Colour(0xff151c27),(float)x,(float)(y+h),false);
-        g.setGradientFill(screen);g.fillRoundedRectangle(x,y,w,h,5);
+        g.setGradientFill(screen);g.fillRoundedRectangle((float)x,(float)y,(float)w,(float)h,5.0f);
         g.setColour(juce::Colour(0xff7b8796).withAlpha(0.55f));g.drawRoundedRectangle(x+0.5f,y+0.5f,w-1.0f,h-1.0f,5,0.8f);
         for(int i=1;i<8;++i){float gx=x+(float)i*w/8.0f;g.setColour(juce::Colour(0xff8290a1).withAlpha(0.2f));g.drawLine(gx,y+5.0f,gx,y+h-5.0f,0.55f);}
         const float mid=y+h*0.58f;g.setColour(juce::Colour(0xff8793a2).withAlpha(0.3f));g.drawLine(x+6.0f,mid,x+w-6.0f,mid,0.6f);
