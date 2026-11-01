@@ -471,7 +471,8 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
 
     // FX Chain slots execute from left to right and are saved with the project.
     const juce::StringArray fxTypes = { "Off", "Compressor", "Saturation", "Phaser",
-        "Ping-Pong Delay", "Reverb", "Chorus", "Multiband Distortion", "Limiter" };
+        "Ping-Pong Delay", "Reverb", "Chorus", "Multiband Distortion", "Limiter",
+        "Bitcrusher", "Stereo Width", "Tremolo", "Ring Mod", "Filter", "Flanger" };
     choice("fxSlot1", "FX Slot 1", fxTypes, 2);
     choice("fxSlot2", "FX Slot 2", fxTypes, 1);
     choice("fxSlot3", "FX Slot 3", fxTypes, 0);

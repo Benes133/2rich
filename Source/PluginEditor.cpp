@@ -1064,6 +1064,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
         panel(348,128,820,420,"MODULE EDITOR","SELECT AN INSERT TO EDIT ITS CONTROLS");
         panel(348,560,820,166,"MASTER EQ","GLOBAL TONE SHAPING AFTER THE FX CHAIN");
 
+        label(48,194,264,"PROCESSING ORDER");
         const juce::StringArray fxNames = { "OFF", "COMPRESSOR", "SATURATION", "PHASER",
             "PING-PONG DELAY", "REVERB", "CHORUS", "MULTIBAND DIST.", "LIMITER",
             "BITCRUSHER", "STEREO WIDTH", "TREMOLO", "RING MOD", "FILTER", "FLANGER" };

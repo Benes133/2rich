@@ -21,8 +21,7 @@
 - Up to 7 unison voices with detune and stereo spread.
 - WAV/AIFF wavetable import, 64 frames × 2048 samples, with morphing and mouse-draw editing.
 - Imported and hand-drawn wavetable data is embedded in DAW project state.
-- Six ordered FX insert slots with 14 selectable modules: Compressor, Saturation, Phaser, Ping-Pong Delay, Reverb, Chorus, Multiband Distortion, Limiter, Bitcrusher, Stereo Width, Tremolo, Ring Modulator, resonant Filter and Flanger.
-- Dedicated module controls for drive/tone, stereo width and balance, modulation depth/rate, delay tone/feedback, filter cutoff/resonance and limiter release/input/mix. FX insert order is editable from the rack.
+- Six ordered FX insert slots: Compressor, Saturation, Phaser, Ping-Pong Delay, Reverb, Chorus, Multiband Distortion and Limiter.
 - Four modulation routes with LFO, velocity, envelope and MIDI expression sources.
 - Host-synchronised arpeggiator and 32-step sequencer with per-step pitch, velocity, gate and accent.
 - 25 factory presets, search, favourites and external .2richpreset save/load.
