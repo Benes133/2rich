@@ -347,6 +347,8 @@ private:
 AuroraProcessor::AuroraProcessor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       params(*this, nullptr, "PARAMS", createLayout()) {
+    for (auto& favourite : presetFavorites)
+        favourite.store(false, std::memory_order_relaxed);
     for (int i = 0; i < 16; ++i) {
         auto* voice = new Voice();
         voice->setProcessor(this);
