@@ -193,10 +193,11 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     };
     addChoice(oscModeBox, { "Classic", "FM", "Ring Mod", "Hard Sync" }, "oscMode");
     addChoice(filterTypeBox, { "Low Pass", "Band Pass", "High Pass" }, "filterType");
-    for (int i = 0; i < 4; ++i) {
-        addChoice(fxSlots[(size_t)i], { "Off", "Compressor", "Saturation" },
-                  "fxSlot" + juce::String(i + 1));
-        fxSlots[(size_t)i].setTooltip("FX Chain slot " + juce::String(i + 1) + ". Signal flows from slot 1 to slot 4.");
+    const juce::StringArray fxTypeNames = { "Off", "Compressor", "Saturation", "Phaser",
+        "Ping-Pong", "Reverb", "Chorus", "Multiband Dist.", "Limiter" };
+    for (int i = 0; i < 6; ++i) {
+        addChoice(fxSlots[(size_t)i], fxTypeNames, "fxSlot" + juce::String(i + 1));
+        fxSlots[(size_t)i].setTooltip("FX Chain slot " + juce::String(i + 1) + ". Signal flows from slot 1 to slot 6.");
     }
 
     fxCompEnabledButton.setLookAndFeel(&richLook);
@@ -243,6 +244,16 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addExtra(fxCompRelease,"fxCompRelease","RELEASE");
     addExtra(fxCompMakeup,"fxCompMakeup","MAKEUP");
     addExtra(fxCompMix,"fxCompMix","MIX");
+    addExtra(fxPhaserRate,"fxPhaserRate","PHASER RATE");
+    addExtra(fxPingTime,"fxPingTime","PING TIME");
+    addExtra(fxPingFeedback,"fxPingFeedback","PING FB");
+    addExtra(fxReverbRoom,"fxReverbRoom","ROOM SIZE");
+    addExtra(fxReverbDamping,"fxReverbDamping","DAMPING");
+    addExtra(fxLimiterCeiling,"fxLimiterCeiling","CEILING");
+    for (auto* slider : { &fxPhaserRate, &fxPingTime, &fxPingFeedback, &fxReverbRoom, &fxReverbDamping, &fxLimiterCeiling }) {
+        slider->setSliderStyle(juce::Slider::LinearHorizontal);
+        slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 38, 18);
+    }
     addExtra(lfo1Rate,"lfo1Rate","RATE"); addExtra(lfo2Rate,"lfo2Rate","RATE");
     addExtra(lfo3Rate,"lfo3Rate","RATE");
     addExtra(filterAttack,"filterAttack","ATTACK"); addExtra(filterDecay,"filterDecay","DECAY");
@@ -826,10 +837,16 @@ void AuroraEditor::paint(juce::Graphics& g) {
         knobLabel(443,420,80,"MAKEUP");
         knobLabel(535,420,80,"MIX");
 
-        knobLabel(660,270,104,"CHORUS");
-        knobLabel(784,270,104,"FLANGER");
-        knobLabel(660,420,104,"DELAY");
-        knobLabel(784,420,104,"REVERB");
+        knobLabel(660,270,104,"CHORUS MIX");
+        knobLabel(784,270,104,"PHASER MIX");
+        knobLabel(660,420,104,"PING-PONG MIX");
+        knobLabel(784,420,104,"REVERB MIX");
+        knobLabel(657,500,90,"PHASER RATE");
+        knobLabel(748,500,90,"PING TIME");
+        knobLabel(839,500,90,"PING FEEDBACK");
+        knobLabel(657,545,90,"ROOM SIZE");
+        knobLabel(748,545,90,"DAMPING");
+        knobLabel(839,545,90,"LIMITER CEILING");
         g.setColour(neon.withAlpha(0.8f));
         g.fillRoundedRectangle(357,557,246,2,1.0f);
     }
@@ -961,8 +978,8 @@ void AuroraEditor::resized() {
     place(uniDetune,{322,430,160,136});
     place(uniSpread,{556,430,160,136});
 
-    for (int i = 0; i < 4; ++i)
-        place(fxSlots[(size_t)i],{52 + i * 216,146,188,26});
+    for (int i = 0; i < 6; ++i)
+        place(fxSlots[(size_t)i],{52 + i * 145,146,132,26});
     place(fxCompEnabledButton,{360,254,240,22});
     place(fxEq,{47,267,80,122});
     place(fxLow,{137,267,80,122});
@@ -979,6 +996,12 @@ void AuroraEditor::resized() {
     place(fxFlange,{784,287,104,125});
     place(fxDelay,{660,437,104,125});
     place(fxReverb,{784,437,104,125});
+    place(fxPhaserRate,{657,513,90,24});
+    place(fxPingTime,{748,513,90,24});
+    place(fxPingFeedback,{839,513,90,24});
+    place(fxReverbRoom,{657,558,90,24});
+    place(fxReverbDamping,{748,558,90,24});
+    place(fxLimiterCeiling,{839,558,90,24});
 
     place(lfo1Rate,{45,180,76,86});
     place(lfo1Shape,{128,188,145,34});
@@ -1035,7 +1058,8 @@ void AuroraEditor::resized() {
     if(currentPage!=2) {
         juce::Component* controls[]={&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb,
             &fxCompThreshold,&fxCompRatio,&fxCompAttack,&fxCompRelease,&fxCompMakeup,&fxCompMix,
-            &fxCompEnabledButton};
+            &fxCompEnabledButton,&fxPhaserRate,&fxPingTime,&fxPingFeedback,&fxReverbRoom,
+            &fxReverbDamping,&fxLimiterCeiling};
         for(auto* control:controls) control->setVisible(false);
         for(auto& slot:fxSlots) slot.setVisible(false);
     }

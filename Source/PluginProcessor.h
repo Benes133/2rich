@@ -78,5 +78,11 @@ private:
  double sampleRate=44100.0;
  float fxLfoPhase=0.0f;
  float compressorEnvelope=0.0f;
+ std::array<std::array<std::vector<float>, 2>, 6> fxDelayBuffers;
+ std::array<int, 6> fxDelayWrites{};
+ std::array<std::array<std::array<float, 4>, 2>, 6> phaserStates{};
+ std::array<std::array<float, 2>, 6> multibandLowStates{}, multibandMidStates{};
+ std::array<float, 6> fxPhases{};
+ float limiterGain=1.0f;
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AuroraProcessor)
 };

@@ -24,7 +24,8 @@ private:
     std::unique_ptr<juce::FileChooser> wavetableChooser;
     juce::Slider fxEq, fxLow, fxMid, fxHigh, fxDist, fxChorus, fxFlange, fxDelay, fxReverb;
     juce::Slider fxCompThreshold, fxCompRatio, fxCompAttack, fxCompRelease, fxCompMakeup, fxCompMix;
-    std::array<juce::ComboBox, 4> fxSlots;
+    juce::Slider fxPhaserRate, fxPingTime, fxPingFeedback, fxReverbRoom, fxReverbDamping, fxLimiterCeiling;
+    std::array<juce::ComboBox, 6> fxSlots;
     juce::ToggleButton fxCompEnabledButton { "COMPRESSOR" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aFxCompEnabled;
     juce::TextButton synthTab{"SYNTH"}, wtTab{"WAVETABLE"}, fxTab{"FX"}, modTab{"MOD"}, seqTab{"SEQ"};

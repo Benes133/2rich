@@ -452,10 +452,14 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("fxHigh", "EQ High", -12.0f, 12.0f, 0.0f);
 
     // FX Chain slots execute from left to right and are saved with the project.
-    choice("fxSlot1", "FX Slot 1", { "Off", "Compressor", "Saturation" }, 2);
-    choice("fxSlot2", "FX Slot 2", { "Off", "Compressor", "Saturation" }, 1);
-    choice("fxSlot3", "FX Slot 3", { "Off", "Compressor", "Saturation" }, 0);
-    choice("fxSlot4", "FX Slot 4", { "Off", "Compressor", "Saturation" }, 0);
+    const juce::StringArray fxTypes = { "Off", "Compressor", "Saturation", "Phaser",
+        "Ping-Pong Delay", "Reverb", "Chorus", "Multiband Distortion", "Limiter" };
+    choice("fxSlot1", "FX Slot 1", fxTypes, 2);
+    choice("fxSlot2", "FX Slot 2", fxTypes, 1);
+    choice("fxSlot3", "FX Slot 3", fxTypes, 0);
+    choice("fxSlot4", "FX Slot 4", fxTypes, 0);
+    choice("fxSlot5", "FX Slot 5", fxTypes, 0);
+    choice("fxSlot6", "FX Slot 6", fxTypes, 0);
     layout.add(std::make_unique<juce::AudioParameterBool>("fxCompEnabled", "Compressor Enabled", false));
     f("fxCompThreshold", "Compressor Threshold", -36.0f, 0.0f, -18.0f);
     f("fxCompRatio", "Compressor Ratio", 1.0f, 20.0f, 4.0f);
@@ -463,6 +467,12 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("fxCompRelease", "Compressor Release", 10.0f, 500.0f, 120.0f, 0.5f);
     f("fxCompMakeup", "Compressor Makeup", 0.0f, 18.0f, 0.0f);
     f("fxCompMix", "Compressor Mix", 0.0f, 1.0f, 1.0f);
+    f("fxPhaserRate", "Phaser Rate", 0.05f, 5.0f, 0.35f, 0.5f);
+    f("fxPingTime", "Ping-Pong Time", 50.0f, 1200.0f, 360.0f, 0.5f);
+    f("fxPingFeedback", "Ping-Pong Feedback", 0.0f, 0.92f, 0.48f);
+    f("fxReverbRoom", "Reverb Room Size", 0.0f, 1.0f, 0.55f);
+    f("fxReverbDamping", "Reverb Damping", 0.0f, 1.0f, 0.48f);
+    f("fxLimiterCeiling", "Limiter Ceiling", -12.0f, 0.0f, -0.3f);
     return layout;
 }
 
@@ -488,6 +498,16 @@ void AuroraProcessor::prepareToPlay(double sr, int maximumBlockSize) {
         channel.assign((size_t)juce::jmax(1, (int)sr * 2), 0.0f);
     delayWrite = 0;
     compressorEnvelope = 0.0f;
+    for (size_t slot = 0; slot < fxDelayBuffers.size(); ++slot) {
+        for (auto& channel : fxDelayBuffers[slot])
+            channel.assign((size_t)juce::jmax(1, (int)sr * 2), 0.0f);
+        fxDelayWrites[slot] = 0;
+        phaserStates[slot] = {};
+        multibandLowStates[slot] = {};
+        multibandMidStates[slot] = {};
+        fxPhases[slot] = 0.0f;
+    }
+    limiterGain = 1.0f;
 
     juce::dsp::Reverb::Parameters reverbParameters;
     reverbParameters.roomSize = 0.45f;
@@ -786,59 +806,191 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         synth.renderNextBlock(buffer, sequencedMidi, 0, samples);
     }
 
-    // Four ordered FX slots. Slot 1 is processed first, slot 4 last.
-    const int fxSlots[4] = {
+    // Six ordered effect slots. Modules are processed in the displayed order.
+    const int fxSlots[6] = {
         (int)value("fxSlot1"), (int)value("fxSlot2"),
-        (int)value("fxSlot3"), (int)value("fxSlot4")
+        (int)value("fxSlot3"), (int)value("fxSlot4"),
+        (int)value("fxSlot5"), (int)value("fxSlot6")
     };
+
     const float saturation = juce::jmax(value("drive"), value("fxDist"));
     const float saturationGain = 1.0f + saturation * 15.0f;
     const float saturationNormaliser = std::tanh(saturationGain);
-
     const bool compressorEnabled = value("fxCompEnabled") > 0.5f;
-    const float compThreshold = value("fxCompThreshold");
+    const float compThresholdLinear = std::pow(10.0f, value("fxCompThreshold") / 20.0f);
     const float compRatio = juce::jmax(1.0f, value("fxCompRatio"));
-    const float compAttack = juce::jmax(0.1f, value("fxCompAttack"));
-    const float compRelease = juce::jmax(10.0f, value("fxCompRelease"));
-    const float compMakeup = value("fxCompMakeup");
+    const float compMakeupLinear = std::pow(10.0f, value("fxCompMakeup") / 20.0f);
     const float compMix = juce::jlimit(0.0f, 1.0f, value("fxCompMix"));
-    const float compThresholdLinear = std::pow(10.0f, compThreshold / 20.0f);
-    const float compMakeupLinear = std::pow(10.0f, compMakeup / 20.0f);
-    const float compAttackCoeff = (float)std::exp(-1.0 / (sampleRate * compAttack * 0.001));
-    const float compReleaseCoeff = (float)std::exp(-1.0 / (sampleRate * compRelease * 0.001));
+    const float compAttackCoeff = (float)std::exp(-1.0 / (sampleRate * value("fxCompAttack") * 0.001));
+    const float compReleaseCoeff = (float)std::exp(-1.0 / (sampleRate * value("fxCompRelease") * 0.001));
+    const float phaserRate = value("fxPhaserRate");
+    const float pingTimeSamples = value("fxPingTime") * (float)sampleRate * 0.001f;
+    const float pingFeedback = juce::jlimit(0.0f, 0.92f, value("fxPingFeedback"));
+    const float chorusMix = value("fxChorus");
+    const float phaserMix = value("fxFlange");
+    const float pingMix = value("fxDelay");
+    const float reverbMix = value("fxReverb");
+    const float reverbRoom = value("fxReverbRoom");
+    const float reverbDamping = value("fxReverbDamping");
+    const float limiterCeiling = std::pow(10.0f, value("fxLimiterCeiling") / 20.0f);
+    const float limiterReleaseCoeff = (float)std::exp(-1.0 / (sampleRate * 0.060));
+    const float lowCoeff = std::exp(-juce::MathConstants<float>::twoPi * 180.0f / (float)sampleRate);
+    const float midCoeff = std::exp(-juce::MathConstants<float>::twoPi * 2200.0f / (float)sampleRate);
 
+    float chorusModAverage = 0.0f, delayModAverage = 0.0f, reverbModAverage = 0.0f;
+    float modulationWeight = 0.0f;
     for (int i = 0; i < samples; ++i) {
-        float left = buffer.getSample(0, i);
-        float right = buffer.getSample(1, i);
-        for (int slot = 0; slot < 4; ++slot) {
-            switch (fxSlots[slot]) {
-                case 1: // Stereo-linked feed-forward compressor.
+        const float weight = fxModWeightBlock[(size_t)i];
+        if (weight > 0.0001f) {
+            chorusModAverage += fxChorusModBlock[(size_t)i] / weight;
+            delayModAverage += fxDelayModBlock[(size_t)i] / weight;
+            reverbModAverage += fxReverbModBlock[(size_t)i] / weight;
+            modulationWeight += 1.0f;
+        }
+    }
+    if (modulationWeight > 0.0f) {
+        chorusModAverage /= modulationWeight;
+        delayModAverage /= modulationWeight;
+        reverbModAverage /= modulationWeight;
+    }
+    const float activeChorusMix = juce::jlimit(0.0f, 1.0f, chorusMix + chorusModAverage * 0.5f);
+    const float activePingMix = juce::jlimit(0.0f, 1.0f, pingMix + delayModAverage * 0.5f);
+    const float activeReverbMix = juce::jlimit(0.0f, 1.0f, reverbMix + reverbModAverage * 0.5f);
+
+    for (int slot = 0; slot < 6; ++slot) {
+        const int effect = juce::jlimit(0, 8, fxSlots[slot]);
+        if (effect == 0)
+            continue;
+
+        if (effect == 5) { // Reverb sits exactly at its selected chain position.
+            juce::dsp::Reverb::Parameters rp;
+            rp.roomSize = reverbRoom;
+            rp.damping = reverbDamping;
+            rp.wetLevel = activeReverbMix * 0.42f;
+            rp.dryLevel = 1.0f;
+            rp.width = 1.0f;
+            reverb.setParameters(rp);
+            juce::dsp::AudioBlock<float> reverbBlock(buffer);
+            reverb.process(juce::dsp::ProcessContextReplacing<float>(reverbBlock));
+            continue;
+        }
+
+        auto& slotBuffer = fxDelayBuffers[(size_t)slot];
+        const int slotSize = (int)slotBuffer[0].size();
+        int& write = fxDelayWrites[(size_t)slot];
+        for (int i = 0; i < samples; ++i) {
+            float left = buffer.getSample(0, i);
+            float right = buffer.getSample(1, i);
+            switch (effect) {
+                case 1: { // Stereo-linked feed-forward compressor.
                     if (compressorEnabled) {
                         const float detector = juce::jmax(std::abs(left), std::abs(right));
-                        const float coeff = detector > compressorEnvelope
-                            ? compAttackCoeff : compReleaseCoeff;
+                        const float coeff = detector > compressorEnvelope ? compAttackCoeff : compReleaseCoeff;
                         compressorEnvelope = coeff * compressorEnvelope + (1.0f - coeff) * detector;
-                        const float envelope = juce::jmax(compressorEnvelope, 1.0e-8f);
-                        const float overThresholdDb = juce::jmax(
-                            0.0f, 20.0f * std::log10(envelope / juce::jmax(compThresholdLinear, 1.0e-8f)));
-                        const float reductionDb = overThresholdDb * (1.0f - 1.0f / compRatio);
+                        const float overDb = juce::jmax(0.0f, 20.0f * std::log10(
+                            juce::jmax(compressorEnvelope, 1.0e-8f) /
+                            juce::jmax(compThresholdLinear, 1.0e-8f)));
+                        const float reductionDb = overDb * (1.0f - 1.0f / compRatio);
                         const float compressedGain = compMakeupLinear * std::pow(10.0f, -reductionDb / 20.0f);
                         left = juce::jmap(compMix, left, left * compressedGain);
                         right = juce::jmap(compMix, right, right * compressedGain);
                     }
                     break;
-                case 2: // Existing saturation/drive, now movable in the chain.
+                }
+                case 2: { // Saturation.
                     if (saturation > 0.001f) {
                         left = std::tanh(left * saturationGain) / saturationNormaliser;
                         right = std::tanh(right * saturationGain) / saturationNormaliser;
                     }
                     break;
-                default:
+                }
+                case 3: { // Four cascaded all-pass stages with a swept centre.
+                    const float lfo = 0.5f + 0.5f * std::sin(fxPhases[(size_t)slot]);
+                    const float depth = juce::jlimit(0.0f, 1.0f, phaserMix);
+                    const float coefficient = 0.12f + depth * (0.72f + 0.10f * lfo);
+                    for (int ch = 0; ch < 2; ++ch) {
+                        float x = ch == 0 ? left : right;
+                        for (int stage = 0; stage < 4; ++stage) {
+                            auto& z = phaserStates[(size_t)slot][(size_t)ch][(size_t)stage];
+                            const float y = -coefficient * x + z;
+                            z = x + coefficient * y;
+                            x = y;
+                        }
+                        if (ch == 0) left = juce::jmap(depth, left, x);
+                        else right = juce::jmap(depth, right, x);
+                    }
+                    fxPhases[(size_t)slot] += juce::MathConstants<float>::twoPi * phaserRate / (float)sampleRate;
+                    if (fxPhases[(size_t)slot] >= juce::MathConstants<float>::twoPi)
+                        fxPhases[(size_t)slot] -= juce::MathConstants<float>::twoPi;
                     break;
+                }
+                case 4: { // Ping-pong delay: each side feeds the opposite channel.
+                    const int tap = juce::jlimit(1, slotSize - 1, (int)pingTimeSamples);
+                    const int read = (write - tap + slotSize) % slotSize;
+                    const float delayedLeft = slotBuffer[0][(size_t)read];
+                    const float delayedRight = slotBuffer[1][(size_t)read];
+                    slotBuffer[0][(size_t)write] = left + delayedRight * pingFeedback;
+                    slotBuffer[1][(size_t)write] = right + delayedLeft * pingFeedback;
+                    left = juce::jmap(activePingMix, left, delayedRight);
+                    right = juce::jmap(activePingMix, right, delayedLeft);
+                    write = (write + 1) % slotSize;
+                    break;
+                }
+                case 6: { // Stereo chorus using a modulated delay.
+                    const float phase = fxPhases[(size_t)slot];
+                    const float base = (float)sampleRate * 0.014f;
+                    const float swing = (float)sampleRate * 0.018f * (0.5f + 0.5f * std::sin(phase));
+                    const int tapL = juce::jlimit(1, slotSize - 1, (int)(base + swing));
+                    const int tapR = juce::jlimit(1, slotSize - 1,
+                        (int)(base + swing * (0.5f + 0.5f * std::sin(phase + 1.2f))));
+                    const float delayedL = slotBuffer[0][(size_t)((write - tapL + slotSize) % slotSize)];
+                    const float delayedR = slotBuffer[1][(size_t)((write - tapR + slotSize) % slotSize)];
+                    slotBuffer[0][(size_t)write] = left + delayedL * 0.12f;
+                    slotBuffer[1][(size_t)write] = right + delayedR * 0.12f;
+                    left = juce::jmap(activeChorusMix, left, left * 0.55f + delayedL * 0.45f);
+                    right = juce::jmap(activeChorusMix, right, right * 0.55f + delayedR * 0.45f);
+                    write = (write + 1) % slotSize;
+                    fxPhases[(size_t)slot] += juce::MathConstants<float>::twoPi * 0.23f / (float)sampleRate;
+                    if (fxPhases[(size_t)slot] >= juce::MathConstants<float>::twoPi)
+                        fxPhases[(size_t)slot] -= juce::MathConstants<float>::twoPi;
+                    break;
+                }
+                case 7: { // Three-band saturation with independent band emphasis.
+                    for (int ch = 0; ch < 2; ++ch) {
+                        const float input = ch == 0 ? left : right;
+                        auto& lowState = multibandLowStates[(size_t)slot][(size_t)ch];
+                        auto& midState = multibandMidStates[(size_t)slot][(size_t)ch];
+                        lowState = (1.0f - lowCoeff) * input + lowCoeff * lowState;
+                        midState = (1.0f - midCoeff) * input + midCoeff * midState;
+                        const float lowBand = lowState;
+                        const float midBand = midState - lowState;
+                        const float highBand = input - midState;
+                        const float driveLow = 1.0f + saturation * 5.0f;
+                        const float driveMid = 1.0f + saturation * 10.0f;
+                        const float driveHigh = 1.0f + saturation * 7.0f;
+                        const float shaped = std::tanh(lowBand * driveLow) * 0.45f
+                            + std::tanh(midBand * driveMid) * 0.35f
+                            + std::tanh(highBand * driveHigh) * 0.30f;
+                        if (ch == 0) left = juce::jmap(saturation, input, shaped);
+                        else right = juce::jmap(saturation, input, shaped);
+                    }
+                    break;
+                }
+                case 8: { // Linked peak limiter with smoothed release.
+                    const float peak = juce::jmax(std::abs(left), std::abs(right));
+                    const float desired = peak > limiterCeiling
+                        ? limiterCeiling / juce::jmax(peak, 1.0e-8f) : 1.0f;
+                    if (desired < limiterGain) limiterGain = desired;
+                    else limiterGain = limiterReleaseCoeff * limiterGain + (1.0f - limiterReleaseCoeff);
+                    left = juce::jlimit(-limiterCeiling, limiterCeiling, left * limiterGain);
+                    right = juce::jlimit(-limiterCeiling, limiterCeiling, right * limiterGain);
+                    break;
+                }
+                default: break;
             }
+            buffer.setSample(0, i, left);
+            buffer.setSample(1, i, right);
         }
-        buffer.setSample(0, i, left);
-        buffer.setSample(1, i, right);
     }
 
     const float low = value("fxLow");
@@ -863,56 +1015,9 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         left += (left - (lowLeft + highLeft)) * (midGain - 1.0f) * eq;
         right += (right - (lowRight + highRight)) * (midGain - 1.0f) * eq;
 
-        const int delaySize = (int)delayBuffer[0].size();
-        const float lfo = 0.5f + 0.5f * std::sin(fxLfoPhase);
-        const float baseDelay = (float)sampleRate * (0.12f + 0.18f * lfo * value("fxFlange"));
-        const float delayMs = (float)sampleRate * (0.22f + 0.18f * value("fxDelay"));
-        const int tap = juce::jlimit(1, delaySize - 1, (int)(baseDelay + delayMs));
-        const int read = (delayWrite - tap + delaySize) % delaySize;
-        const float delayedLeft = delayBuffer[0][(size_t)read];
-        const float delayedRight = delayBuffer[1][(size_t)read];
-        const float fxWeight = fxModWeightBlock[(size_t)i];
-        const float chorusMod = fxWeight > 0.0001f
-            ? fxChorusModBlock[(size_t)i] / fxWeight : 0.0f;
-        const float delayMod = fxWeight > 0.0001f
-            ? fxDelayModBlock[(size_t)i] / fxWeight : 0.0f;
-        const float chorus = juce::jlimit(0.0f, 1.0f, value("fxChorus") + chorusMod * 0.5f);
-        const float flange = value("fxFlange");
-        const float delay = juce::jlimit(0.0f, 1.0f, value("fxDelay") + delayMod * 0.5f);
-        delayBuffer[0][(size_t)delayWrite] = left + delayedLeft * (delay * 0.35f + chorus * 0.16f + flange * 0.45f);
-        delayBuffer[1][(size_t)delayWrite] = right + delayedRight * (delay * 0.35f + chorus * 0.16f + flange * 0.45f);
-        left += delayedLeft * (delay * 0.28f + chorus * 0.18f + flange * 0.45f);
-        right += delayedRight * (delay * 0.28f + chorus * 0.18f + flange * 0.45f);
         buffer.setSample(0, i, left);
         buffer.setSample(1, i, right);
-        delayWrite = (delayWrite + 1) % delaySize;
-        fxLfoPhase += juce::MathConstants<float>::twoPi * 0.23f / (float)sampleRate;
-        if (fxLfoPhase > juce::MathConstants<float>::twoPi)
-            fxLfoPhase -= juce::MathConstants<float>::twoPi;
     }
-
-    juce::dsp::Reverb::Parameters reverbParameters;
-    reverbParameters.roomSize = 0.55f;
-    reverbParameters.damping = 0.48f;
-    float reverbModAverage = 0.0f;
-    int reverbModSamples = 0;
-    for (int i = 0; i < samples; ++i) {
-        const float weight = fxModWeightBlock[(size_t)i];
-        if (weight > 0.0001f) {
-            reverbModAverage += fxReverbModBlock[(size_t)i] / weight;
-            ++reverbModSamples;
-        }
-    }
-    if (reverbModSamples > 0)
-        reverbModAverage /= (float)reverbModSamples;
-    const float modulatedReverb = juce::jlimit(0.0f, 1.0f,
-        value("fxReverb") + reverbModAverage * 0.5f);
-    reverbParameters.wetLevel = modulatedReverb * 0.35f;
-    reverbParameters.dryLevel = 1.0f;
-    reverbParameters.width = 1.0f;
-    reverb.setParameters(reverbParameters);
-    juce::dsp::AudioBlock<float> reverbBlock(buffer);
-    reverb.process(juce::dsp::ProcessContextReplacing<float>(reverbBlock));
 
     buffer.applyGain(value("master"));
     const float width = value("width");
