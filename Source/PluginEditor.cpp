@@ -145,33 +145,56 @@ void AuroraEditor::addKnob(juce::Slider& s, const juce::String&, const juce::Str
 }
 
 void AuroraEditor::applyPreset(int id) {
+    // Each preset is a complete patch: oscillator, envelope, filter, unison and FX.
+    struct Patch {
+        int w1, w2, table;
+        float mix, detune, sub, cutoff, res, attack, decay, sustain, release;
+        float master, drive, width, voices, uniDetune, uniSpread, position;
+        float eq, low, mid, high, fxDist, chorus, flange, delay, reverb;
+    };
+    static const Patch patches[] = {
+        {0,2,0,.42f,11,.18f,10500,.22f,.004f,.22f,.72f,.18f,.80f,.12f,.72f,1,12,.65f,.20f,.20f,0,0,.12f,.15f,0,.08f,.12f},
+        {0,1,3,.58f,18,.10f,8500,.35f,.002f,.16f,.62f,.12f,.78f,.24f,.85f,3,18,.85f,.28f,.35f,1,2,.24f,.10f,.18f,.16f,.10f},
+        {3,0,2,.25f,5,.05f,6200,.18f,.015f,.35f,.48f,.32f,.82f,.05f,.55f,1,8,.40f,.18f,.10f,0,1,.05f,.05f,.0f,.10f,.08f},
+        {2,3,2,.62f,7,.28f,5200,.28f,1.8f,3.2f,.82f,4.0f,.76f,.08f,.95f,3,18,.9f,.65f,.25f,2,3,.04f,.48f,.0f,.22f,.48f},
+        {3,2,4,.50f,3,.12f,4300,.42f,2.6f,3.8f,.76f,4.5f,.78f,.04f,.9f,5,24,1.0f,.72f,.35f,3,4,.02f,.62f,.0f,.28f,.62f},
+        {0,2,1,.38f,9,.20f,6800,.25f,1.2f,2.4f,.68f,3.8f,.76f,.10f,.8f,4,20,.9f,.58f,.22f,1,2,.10f,.55f,.0f,.25f,.52f},
+        {2,3,3,.32f,2,.10f,9200,.12f,.002f,.18f,.35f,.55f,.82f,.02f,.35f,1,5,.25f,.12f,.10f,0,1,.02f,.08f,.0f,.08f,.08f},
+        {3,2,4,.45f,4,.08f,7400,.20f,.008f,.42f,.48f,.8f,.82f,.02f,.45f,1,6,.35f,.16f,.12f,0,2,.02f,.10f,.0f,.12f,.12f},
+        {1,3,1,.22f,12,.05f,5800,.16f,.001f,.24f,.20f,.38f,.84f,.16f,.3f,1,10,.30f,.14f,.12f,0,1,.16f,.04f,.0f,.10f,.08f},
+        {0,1,5,.48f,24,.35f,2600,.62f,.01f,.42f,.50f,.8f,.78f,.38f,.72f,2,22,.75f,.35f,.32f,2,1,.38f,.12f,.15f,.22f,.18f},
+        {0,3,5,.55f,31,.18f,1800,.72f,.02f,.55f,.42f,.9f,.76f,.62f,.68f,4,30,.95f,.42f,.38f,3,2,.62f,.18f,.28f,.26f,.12f},
+        {1,0,3,.20f,8,.28f,1400,.82f,.003f,.28f,.58f,.35f,.82f,.72f,.42f,1,12,.40f,.12f,.20f,1,0,.72f,.0f,.10f,.05f,.08f},
+        {0,2,4,.42f,16,.32f,2200,.48f,.006f,.38f,.52f,.55f,.80f,.44f,.75f,3,25,.88f,.38f,.30f,1,2,.44f,.22f,.12f,.22f,.16f},
+        {3,2,2,.28f,6,.04f,7600,.16f,.001f,.20f,.18f,.24f,.84f,.08f,.38f,1,7,.35f,.18f,.12f,0,2,.08f,.08f,.0f,.14f,.10f},
+        {2,3,3,.36f,14,.06f,6400,.28f,.001f,.32f,.22f,.32f,.82f,.18f,.52f,2,14,.65f,.28f,.18f,1,3,.18f,.18f,.18f,.20f,.14f},
+        {3,1,4,.30f,9,.08f,8200,.22f,.002f,.26f,.24f,.40f,.82f,.12f,.58f,2,11,.72f,.30f,.22f,1,4,.12f,.24f,.08f,.18f,.18f},
+        {3,2,4,.52f,5,.12f,5400,.24f,1.1f,2.8f,.78f,4.2f,.76f,.04f,.95f,5,18,1.0f,.68f,.25f,1,3,.04f,.55f,.0f,.35f,.62f},
+        {0,3,5,.44f,20,.22f,3100,.38f,.8f,2.2f,.62f,3.6f,.78f,.20f,.88f,6,28,1.0f,.62f,.32f,2,4,.20f,.62f,.22f,.38f,.58f},
+        {3,2,4,.60f,4,.10f,4800,.30f,1.5f,3.4f,.90f,4.8f,.74f,.02f,.98f,5,16,1.0f,.74f,.28f,2,3,.02f,.72f,.0f,.34f,.72f},
+        {2,3,2,.48f,10,.18f,3900,.34f,2.2f,3.0f,.84f,4.5f,.76f,.08f,.92f,7,24,1.0f,.68f,.34f,2,3,.08f,.68f,.12f,.32f,.68f},
+        {1,0,3,.32f,22,.02f,9800,.12f,.001f,.12f,.05f,.45f,.82f,.48f,.72f,3,32,.95f,.22f,.15f,0,3,.48f,.04f,.55f,.25f,.10f},
+        {1,3,1,.40f,15,.10f,7200,.40f,.001f,.24f,.16f,.55f,.80f,.30f,.80f,4,26,.92f,.34f,.24f,2,2,.30f,.18f,.45f,.28f,.18f},
+        {0,2,4,.50f,8,.12f,6100,.22f,.006f,.45f,.72f,2.8f,.78f,.10f,.96f,7,28,1.0f,.72f,.30f,1,3,.10f,.62f,.0f,.35f,.62f},
+        {0,1,5,.58f,38,.28f,1700,.68f,.003f,.38f,.48f,.72f,.76f,.72f,.86f,7,42,1.0f,.48f,.42f,3,4,.72f,.25f,.48f,.30f,.24f},
+        {3,0,4,.46f,13,.16f,4600,.26f,.45f,2.6f,.86f,4.6f,.76f,.14f,.94f,6,30,1.0f,.70f,.30f,2,3,.14f,.58f,.30f,.48f,.70f}
+    };
+    if (id < 1 || id > (int)std::size(patches)) return;
+    const auto& p = patches[id - 1];
     auto set = [this](const char* key, float value) {
         if (auto* parameter = proc.params.getParameter(key))
             parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
     };
-    // Values are plain parameter units; the preset changes the actual synth parameters.
-    struct Patch { int w1, w2; float mix, detune, sub, cutoff, res, a, d, s, r, drive, width; };
-    static const Patch patches[] = {
-        {0,2,.42f,11.f,.18f,10500.f,.22f,.004f,.22f,.72f,.18f,.12f,.72f},
-        {0,1,.58f,18.f,.10f,8500.f,.35f,.002f,.16f,.62f,.12f,.24f,.85f},
-        {3,0,.25f,5.f,.05f,6200.f,.18f,.015f,.35f,.48f,.32f,.05f,.55f},
-        {2,3,.62f,7.f,.28f,5200.f,.28f,1.8f,3.2f,.82f,4.0f,.08f,.95f},
-        {3,2,.50f,3.f,.12f,4300.f,.42f,2.6f,3.8f,.76f,4.5f,.04f,.9f},
-        {0,2,.38f,9.f,.20f,6800.f,.25f,1.2f,2.4f,.68f,3.8f,.10f,.8f},
-        {2,3,.32f,2.f,.10f,9200.f,.12f,.002f,.18f,.35f,.55f,.02f,.35f},
-        {3,2,.45f,4.f,.08f,7400.f,.20f,.008f,.42f,.48f,.8f,.02f,.45f},
-        {1,3,.22f,12.f,.05f,5800.f,.16f,.001f,.24f,.20f,.38f,.16f,.3f}
-    };
-    if (id < 1 || id > 9) return;
-    const auto& p = patches[id - 1];
-    set("wave1", (float)p.w1); set("wave2", (float)p.w2);
+    set("wave1",(float)p.w1); set("wave2",(float)p.w2); set("wtTable",(float)p.table);
     set("mix",p.mix); set("detune",p.detune); set("sub",p.sub);
     set("cutoff",p.cutoff); set("res",p.res);
-    set("attack",p.a); set("decay",p.d); set("sustain",p.s); set("release",p.r);
-    set("drive",p.drive); set("width",p.width); set("master",.8f);
-    set("unison",id>=21?7.0f:(id>=10?3.0f:1.0f)); set("uniDetune",id>=21?24.0f:12.0f); set("uniSpread",id>=21?.9f:.65f);
-    set("wtTable",(float)((id*3)%6)); set("wtPosition",id>=17?.65f:.2f);
-    set("fxEq",id>=10?.45f:.2f);set("fxDist",p.drive);set("fxChorus",id>=17?.45f:.15f);set("fxFlange",id==21||id==24?.35f:0.0f);set("fxDelay",id>=14?.3f:.08f);set("fxReverb",id>=4?.38f:.12f);
+    set("attack",p.attack); set("decay",p.decay); set("sustain",p.sustain); set("release",p.release);
+    set("master",p.master); set("drive",p.drive); set("width",p.width);
+    set("unison",p.voices); set("uniDetune",p.uniDetune); set("uniSpread",p.uniSpread);
+    set("wtPosition",p.position);
+    set("fxEq",p.eq); set("fxLow",p.low); set("fxMid",p.mid); set("fxHigh",p.high);
+    set("fxDist",p.fxDist); set("fxChorus",p.chorus); set("fxFlange",p.flange);
+    set("fxDelay",p.delay); set("fxReverb",p.reverb);
     repaint();
 }
 
