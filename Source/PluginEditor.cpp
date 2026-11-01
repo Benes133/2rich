@@ -105,6 +105,55 @@ juce::Rectangle<int> scaledBounds(juce::Rectangle<int> r, float scale, int ox, i
     return { ox + juce::roundToInt(r.getX() * scale), oy + juce::roundToInt(r.getY() * scale),
              juce::roundToInt(r.getWidth() * scale), juce::roundToInt(r.getHeight() * scale) };
 }
+
+juce::String factoryPresetName(int id) {
+    static const char* starterNames[25] = {
+        "Violet Lead", "Neon Saw", "Hollow Lead", "Cloud Pad", "Glass Cathedral",
+        "Slow Motion", "Digital Keys", "Soft Piano-ish", "Pluck Keys", "Sub Pressure",
+        "Reese Machine", "Acid Bloom", "Neon Bass", "Glass Pluck", "Cyber Mallet",
+        "Crystal Keys", "Aurora Drift", "Deep Space", "Ethereal Choir", "Frozen Sky",
+        "Laser Bloom", "Retro Pulse", "Wide Unison", "Dirty Motion", "Dream Sequence"
+    };
+    if (id >= 1 && id <= 25) return starterNames[id - 1];
+
+    static const char* prefixes[10][10] = {
+        { "Neon", "Chrome", "Violet", "Voltage", "Afterglow", "Prism", "Pulse", "Midnight", "Arctic", "Solar" },
+        { "Velvet", "Cloud", "Halo", "Opal", "Dream", "Silk", "Ethereal", "Lunar", "Horizon", "Softlight" },
+        { "Astral", "Nebula", "Infinite", "Weightless", "Orbit", "Celestial", "Drift", "Nocturne", "Stellar", "Ambient" },
+        { "Digital", "Ivory", "Vintage", "Soft", "Tape", "Felt", "Modern", "Warm", "Glass", "Electric" },
+        { "Grand", "Felt", "Velour", "Noir", "Studio", "Cinematic", "Upright", "Velvet", "Chamber", "Sunday" },
+        { "Crystal", "Plucked", "Bamboo", "Marble", "Tiny", "Bell", "Wooden", "Elastic", "Pixel", "Chime" },
+        { "Sub", "Reese", "Mono", "Acid", "Rubber", "Heavy", "Deep", "Circuit", "Industrial", "Round" },
+        { "Analog", "Modular", "Retro", "Digital", "Hybrid", "FM", "Wave", "Unison", "Future", "Classic" },
+        { "Impact", "Reverse", "Riser", "Glitch", "Laser", "Transition", "Signal", "Noise", "Cinematic", "Spectral" },
+        { "Organic", "Frozen", "Dusty", "Granular", "Shimmer", "Fractal", "Hollow", "Textured", "Worn", "Distant" }
+    };
+    static const char* flavours[5] = { "Motion", "Bloom", "Dream", "Signal", "Echo" };
+    static const char* nouns[10] = {
+        "Lead", "Pad", "Atmosphere", "Keys", "Piano", "Pluck", "Bass", "Synth", "FX", "Texture"
+    };
+    const int offset = juce::jlimit(0, 474, id - 26);
+    const int group = juce::jmin(9, offset / 50);
+    const int local = offset % 50;
+    return juce::String(prefixes[group][local % 10]) + " "
+        + flavours[local / 10] + " " + nouns[group] + " "
+        + juce::String(local + 1).paddedLeft('0', 2);
+}
+
+juce::String factoryPresetCategory(int id) {
+    if (id <= 3) return "LEADS";
+    if (id <= 6) return "PADS";
+    if (id <= 9) return "KEYS";
+    if (id <= 13) return "BASS";
+    if (id <= 16) return "PLUCKS";
+    if (id <= 20) return "ATMOSPHERE";
+    if (id <= 25) return "FX & SYNTH";
+    static const char* groups[10] = {
+        "LEADS / VOL. 2", "PADS / VOL. 2", "ATMOSPHERES", "KEYS",
+        "PIANOS", "PLUCKS", "BASS", "SYNTHS", "SOUND FX", "TEXTURES"
+    };
+    return groups[juce::jlimit(0, 9, (id - 26) / 50)];
+}
 }
 
 AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(p) {
@@ -138,29 +187,8 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     aWave1 = std::make_unique<ChoiceAttach>(ap, "wave1", wave1);
     aWave2 = std::make_unique<ChoiceAttach>(ap, "wave2", wave2);
 
-    presets.addSectionHeading("LEADS");
-    presets.addItem("Violet Lead", 1);
-    presets.addItem("Neon Saw", 2);
-    presets.addItem("Hollow Lead", 3);
-    presets.addSectionHeading("PADS");
-    presets.addItem("Cloud Pad", 4);
-    presets.addItem("Glass Cathedral", 5);
-    presets.addItem("Slow Motion", 6);
-    presets.addSectionHeading("KEYS");
-    presets.addItem("Digital Keys", 7);
-    presets.addItem("Soft Piano-ish", 8);
-    presets.addItem("Pluck Keys", 9);
-    presets.addSectionHeading("BASS");
-    presets.addItem("Sub Pressure",10); presets.addItem("Reese Machine",11); presets.addItem("Acid Bloom",12); presets.addItem("Neon Bass",13);
-    presets.addSectionHeading("PLUCKS");
-    presets.addItem("Glass Pluck",14); presets.addItem("Cyber Mallet",15); presets.addItem("Crystal Keys",16);
-    presets.addSectionHeading("ATMOSPHERE");
-    presets.addItem("Aurora Drift",17); presets.addItem("Deep Space",18); presets.addItem("Ethereal Choir",19); presets.addItem("Frozen Sky",20);
-    presets.addSectionHeading("FX & SYNTH");
-    presets.addItem("Laser Bloom",21); presets.addItem("Retro Pulse",22); presets.addItem("Wide Unison",23); presets.addItem("Dirty Motion",24); presets.addItem("Dream Sequence",25);
-    // Expansion categories are reserved for future user-created banks.
-
-    presets.setTextWhenNothingSelected("SELECT PRESET");
+    presets.setTextWhenNothingSelected("SELECT FROM 500 FACTORY SOUNDS");
+    rebuildPresetList();
     presets.onChange = [this] {
         if (presets.getSelectedId() > 0)
             applyPreset(presets.getSelectedId());
