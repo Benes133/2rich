@@ -316,12 +316,14 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     layout.add(std::make_unique<juce::AudioParameterInt>("seqOctaves", "Arpeggiator Octaves", 1, 4, 1));
     f("seqGate", "Sequencer Gate", 10.0f, 100.0f, 82.0f);
     f("seqSwing", "Sequencer Swing", 0.0f, 60.0f, 0.0f);
+    const int defaultStepPitches[16] = { 0, 7, 12, 7, 0, 7, 12, 7, 0, 7, 12, 7, 0, 7, 12, 7 };
     for (int step = 0; step < 16; ++step) {
         const auto suffix = juce::String(step);
         layout.add(std::make_unique<juce::AudioParameterBool>(
-            ("stepOn" + suffix).toRawUTF8(), ("Step " + juce::String(step + 1) + " On").toRawUTF8(), step % 4 == 0));
+            ("stepOn" + suffix).toRawUTF8(), ("Step " + juce::String(step + 1) + " On").toRawUTF8(), true));
         layout.add(std::make_unique<juce::AudioParameterInt>(
-            ("stepPitch" + suffix).toRawUTF8(), ("Step " + juce::String(step + 1) + " Pitch").toRawUTF8(), -12, 12, 0));
+            ("stepPitch" + suffix).toRawUTF8(), ("Step " + juce::String(step + 1) + " Pitch").toRawUTF8(),
+            -12, 12, defaultStepPitches[step]));
     }
 
     f("master", "Master", 0.0f, 1.0f, 0.8f);
