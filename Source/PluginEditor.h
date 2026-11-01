@@ -51,6 +51,7 @@ private:
     int drawingFrame = 0;
     int previousDrawIndex = 0;
     float previousDrawValue = 0.0f;
+    float lastOutputPeak = 0.0f;
 
     using Attach = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ChoiceAttach = juce::AudioProcessorValueTreeState::ComboBoxAttachment;

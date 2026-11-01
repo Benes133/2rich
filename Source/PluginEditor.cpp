@@ -135,7 +135,8 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         updateFavoriteButton();
     };
 
-    presetSearch.setTextToShowWhenEmpty("SEARCH PRESETS", muted);
+    presetSearch.setTextToShowWhenEmpty("SEARCH / fav:", muted);
+    presetSearch.setTooltip("Search factory presets by name. Type fav: to show only favourites, or fav:lead to narrow the favourite list.");
     presetSearch.setColour(juce::TextEditor::backgroundColourId, surface);
     presetSearch.setColour(juce::TextEditor::textColourId, white);
     presetSearch.setColour(juce::TextEditor::highlightColourId, violet);
@@ -472,7 +473,9 @@ void AuroraEditor::rebuildPresetList() {
         "Aurora Drift", "Deep Space", "Ethereal Choir", "Frozen Sky",
         "Laser Bloom", "Retro Pulse", "Wide Unison", "Dirty Motion", "Dream Sequence"
     };
-    const auto query = presetSearch.getText().trim().toLowerCase();
+    const auto rawQuery = presetSearch.getText().trim().toLowerCase();
+    const bool favouritesOnly = rawQuery.startsWith("fav:");
+    const auto query = favouritesOnly ? rawQuery.substring(4).trim() : rawQuery;
     const int previousId = presets.getSelectedId();
     presets.clear();
 
@@ -482,16 +485,19 @@ void AuroraEditor::rebuildPresetList() {
         { "ATMOSPHERE", 17, 20 }, { "FX & SYNTH", 21, 25 }
     };
 
-    if (query.isEmpty()) {
+    if (query.isEmpty() && !favouritesOnly) {
         for (const auto& category : categories) {
             presets.addSectionHeading(category.name);
             for (int id = category.first; id <= category.last; ++id)
                 presets.addItem(names[id - 1], id);
         }
     } else {
-        for (int id = 1; id <= 25; ++id)
-            if (juce::String(names[id - 1]).toLowerCase().contains(query))
+        for (int id = 1; id <= 25; ++id) {
+            const bool matchesName = query.isEmpty()
+                || juce::String(names[id - 1]).toLowerCase().contains(query);
+            if (matchesName && (!favouritesOnly || proc.isPresetFavorite(id)))
                 presets.addItem(names[id - 1], id);
+        }
     }
 
     if (previousId > 0 && presets.indexOfItemId(previousId) >= 0)
@@ -671,6 +677,11 @@ void AuroraEditor::editWavetableFromMouse(const juce::MouseEvent& event) {
 
 void AuroraEditor::timerCallback() {
     bool changed = false;
+    const float outputPeak = proc.getOutputPeak();
+    if (std::abs(outputPeak - lastOutputPeak) > 0.004f) {
+        lastOutputPeak = outputPeak;
+        changed = true;
+    }
     const int activeStep = proc.getSequencerCurrentStep();
     if (activeStep != lastActiveStep) {
         lastActiveStep = activeStep;
@@ -726,10 +737,7 @@ void AuroraEditor::setPage(int page) {
         button.setVisible(page == 4);
     if (page == 4)
         refreshSelectedStepControls();
-    if (page == 3 || page == 4)
-        startTimerHz(30);
-    else
-        stopTimer();
+    startTimerHz(30);
     repaint();
     resized();
 }
@@ -764,6 +772,10 @@ void AuroraEditor::paint(juce::Graphics& g) {
     g.drawText("PRESET", 735, 20, 170, 12, juce::Justification::centredLeft);
     g.setColour(violet);
     g.fillRoundedRectangle(32, 84, 896, 1, 0.5f);
+    g.setColour(cardHi);
+    g.fillRoundedRectangle(735.0f,91.0f,188.0f,5.0f,2.5f);
+    g.setColour(neon.withAlpha(0.9f));
+    g.fillRoundedRectangle(735.0f,91.0f,188.0f * juce::jlimit(0.0f,1.0f,proc.getOutputPeak()),2.5f);
 
     auto panel = [&](int x, int y, int w, int h, const juce::String& title, const juce::String& sub) {
         g.setColour(card);

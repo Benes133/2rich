@@ -1023,12 +1023,18 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 
     buffer.applyGain(value("master"));
     const float width = value("width");
+    float blockPeak = 0.0f;
     for (int i = 0; i < samples; ++i) {
         const float midSample = (buffer.getSample(0, i) + buffer.getSample(1, i)) * 0.5f;
         const float sideSample = (buffer.getSample(0, i) - buffer.getSample(1, i)) * 0.5f * width * 2.0f;
-        buffer.setSample(0, i, midSample + sideSample);
-        buffer.setSample(1, i, midSample - sideSample);
+        const float left = midSample + sideSample;
+        const float right = midSample - sideSample;
+        buffer.setSample(0, i, left);
+        buffer.setSample(1, i, right);
+        blockPeak = juce::jmax(blockPeak, juce::jmax(std::abs(left), std::abs(right)));
     }
+    const float previousPeak = outputPeak.load(std::memory_order_relaxed);
+    outputPeak.store(juce::jmax(blockPeak, previousPeak * 0.82f), std::memory_order_relaxed);
 }
 
 void AuroraProcessor::saveUserPattern(int slot) {

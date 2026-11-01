@@ -48,6 +48,7 @@ public:
  float getModRouteActivity(int route) const noexcept {
   return route >= 0 && route < 4 ? modRouteActivity[(size_t)route].load(std::memory_order_relaxed) : 0.0f;
  }
+ float getOutputPeak() const noexcept { return outputPeak.load(std::memory_order_relaxed); }
 private:
  struct StepData { bool enabled = true; int pitch = 0; float velocity = 127.0f; float gate = 100.0f; bool accent = false; };
  struct UserPattern {
@@ -87,5 +88,6 @@ private:
  std::array<std::array<float, 2>, 6> multibandLowStates{}, multibandMidStates{};
  std::array<float, 6> fxPhases{};
  float limiterGain=1.0f;
+ std::atomic<float> outputPeak{0.0f};
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AuroraProcessor)
 };
