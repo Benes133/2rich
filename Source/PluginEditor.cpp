@@ -1697,7 +1697,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
                          "Target key is selectable because the standard JUCE VST3 playhead does not report the DAW key signature.",
                          740,674,390,42,juce::Justification::centredLeft,3);
     } else if (currentPage == 4) {
-        panel(32,128,1136,598,"GRANULAR ENGINE","GRAIN CLOUD SYNTHESIS  /  TEMPO-LOCKED WINDOWS  /  DEDICATED PATCHES");
+        panel(32,128,1136,638,"GRANULAR ENGINE","GRAIN CLOUD SYNTHESIS  /  TEMPO-LOCKED WINDOWS  /  DEDICATED PATCHES");
         label(52,190,180,"SOURCE AUDIO");
         label(390,190,700,"DETECTED ROOT / SOURCE TEMPO / ACTIVE SLICES");
         label(52,245,170,"GRAIN PLAYBACK");
