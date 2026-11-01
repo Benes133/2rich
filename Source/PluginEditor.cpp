@@ -711,8 +711,8 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         modAmounts[(size_t)i].setSliderStyle(juce::Slider::LinearHorizontal);
         modAmounts[(size_t)i].setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
     }
-    for(auto* tab:{&synthTab,&wtTab,&fxTab,&sampleTab,&modTab,&seqTab}){tab->setLookAndFeel(&richLook);tab->setColour(juce::TextButton::textColourOffId,white);tab->setColour(juce::TextButton::textColourOnId,violetHi);tab->setClickingTogglesState(false);addAndMakeVisible(*tab);}
-    synthTab.onClick=[this]{setPage(0);};wtTab.onClick=[this]{setPage(1);};fxTab.onClick=[this]{setPage(2);};sampleTab.onClick=[this]{setPage(3);};modTab.onClick=[this]{setPage(1);};seqTab.onClick=[this]{setPage(1);};
+    for(auto* tab:{&synthTab,&wtTab,&fxTab,&samplerTab,&granularTab,&presetsTab}){tab->setLookAndFeel(&richLook);tab->setColour(juce::TextButton::textColourOffId,white);tab->setColour(juce::TextButton::textColourOnId,violetHi);tab->setClickingTogglesState(false);addAndMakeVisible(*tab);}
+    synthTab.onClick=[this]{setPage(0);};wtTab.onClick=[this]{setPage(1);};fxTab.onClick=[this]{setPage(2);};samplerTab.onClick=[this]{setPage(3);};granularTab.onClick=[this]{setPage(4);};presetsTab.onClick=[this]{setPage(5);};
     updateSampleStatus();
     unison.setRange(1,7,1); unison.setNumDecimalPlacesToDisplay(0);
     add(mix, "mix", "MIX"); add(detune, "detune", "DETUNE"); add(sub, "sub", "SUB");
@@ -751,9 +751,12 @@ AuroraEditor::~AuroraEditor() {
     lfo1Shape.setLookAndFeel(nullptr); lfo2Shape.setLookAndFeel(nullptr); lfo3Shape.setLookAndFeel(nullptr);
     fxFilterTypeBox.setLookAndFeel(nullptr);
     oscModeBox.setLookAndFeel(nullptr); filterTypeBox.setLookAndFeel(nullptr);
-    sampleModeBox.setLookAndFeel(nullptr);
+    sampleTargetKeyBox.setLookAndFeel(nullptr); sampleSyncBarsBox.setLookAndFeel(nullptr);
+    grainTargetKeyBox.setLookAndFeel(nullptr); grainSyncDivisionBox.setLookAndFeel(nullptr);
+    granularPresetBox.setLookAndFeel(nullptr);
+    presetCategoryFilter.setLookAndFeel(nullptr);
     importWavetableButton.setLookAndFeel(nullptr); clearWavetableButton.setLookAndFeel(nullptr);
-    sampleLoadButton.setLookAndFeel(nullptr); sampleClearButton.setLookAndFeel(nullptr);
+    sampleLoadButton.setLookAndFeel(nullptr); sampleClearButton.setLookAndFeel(nullptr); sampleResliceButton.setLookAndFeel(nullptr);
     wavetableChooser.reset();
     sampleChooser.reset();
     for (auto& box : modSources) box.setLookAndFeel(nullptr);
@@ -765,7 +768,8 @@ AuroraEditor::~AuroraEditor() {
     seqModeBox.setLookAndFeel(nullptr); arpStyleBox.setLookAndFeel(nullptr); seqRateBox.setLookAndFeel(nullptr);
     seqDirectionBox.setLookAndFeel(nullptr); seqLengthBox.setLookAndFeel(nullptr);
     seqPageBox.setLookAndFeel(nullptr); seqPatternSlotBox.setLookAndFeel(nullptr);
-    synthTab.setLookAndFeel(nullptr);wtTab.setLookAndFeel(nullptr);fxTab.setLookAndFeel(nullptr);sampleTab.setLookAndFeel(nullptr);modTab.setLookAndFeel(nullptr);seqTab.setLookAndFeel(nullptr);
+    synthTab.setLookAndFeel(nullptr);wtTab.setLookAndFeel(nullptr);fxTab.setLookAndFeel(nullptr);
+    samplerTab.setLookAndFeel(nullptr);granularTab.setLookAndFeel(nullptr);presetsTab.setLookAndFeel(nullptr);
 }
 
 void AuroraEditor::rebuildPresetList() {
@@ -1054,7 +1058,7 @@ void AuroraEditor::writeSelectedStepParameter(const juce::String& baseId, float 
 }
 
 void AuroraEditor::mouseDown(const juce::MouseEvent& event) {
-    if (currentPage == 3) {
+    if (currentPage == 4) {
         const float scale = juce::jmin(getWidth()/1200.0f,getHeight()/820.0f);
         const int ox = (getWidth()-juce::roundToInt(1200.0f*scale))/2;
         const int oy = (getHeight()-juce::roundToInt(820.0f*scale))/2;
@@ -1083,7 +1087,7 @@ void AuroraEditor::mouseDown(const juce::MouseEvent& event) {
 }
 
 void AuroraEditor::mouseDrag(const juce::MouseEvent& event) {
-    if (sampleScrubbing && currentPage == 3) {
+    if (sampleScrubbing && currentPage == 4) {
         const float scale = juce::jmin(getWidth()/1200.0f,getHeight()/820.0f);
         const int ox = (getWidth()-juce::roundToInt(1200.0f*scale))/2;
         const float x = ((float)event.x-(float)ox)/scale;
@@ -1538,9 +1542,9 @@ void AuroraEditor::resized() {
     const int ox=(getWidth()-juce::roundToInt(1200.0f*scale))/2,oy=(getHeight()-juce::roundToInt(820.0f*scale))/2;
     auto place=[&](juce::Component& c,juce::Rectangle<int> b){c.setBounds(scaledBounds(b,scale,ox,oy));};
 
-    place(heading,{52,26,176,40});place(synthTab,{258,35,86,32});place(wtTab,{352,35,124,32});place(fxTab,{484,35,72,32});place(sampleTab,{564,35,88,32});
-    place(presetSearch,{758,34,142,29});place(presets,{908,34,244,29});
-    place(presetFavoriteButton,{758,70,66,22});place(savePresetButton,{832,70,66,22});place(loadPresetButton,{906,70,66,22});
+    place(heading,{52,26,176,40});
+    place(synthTab,{244,35,74,32});place(wtTab,{324,35,94,32});place(fxTab,{424,35,62,32});
+    place(samplerTab,{492,35,94,32});place(granularTab,{592,35,104,32});place(presetsTab,{702,35,92,32});
     modTab.setVisible(false);seqTab.setVisible(false);
 
     // VOICE: oscillator and wavetable top row.
