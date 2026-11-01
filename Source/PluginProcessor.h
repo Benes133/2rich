@@ -11,6 +11,7 @@ public:
   std::vector<float> left, right, thumbnail;
   std::vector<int> sliceStarts; // Includes the terminal sample position.
   double sampleRate = 44100.0;
+  double sourceBpm = 120.0;
   int rootMidiNote = 60;
   juce::String keyName = "C";
   juce::String fileName, fullPath;
@@ -62,6 +63,7 @@ public:
   return route >= 0 && route < 4 ? modRouteActivity[(size_t)route].load(std::memory_order_relaxed) : 0.0f;
  }
  float getOutputPeak() const noexcept { return outputPeak.load(std::memory_order_relaxed); }
+ double getHostTempoBpm() const noexcept { return hostTempoBpm.load(std::memory_order_relaxed); }
 private:
  struct StepData { bool enabled = true; int pitch = 0; float velocity = 127.0f; float gate = 100.0f; bool accent = false; };
  struct UserPattern {
@@ -94,6 +96,7 @@ private:
  std::array<std::vector<float>,2> delayBuffer;
  int delayWrite=0;
  double sampleRate=44100.0;
+ std::atomic<double> hostTempoBpm{120.0};
  float fxLfoPhase=0.0f;
  float compressorEnvelope=0.0f;
  std::array<std::array<std::vector<float>, 2>, 6> fxDelayBuffers;
