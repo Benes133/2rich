@@ -66,7 +66,9 @@ public:
             return;
 
         auto value = [this](const char* id) {
-            return processor->params.getRawParameterValue(id)->load();
+            if (const auto* parameter = processor->params.getRawParameterValue(id))
+                return parameter->load();
+            return 0.0f;
         };
 
         const int wave1 = (int)value("wave1");
@@ -492,6 +494,56 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("fxReverbRoom", "Reverb Room Size", 0.0f, 1.0f, 0.55f);
     f("fxReverbDamping", "Reverb Damping", 0.0f, 1.0f, 0.48f);
     f("fxLimiterCeiling", "Limiter Ceiling", -12.0f, 0.0f, -0.3f);
+
+    // Parameters used by the expanded FX rack. Register every ID before any
+    // audio callback can read it through getRawParameterValue().
+    f("fxSatTone", "Saturation Tone", -1.0f, 1.0f, 0.0f);
+    f("fxSatMix", "Saturation Mix", 0.0f, 1.0f, 1.0f);
+    f("fxPhaserFeedback", "Phaser Feedback", -0.95f, 0.95f, 0.25f);
+    f("fxPingTone", "Ping-Pong Tone", 0.0f, 1.0f, 0.7f);
+    f("fxReverbWidth", "Reverb Width", 0.0f, 1.0f, 1.0f);
+
+    f("fxLimiterInput", "Limiter Input", -18.0f, 18.0f, 0.0f);
+    f("fxLimiterMix", "Limiter Mix", 0.0f, 1.0f, 1.0f);
+    f("fxLimiterRelease", "Limiter Release", 10.0f, 500.0f, 80.0f, 0.5f);
+
+    f("fxMbLow", "Multiband Low Drive", 0.0f, 8.0f, 1.0f);
+    f("fxMbMid", "Multiband Mid Drive", 0.0f, 8.0f, 1.0f);
+    f("fxMbHigh", "Multiband High Drive", 0.0f, 8.0f, 1.0f);
+    f("fxMbMix", "Multiband Mix", 0.0f, 1.0f, 1.0f);
+
+    f("fxBitDepth", "Bitcrusher Depth", 2.0f, 16.0f, 8.0f);
+    f("fxBitRate", "Bitcrusher Rate Reduction", 1.0f, 32.0f, 4.0f);
+    f("fxBitMix", "Bitcrusher Mix", 0.0f, 1.0f, 1.0f);
+
+    f("fxStereoWidth", "Stereo Width Amount", 0.0f, 2.0f, 1.0f);
+    f("fxStereoPan", "Stereo Balance", -1.0f, 1.0f, 0.0f);
+    f("fxStereoMix", "Stereo Width Mix", 0.0f, 1.0f, 1.0f);
+
+    f("fxTremRate", "Tremolo Rate", 0.05f, 20.0f, 4.0f, 0.5f);
+    f("fxTremDepth", "Tremolo Depth", 0.0f, 1.0f, 0.5f);
+    f("fxTremStereo", "Tremolo Stereo Phase", 0.0f, 180.0f, 90.0f);
+    f("fxTremMix", "Tremolo Mix", 0.0f, 1.0f, 1.0f);
+
+    f("fxRingFreq", "Ring Mod Frequency", 20.0f, 2000.0f, 220.0f, 0.5f);
+    f("fxRingMix", "Ring Mod Mix", 0.0f, 1.0f, 1.0f);
+    f("fxRingStereo", "Ring Mod Stereo Phase", 0.0f, 180.0f, 90.0f);
+
+    f("fxFilterCutoff", "FX Filter Cutoff", 20.0f, 18000.0f, 8000.0f, 0.35f);
+    f("fxFilterRes", "FX Filter Resonance", 0.0f, 0.95f, 0.25f);
+    choice("fxFilterType", "FX Filter Type", { "Low Pass", "High Pass", "Band Pass" }, 0);
+    f("fxFilterMix", "FX Filter Mix", 0.0f, 1.0f, 1.0f);
+
+    f("fxFlangerRate", "Flanger Rate", 0.05f, 5.0f, 0.25f, 0.5f);
+    f("fxFlangerDepth", "Flanger Depth", 0.0f, 1.0f, 0.5f);
+    f("fxFlangerFeedback", "Flanger Feedback", -0.9f, 0.9f, 0.35f);
+    f("fxFlangerTime", "Flanger Time", 0.2f, 20.0f, 3.0f, 0.5f);
+    f("fxFlangerMix", "Flanger Mix", 0.0f, 1.0f, 0.5f);
+
+    f("fxChorusRate", "Chorus Rate", 0.05f, 5.0f, 0.3f, 0.5f);
+    f("fxChorusDepth", "Chorus Depth", 0.0f, 1.0f, 0.5f);
+    f("fxChorusWidth", "Chorus Width", 0.0f, 1.0f, 0.5f);
+
     return layout;
 }
 
@@ -561,7 +613,10 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         return;
 
     auto value = [this](const char* id) {
-        return params.getRawParameterValue(id)->load();
+        if (const auto* parameter = params.getRawParameterValue(id))
+            return parameter->load();
+        // Fail closed rather than dereferencing null if a future parameter ID is missing.
+        return 0.0f;
     };
 
     if ((int)lfo1Block.size() < samples) lfo1Block.resize((size_t)samples);
