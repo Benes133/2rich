@@ -146,12 +146,12 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     const juce::StringArray lfoShapes = { "Sine", "Triangle", "Saw", "Square", "Sample & Hold" };
     addChoice(lfo1Shape, lfoShapes, "lfo1Shape");
     addChoice(lfo2Shape, lfoShapes, "lfo2Shape");
-    const juce::StringArray modSources = { "Off", "LFO 1", "LFO 2", "Velocity", "Amp Env", "Filter Env", "Mod Wheel" };
-    const juce::StringArray modTargets = { "Off", "Cutoff", "Osc Mix", "WT Position", "Pitch", "Pan", "Resonance" };
+    const juce::StringArray modSourceNames = { "Off", "LFO 1", "LFO 2", "Velocity", "Amp Env", "Filter Env", "Mod Wheel" };
+    const juce::StringArray modTargetNames = { "Off", "Cutoff", "Osc Mix", "WT Position", "Pitch", "Pan", "Resonance" };
     for (int i = 0; i < 4; ++i) {
         const auto suffix = juce::String(i + 1);
-        addChoice(this->modSources[(size_t)i], modSources, "mod" + suffix + "Source");
-        addChoice(this->modTargets[(size_t)i], modTargets, "mod" + suffix + "Target");
+        addChoice(this->modSources[(size_t)i], modSourceNames, "mod" + suffix + "Source");
+        addChoice(this->modTargets[(size_t)i], modTargetNames, "mod" + suffix + "Target");
     }
 
     addChoice(seqModeBox, { "Off", "Arpeggiator", "Step Sequencer" }, "seqMode");

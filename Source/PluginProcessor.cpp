@@ -345,7 +345,7 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     return layout;
 }
 
-void AuroraProcessor::prepareToPlay(double sr, int blockSize) {
+void AuroraProcessor::prepareToPlay(double sr, int maximumBlockSize) {
     sampleRate = sr;
     synth.setCurrentPlaybackSampleRate(sr);
 
@@ -353,7 +353,7 @@ void AuroraProcessor::prepareToPlay(double sr, int blockSize) {
         if (auto* voice = dynamic_cast<Voice*>(synth.getVoice(i)))
             voice->prepare(sr);
 
-    const auto storageSize = (size_t)juce::jmax(8192, blockSize + 1);
+    const auto storageSize = (size_t)juce::jmax(8192, maximumBlockSize + 1);
     lfo1Block.resize(storageSize);
     lfo2Block.resize(storageSize);
     for (auto& channel : delayBuffer)
@@ -435,17 +435,27 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     } else {
         sequencerWasRunning = true;
         juce::MidiBuffer sequencedMidi;
-        juce::MidiBuffer::Iterator inputIterator(midi);
+        auto inputIterator = midi.begin();
+        const auto inputEnd = midi.end();
         juce::MidiMessage inputMessage;
         int nextInputPosition = 0;
-        bool hasInput = inputIterator.getNextEvent(inputMessage, nextInputPosition);
+        auto loadNextInput = [&]() {
+            if (inputIterator == inputEnd)
+                return false;
+            const auto metadata = *inputIterator;
+            inputMessage = metadata.getMessage();
+            nextInputPosition = metadata.samplePosition;
+            ++inputIterator;
+            return true;
+        };
+        bool hasInput = loadNextInput();
 
         double bpm = 120.0;
-        if (auto* playHead = getPlayHead()) {
-            const auto position = playHead->getPosition();
-            if (position.has_value()) {
+        if (auto* hostPlayHead = getPlayHead()) {
+            const auto position = hostPlayHead->getPosition();
+            if (position.hasValue()) {
                 const auto hostBpm = position->getBpm();
-                if (hostBpm.has_value() && *hostBpm > 1.0)
+                if (hostBpm.hasValue() && *hostBpm > 1.0)
                     bpm = *hostBpm;
             }
         }
@@ -484,7 +494,7 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                 } else {
                     sequencedMidi.addEvent(inputMessage, sample);
                 }
-                hasInput = inputIterator.getNextEvent(inputMessage, nextInputPosition);
+                hasInput = loadNextInput();
             }
 
             const int heldCount = (int)std::count_if(heldNoteVelocities.begin(), heldNoteVelocities.end(),
