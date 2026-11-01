@@ -480,6 +480,9 @@ void AuroraEditor::mouseDown(const juce::MouseEvent& event) {
 
     drawingWavetable = true;
     drawingFrame = juce::jlimit(0, 63, juce::roundToInt((float)wtPosition.getValue() * 63.0f));
+    previousDrawIndex = juce::jlimit(0, 2047,
+        juce::roundToInt((x - 338.0f) / 556.0f * 2047.0f));
+    previousDrawValue = juce::jlimit(-1.0f, 1.0f, (238.66f - y) / 43.0f);
     wtTable.setSelectedId(7, juce::sendNotification);
     editWavetableFromMouse(event);
 }
