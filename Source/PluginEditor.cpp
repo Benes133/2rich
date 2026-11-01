@@ -994,12 +994,12 @@ void AuroraEditor::paint(juce::Graphics& g) {
             const int sx = 42 + i * 186;
             g.setColour(muted);
             g.setFont(juce::Font(juce::FontOptions(8.0f, juce::Font::bold)));
-            g.drawText("SLOT " + juce::String(i + 1), sx + 6, 174, 164, 12,
+            g.drawText("SLOT " + juce::String(i + 1), sx + 6, 176, 164, 12,
                        juce::Justification::centredLeft);
             g.setColour(violet.withAlpha(0.24f));
-            g.fillRoundedRectangle((float)sx, 188.0f, 178.0f, 34.0f, 7.0f);
+            g.fillRoundedRectangle((float)sx, 193.0f, 178.0f, 32.0f, 7.0f);
             g.setColour(border);
-            g.drawRoundedRectangle((float)sx + 0.5f, 188.5f, 177.0f, 33.0f, 7.0f, 1.0f);
+            g.drawRoundedRectangle((float)sx + 0.5f, 193.5f, 177.0f, 31.0f, 7.0f, 1.0f);
         }
 
         panel(32, 256, 258, 470, "EQ / DRIVE", "TONE SHAPING / HARMONICS");
@@ -1084,7 +1084,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
         g.drawText("PITCH (SEMITONES)", 620, 456, 420, 12, juce::Justification::centredLeft);
         g.drawText("VELOCITY", 620, 530, 420, 12, juce::Justification::centredLeft);
         g.drawText("STEP GATE", 620, 604, 420, 12, juce::Justification::centredLeft);
-        g.drawText("USER PATTERN BANK", 54, 682, 180, 12, juce::Justification::centredLeft);
+        g.drawText("USER PATTERN BANK", 54, 654, 180, 12, juce::Justification::centredLeft);
 
         const int pageOffset = seqPageBox.getSelectedId() == 2 ? 16 : 0;
         if (lastActiveStep >= pageOffset && lastActiveStep < pageOffset + 16) {
@@ -1163,7 +1163,7 @@ void AuroraEditor::resized() {
 
     // FX page: six insert slots, EQ/drive, dynamics and time/space.
     for (int i = 0; i < 6; ++i)
-        place(fxSlots[(size_t)i], {42 + i * 186, 188, 178, 34});
+        place(fxSlots[(size_t)i], {42 + i * 186, 193, 178, 32});
     place(fxEq, {42, 356, 70, 126});
     place(fxLow, {114, 356, 70, 126});
     place(fxMid, {186, 356, 70, 126});
@@ -1220,7 +1220,7 @@ void AuroraEditor::resized() {
         const int y = 414 + (i / 4) * 60;
         place(stepButtons[(size_t)i], {x, y, 112, 42});
     }
-    place(selectedStepLabel, {620, 414, 240, 26});
+    place(selectedStepLabel, {1004, 394, 120, 24});
     place(stepPitch, {620, 472, 460, 32});
     place(stepVelocity, {620, 546, 460, 32});
     place(stepGate, {620, 620, 460, 32});
