@@ -544,7 +544,9 @@ void AuroraEditor::paint(juce::Graphics& g) {
         knobLabel(55,164,112,"RATE");
         knobLabel(515,164,112,"RATE");
         g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.5f)));
+        g.setFont(juce::Font(juce::FontOptions(9.0f,juce::Font::bold)));
+        g.drawText("SHAPE",195,164,245,14,juce::Justification::centredLeft);
+        g.drawText("SHAPE",655,164,245,14,juce::Justification::centredLeft);
 
         g.setColour(muted);
         g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
