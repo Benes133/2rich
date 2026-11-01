@@ -618,39 +618,36 @@ AuroraEditor::~AuroraEditor() {
 }
 
 void AuroraEditor::rebuildPresetList() {
-    static const char* names[] = {
-        "Violet Lead", "Neon Saw", "Hollow Lead",
-        "Cloud Pad", "Glass Cathedral", "Slow Motion",
-        "Digital Keys", "Soft Piano-ish", "Pluck Keys",
-        "Sub Pressure", "Reese Machine", "Acid Bloom", "Neon Bass",
-        "Glass Pluck", "Cyber Mallet", "Crystal Keys",
-        "Aurora Drift", "Deep Space", "Ethereal Choir", "Frozen Sky",
-        "Laser Bloom", "Retro Pulse", "Wide Unison", "Dirty Motion", "Dream Sequence"
-    };
     const auto rawQuery = presetSearch.getText().trim().toLowerCase();
     const bool favouritesOnly = rawQuery.startsWith("fav:");
     const auto query = favouritesOnly ? rawQuery.substring(4).trim() : rawQuery;
     const int previousId = presets.getSelectedId();
     presets.clear();
 
-    const struct Category { const char* name; int first; int last; } categories[] = {
+    struct Category { const char* name; int first; int last; };
+    static const Category categories[] = {
         { "LEADS", 1, 3 }, { "PADS", 4, 6 }, { "KEYS", 7, 9 },
         { "BASS", 10, 13 }, { "PLUCKS", 14, 16 },
-        { "ATMOSPHERE", 17, 20 }, { "FX & SYNTH", 21, 25 }
+        { "ATMOSPHERE", 17, 20 }, { "FX & SYNTH", 21, 25 },
+        { "LEADS / VOL. 2", 26, 75 }, { "PADS / VOL. 2", 76, 125 },
+        { "ATMOSPHERES", 126, 175 }, { "KEYS", 176, 225 },
+        { "PIANOS", 226, 275 }, { "PLUCKS", 276, 325 },
+        { "BASS", 326, 375 }, { "SYNTHS", 376, 425 },
+        { "SOUND FX", 426, 475 }, { "TEXTURES", 476, 500 }
     };
 
     if (query.isEmpty() && !favouritesOnly) {
         for (const auto& category : categories) {
             presets.addSectionHeading(category.name);
             for (int id = category.first; id <= category.last; ++id)
-                presets.addItem(names[id - 1], id);
+                presets.addItem(factoryPresetName(id), id);
         }
     } else {
-        for (int id = 1; id <= 25; ++id) {
-            const bool matchesName = query.isEmpty()
-                || juce::String(names[id - 1]).toLowerCase().contains(query);
+        for (int id = 1; id <= 500; ++id) {
+            const auto name = factoryPresetName(id);
+            const bool matchesName = query.isEmpty() || name.toLowerCase().contains(query);
             if (matchesName && (!favouritesOnly || proc.isPresetFavorite(id)))
-                presets.addItem(names[id - 1], id);
+                presets.addItem(name, id);
         }
     }
 
