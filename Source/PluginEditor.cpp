@@ -471,8 +471,9 @@ AuroraEditor::~AuroraEditor() {
         slider->setLookAndFeel(nullptr);
     wave1.setLookAndFeel(nullptr); wave2.setLookAndFeel(nullptr); presets.setLookAndFeel(nullptr); wtTable.setLookAndFeel(nullptr);
     for (auto& slot : fxSlots) slot.setLookAndFeel(nullptr);
-    for (auto* button : { &presetFavoriteButton, &savePresetButton, &loadPresetButton,
-                          &fxCompEnabledButton }) button->setLookAndFeel(nullptr);
+    for (auto* button : { &presetFavoriteButton, &savePresetButton, &loadPresetButton })
+        button->setLookAndFeel(nullptr);
+    fxCompEnabledButton.setLookAndFeel(nullptr);
     lfo1Shape.setLookAndFeel(nullptr); lfo2Shape.setLookAndFeel(nullptr); lfo3Shape.setLookAndFeel(nullptr);
     oscModeBox.setLookAndFeel(nullptr); filterTypeBox.setLookAndFeel(nullptr);
     importWavetableButton.setLookAndFeel(nullptr); clearWavetableButton.setLookAndFeel(nullptr);
