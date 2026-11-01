@@ -276,7 +276,8 @@ public:
                     sample = (1.0f - currentMix) * superSaw + currentMix * oscB;
                 }
 
-                sample += sub * std::sin((float)phase1[(size_t)voice] * 0.5f);
+                if (sub > 0.0001f)
+                    sample += sub * std::sin((float)phase1[(size_t)voice] * 0.5f);
                 const float envelopeGain = vel * env;
                 if (panMod == 0.0f) {
                     left += sample * staticPanLeft[(size_t)voice] * envelopeGain;
@@ -374,7 +375,10 @@ private:
             const float b = juce::jmap(sampleBlend, at(frameB, sampleA), at(frameB, sampleB));
             return juce::jmap(frameBlend, a, b);
         }
-        auto basic = [&](int shape) {
+        // Calculate only the two shapes used by this table. The previous
+        // implementation evaluated saw, square, triangle and sine on every
+        // oscillator sample, even when three of them were discarded.
+        const auto basic = [x](int shape) noexcept {
             switch (shape) {
                 case 1: return x < 0.5f ? 1.0f : -1.0f;
                 case 2: return 1.0f - 4.0f * std::abs(x - 0.5f);
@@ -383,20 +387,35 @@ private:
             }
         };
 
-        const float saw = basic(0);
-        const float square = basic(1);
-        const float triangle = basic(2);
-        const float sine = basic(3);
-        float first = saw, second = sine;
+        const float morph = juce::jlimit(0.0f, 1.0f, position);
+        const auto morphBasic = [&](int firstShape, int secondShape) {
+            if (morph <= 0.0f)
+                return basic(firstShape);
+            if (morph >= 1.0f)
+                return basic(secondShape);
+            return juce::jmap(morph, basic(firstShape), basic(secondShape));
+        };
+
         switch (table) {
-            case 1: first = square; second = triangle; break;
-            case 2: first = triangle; second = sine; break;
-            case 3: first = saw; second = square; break;
-            case 4: first = sine; second = std::sin(x * juce::MathConstants<float>::twoPi * 2.0f); break;
-            case 5: first = saw; second = std::tanh(saw * 3.0f); break;
-            default: first = basic(type); second = basic(type == 0 ? 3 : 0); break;
+            case 1: return morphBasic(1, 2); // Square -> triangle.
+            case 2: return morphBasic(2, 3); // Triangle -> sine.
+            case 3: return morphBasic(0, 1); // Saw -> square.
+            case 4: {
+                if (morph <= 0.0f) return basic(3);
+                const float secondHarmonic = std::sin(x * juce::MathConstants<float>::twoPi * 2.0f);
+                if (morph >= 1.0f) return secondHarmonic;
+                return juce::jmap(morph, basic(3), secondHarmonic);
+            }
+            case 5: {
+                const float saw = basic(0);
+                if (morph <= 0.0f) return saw;
+                const float drivenSaw = std::tanh(saw * 3.0f);
+                if (morph >= 1.0f) return drivenSaw;
+                return juce::jmap(morph, saw, drivenSaw);
+            }
+            default:
+                return morphBasic(type, type == 0 ? 3 : 0);
         }
-        return juce::jmap(position, first, second);
     }
 
     juce::dsp::StateVariableTPTFilter<float> voiceFilter;
@@ -624,6 +643,7 @@ void AuroraProcessor::prepareToPlay(double sr, int maximumBlockSize) {
         fxPhases[slot] = 0.0f;
     }
     limiterGain = 1.0f;
+    safetyLimiterGain = 1.0f;
 
     // The JUCE DSP reverb owns internal delay lines; prepare them before
     // the audio thread can process an insert that selects Reverb.
@@ -1300,16 +1320,34 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 
     buffer.applyGain(value("master"));
     const float width = value("width");
+    constexpr float safetyCeiling = 0.89125094f; // -1 dBFS
+    const float safetyReleaseCoeff = (float)std::exp(-1.0 / (sampleRate * 0.075));
+    float safetyGain = safetyLimiterGain;
     float blockPeak = 0.0f;
     for (int i = 0; i < samples; ++i) {
         const float midSample = (leftChannel[i] + rightChannel[i]) * 0.5f;
         const float sideSample = (leftChannel[i] - rightChannel[i]) * 0.5f * width * 2.0f;
-        const float left = midSample + sideSample;
-        const float right = midSample - sideSample;
+        float left = midSample + sideSample;
+        float right = midSample - sideSample;
+
+        // A linked safety limiter prevents summed polyphonic voices and FX
+        // from exceeding full scale. Gain reduction is immediate; recovery
+        // is smoothed to avoid pumping and zipper noise between samples.
+        const float peak = juce::jmax(std::abs(left), std::abs(right));
+        const float targetGain = peak > safetyCeiling
+            ? safetyCeiling / juce::jmax(peak, 1.0e-8f) : 1.0f;
+        if (targetGain < safetyGain)
+            safetyGain = targetGain;
+        else
+            safetyGain = safetyReleaseCoeff * safetyGain + (1.0f - safetyReleaseCoeff);
+
+        left *= safetyGain;
+        right *= safetyGain;
         leftChannel[i] = left;
         rightChannel[i] = right;
         blockPeak = juce::jmax(blockPeak, juce::jmax(std::abs(left), std::abs(right)));
     }
+    safetyLimiterGain = safetyGain;
     const float previousPeak = outputPeak.load(std::memory_order_relaxed);
     outputPeak.store(juce::jmax(blockPeak, previousPeak * 0.82f), std::memory_order_relaxed);
 }

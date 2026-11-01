@@ -91,6 +91,7 @@ private:
  std::array<std::array<std::array<float, 2>, 2>, 6> fxFilterStates{};
  std::array<float, 6> fxPhases{};
  float limiterGain=1.0f;
+ float safetyLimiterGain=1.0f;
  std::atomic<float> outputPeak{0.0f};
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AuroraProcessor)
 };
