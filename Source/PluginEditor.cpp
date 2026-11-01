@@ -160,8 +160,13 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
                     return;
                 juce::String error;
                 if (proc.loadWavetableFromFile(file, error)) {
-                    wtTable.setSelectedId(7, juce::sendNotification);
-                    wavetableStatusLabel.setText("IMPORTED: " + file.getFileName(),
+                    // Force the APVTS choice as well as the UI selection. This makes
+                    // the imported table active even if the host's ComboBox attachment
+                    // does not propagate a programmatic selection change.
+                    if (auto* parameter = proc.params.getParameter("wtTable"))
+                        parameter->setValueNotifyingHost(1.0f); // choice index 6 / item ID 7
+                    wtTable.setSelectedId(7, juce::dontSendNotification);
+                    wavetableStatusLabel.setText("ACTIVE WAVETABLE: " + file.getFileName(),
                                                  juce::dontSendNotification);
                 } else {
                     wavetableStatusLabel.setText("IMPORT FAILED: " + error,
