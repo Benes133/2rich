@@ -39,7 +39,31 @@ public:
         stage = 1;
         filterStage = 1;
         voiceFilter.reset();
+
+        sampleAsset = processor != nullptr ? processor->getSampleAsset() : nullptr;
+        samplePlaying = false;
+        samplePosition = 0.0;
+        grainCountdown = 0;
+        for (auto& grain : grains) grain = {};
+        if (sampleAsset && !sampleAsset->left.empty() && srForNote() > 0.0) {
+            sampleStart = 0;
+            sampleEnd = (int)sampleAsset->left.size();
+            const bool sliceMode = processor->params.getRawParameterValue("sampleSliceMode")->load() > 0.5f;
+            const int sliceCount = (int)sampleAsset->sliceStarts.size() - 1;
+            if (sliceMode && sliceCount > 1) {
+                const int sliceIndex = juce::jlimit(0, sliceCount - 1, note - 36);
+                sampleStart = sampleAsset->sliceStarts[(size_t)sliceIndex];
+                sampleEnd = sampleAsset->sliceStarts[(size_t)sliceIndex + 1];
+            }
+            const float rootNote = processor->params.getRawParameterValue("sampleRootNote")->load();
+            sampleIncrement = sampleAsset->sampleRate / srForNote()
+                * std::pow(2.0, ((double)note - (double)rootNote) / 12.0);
+            samplePosition = (double)sampleStart;
+            samplePlaying = sampleEnd > sampleStart + 1;
+        }
     }
+
+    double srForNote() const noexcept { return getSampleRate(); }
 
     void stopNote(float, bool allowTailOff) override {
         if (allowTailOff) {
@@ -49,6 +73,8 @@ public:
             clearCurrentNote();
             env = 0.0f;
             filterEnv = 0.0f;
+            samplePlaying = false;
+            for (auto& grain : grains) grain.active = false;
             voiceFilter.reset();
         }
     }
@@ -79,6 +105,13 @@ public:
         const float syncRatio = value("syncRatio");
         const int filterType = juce::jlimit(0, 2, (int)value("filterType"));
         const auto importedTable = processor->getImportedWavetable();
+        const int sampleMode = juce::jlimit(0, 2, (int)value("sampleMode"));
+        const float sampleGain = juce::jlimit(0.0f, 1.0f, value("sampleMix"));
+        const float grainSizeMs = value("grainSize");
+        const float grainDensity = juce::jmax(1.0f, value("grainDensity"));
+        const float grainPosition = value("grainPosition");
+        const float grainSpray = value("grainSpray");
+        const float grainPitch = value("grainPitch");
 
         if (filterType != activeFilterType) {
             const auto type = filterType == 1
@@ -279,6 +312,83 @@ public:
                 processor->fxModWeightBlock[(size_t)blockIndex] += weight;
             }
 
+            // Sample playback and granular synthesis share the imported audio asset.
+            if (sampleMode > 0 && sampleAsset && !sampleAsset->left.empty()) {
+                const int assetLength = (int)sampleAsset->left.size();
+                auto readInterpolated = [&](const std::vector<float>& channel, double position) {
+                    if (channel.empty()) return 0.0f;
+                    const int indexA = juce::jlimit(0, (int)channel.size() - 1, (int)position);
+                    const int indexB = juce::jmin((int)channel.size() - 1, indexA + 1);
+                    return juce::jmap((float)(position - std::floor(position)),
+                                      channel[(size_t)indexA], channel[(size_t)indexB]);
+                };
+
+                if (sampleMode == 1) {
+                    float sampleL = 0.0f, sampleR = 0.0f;
+                    if (samplePlaying && samplePosition < (double)sampleEnd) {
+                        sampleL = readInterpolated(sampleAsset->left, samplePosition);
+                        sampleR = readInterpolated(sampleAsset->right, samplePosition);
+                        samplePosition += sampleIncrement;
+                        if (samplePosition >= (double)sampleEnd)
+                            samplePlaying = false;
+                    }
+                    left = sampleL * sampleGain * vel * env;
+                    right = sampleR * sampleGain * vel * env;
+                } else {
+                    const int regionLength = juce::jmax(1, sampleEnd - sampleStart);
+                    const int grainLength = juce::jlimit(64, (int)(sr * 0.5),
+                        (int)(sr * grainSizeMs * 0.001f));
+                    const int spawnInterval = juce::jmax(1, (int)(sr / grainDensity));
+                    if (grainCountdown <= 0) {
+                        Grain* target = nullptr;
+                        for (auto& grain : grains) {
+                            if (!grain.active) { target = &grain; break; }
+                        }
+                        if (target == nullptr)
+                            target = &grains[0];
+
+                        grainSeed ^= grainSeed << 13;
+                        grainSeed ^= grainSeed >> 17;
+                        grainSeed ^= grainSeed << 5;
+                        const float random = (float)(grainSeed & 0x00ffffffu) / 8388607.5f - 1.0f;
+                        const double jitter = (double)random * (double)grainSpray
+                            * (double)regionLength * 0.5;
+                        const double center = (double)sampleStart
+                            + (double)grainPosition * (double)regionLength;
+                        const double maxStart = juce::jmax((double)sampleStart,
+                            (double)sampleEnd - (double)grainLength * sampleIncrement);
+                        target->position = juce::jlimit((double)sampleStart, maxStart, center + jitter);
+                        target->increment = sampleIncrement * std::pow(2.0, (double)grainPitch / 12.0);
+                        target->age = 0;
+                        target->length = grainLength;
+                        target->active = true;
+                        grainCountdown = spawnInterval;
+                    }
+                    --grainCountdown;
+
+                    float grainL = 0.0f, grainR = 0.0f;
+                    int activeGrains = 0;
+                    for (auto& grain : grains) {
+                        if (!grain.active) continue;
+                        if (grain.age >= grain.length || grain.position >= (double)sampleEnd) {
+                            grain.active = false;
+                            continue;
+                        }
+                        const float phase = (float)grain.age / (float)juce::jmax(1, grain.length - 1);
+                        const float window = 0.5f - 0.5f * std::cos(juce::MathConstants<float>::twoPi * phase);
+                        grainL += readInterpolated(sampleAsset->left, grain.position) * window;
+                        grainR += readInterpolated(sampleAsset->right, grain.position) * window;
+                        grain.position += grain.increment;
+                        ++grain.age;
+                        ++activeGrains;
+                    }
+                    const float normaliser = 1.0f / std::sqrt((float)juce::jmax(1, activeGrains));
+                    left = grainL * normaliser * sampleGain * vel * env * 1.65f;
+                    right = grainR * normaliser * sampleGain * vel * env * 1.65f;
+                }
+                juce::ignoreUnused(assetLength);
+            }
+
             // Recalculate filter coefficients every four samples to reduce per-voice DSP cost.
             if ((i & 3) == 0) {
                 voiceFilter.setCutoffFrequency(cutoffHz);
@@ -352,7 +462,18 @@ private:
         return juce::jmap(position, first, second);
     }
 
+    struct Grain {
+        double position = 0.0, increment = 1.0;
+        int age = 0, length = 0;
+        bool active = false;
+    };
     AuroraProcessor* processor = nullptr;
+    std::shared_ptr<const AuroraProcessor::SampleAsset> sampleAsset;
+    std::array<Grain, 12> grains{};
+    double samplePosition = 0.0, sampleIncrement = 1.0;
+    int sampleStart = 0, sampleEnd = 0, grainCountdown = 0;
+    uint32_t grainSeed = 0x13579bdu;
+    bool samplePlaying = false;
     juce::dsp::StateVariableTPTFilter<float> voiceFilter;
     int activeFilterType = 0;
     double hz = 440.0;
@@ -543,6 +664,16 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("fxChorusRate", "Chorus Rate", 0.05f, 5.0f, 0.3f, 0.5f);
     f("fxChorusDepth", "Chorus Depth", 0.0f, 1.0f, 0.5f);
     f("fxChorusWidth", "Chorus Width", 0.0f, 1.0f, 0.5f);
+
+    choice("sampleMode", "Sample Engine", { "Oscillator", "Sampler", "Granular" }, 0);
+    layout.add(std::make_unique<juce::AudioParameterBool>("sampleSliceMode", "Auto Slice Mapping", true));
+    f("sampleRootNote", "Sample Root MIDI Note", 0.0f, 127.0f, 60.0f);
+    f("sampleMix", "Sample Level", 0.0f, 1.0f, 0.85f);
+    f("grainSize", "Grain Size", 20.0f, 500.0f, 120.0f, 0.5f);
+    f("grainDensity", "Grain Density", 2.0f, 60.0f, 18.0f, 0.5f);
+    f("grainPosition", "Grain Position", 0.0f, 1.0f, 0.5f);
+    f("grainSpray", "Grain Spray", 0.0f, 1.0f, 0.15f);
+    f("grainPitch", "Grain Pitch", -24.0f, 24.0f, 0.0f);
 
     return layout;
 }
@@ -1371,6 +1502,165 @@ bool AuroraProcessor::loadWavetableFromFile(const juce::File& file, juce::String
     return true;
 }
 
+bool AuroraProcessor::loadSampleFromFile(const juce::File& file, juce::String& error) {
+    if (!file.existsAsFile()) {
+        error = "File not found";
+        return false;
+    }
+
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+    if (reader == nullptr || reader->lengthInSamples < 1024 || reader->numChannels < 1
+        || !std::isfinite(reader->sampleRate) || reader->sampleRate < 1000.0) {
+        error = "Unsupported or empty audio file";
+        return false;
+    }
+
+    constexpr int64_t maximumFrames = 10000000;
+    const int frames = (int)juce::jmin<int64_t>(maximumFrames, reader->lengthInSamples);
+    juce::AudioBuffer<float> decoded(2, frames);
+    decoded.clear();
+    if (!reader->read(&decoded, 0, frames, 0, true, reader->numChannels > 1)) {
+        error = "Could not decode audio data";
+        return false;
+    }
+
+    auto asset = std::make_shared<SampleAsset>();
+    asset->sampleRate = reader->sampleRate;
+    asset->fileName = file.getFileName();
+    asset->fullPath = file.getFullPathName();
+    asset->left.resize((size_t)frames);
+    asset->right.resize((size_t)frames);
+    for (int i = 0; i < frames; ++i) {
+        const float left = decoded.getSample(0, i);
+        const float right = reader->numChannels > 1 ? decoded.getSample(1, i) : left;
+        asset->left[(size_t)i] = std::isfinite(left) ? left : 0.0f;
+        asset->right[(size_t)i] = std::isfinite(right) ? right : 0.0f;
+    }
+
+    // Fast offline chroma analysis: averaged FFT energy is matched against
+    // standard major/minor key profiles to estimate the track tonic.
+    constexpr int fftOrder = 12;
+    constexpr int fftSize = 1 << fftOrder;
+    juce::dsp::FFT fft(fftOrder);
+    std::vector<float> fftData((size_t)fftSize * 2u, 0.0f);
+    std::array<double, 12> chroma{};
+    const int hop = fftSize / 2;
+    int analysedFrames = 0;
+    for (int offset = 0; offset + fftSize <= frames; offset += hop) {
+        std::fill(fftData.begin(), fftData.end(), 0.0f);
+        for (int n = 0; n < fftSize; ++n) {
+            const float mono = 0.5f * (asset->left[(size_t)(offset + n)]
+                                     + asset->right[(size_t)(offset + n)]);
+            const float window = 0.5f - 0.5f * std::cos(juce::MathConstants<float>::twoPi
+                                                       * (float)n / (float)(fftSize - 1));
+            fftData[(size_t)n] = mono * window;
+        }
+        fft.performFrequencyOnlyForwardTransform(fftData.data());
+        for (int bin = 2; bin < fftSize / 2; ++bin) {
+            const double frequency = (double)bin * reader->sampleRate / (double)fftSize;
+            if (frequency < 45.0 || frequency > 5000.0) continue;
+            const int midiNote = (int)std::round(69.0 + 12.0 * std::log2(frequency / 440.0));
+            const int pitchClass = (midiNote % 12 + 12) % 12;
+            const double magnitude = fftData[(size_t)bin];
+            chroma[(size_t)pitchClass] += magnitude * magnitude;
+        }
+        ++analysedFrames;
+    }
+
+    static const double majorProfile[12] =
+        { 6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88 };
+    static const double minorProfile[12] =
+        { 6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17 };
+    static const char* noteNames[12] =
+        { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    double bestScore = -1.0e30;
+    int bestRoot = 0;
+    bool bestMinor = false;
+    double mean = 0.0;
+    for (const auto value : chroma) mean += value / 12.0;
+    for (int root = 0; root < 12; ++root) {
+        for (int mode = 0; mode < 2; ++mode) {
+            const auto* profile = mode == 0 ? majorProfile : minorProfile;
+            double score = 0.0;
+            for (int note = 0; note < 12; ++note)
+                score += (chroma[(size_t)((note + root) % 12)] - mean) * profile[note];
+            if (score > bestScore) {
+                bestScore = score;
+                bestRoot = root;
+                bestMinor = mode == 1;
+            }
+        }
+    }
+    asset->rootMidiNote = 60 + bestRoot;
+    asset->keyName = juce::String(noteNames[bestRoot]) + (bestMinor ? " minor" : " major");
+
+    // Build 10 ms energy windows and mark strong rising edges as slice points.
+    const int analysisWindow = juce::jmax(1, (int)std::round(reader->sampleRate * 0.01));
+    std::vector<float> rms;
+    rms.reserve((size_t)(frames / analysisWindow + 1));
+    float maximumRms = 0.0f;
+    for (int start = 0; start < frames; start += analysisWindow) {
+        const int end = juce::jmin(frames, start + analysisWindow);
+        double energy = 0.0;
+        for (int i = start; i < end; ++i) {
+            const float mono = 0.5f * (asset->left[(size_t)i] + asset->right[(size_t)i]);
+            energy += (double)mono * (double)mono;
+        }
+        const float level = (float)std::sqrt(energy / (double)juce::jmax(1, end - start));
+        rms.push_back(level);
+        maximumRms = juce::jmax(maximumRms, level);
+    }
+
+    asset->sliceStarts.push_back(0);
+    int lastSlice = 0;
+    const int minimumGap = (int)(reader->sampleRate * 0.08);
+    for (size_t i = 1; i < rms.size() && asset->sliceStarts.size() < 32u; ++i) {
+        const float previous = rms[i - 1];
+        const float current = rms[i];
+        const int samplePosition = (int)i * analysisWindow;
+        if (current > maximumRms * 0.12f && current > previous * 1.5f
+            && samplePosition - lastSlice >= minimumGap
+            && samplePosition < frames - minimumGap) {
+            asset->sliceStarts.push_back(samplePosition);
+            lastSlice = samplePosition;
+        }
+    }
+    if (asset->sliceStarts.size() < 4u) {
+        asset->sliceStarts.clear();
+        asset->sliceStarts.push_back(0);
+        for (int slice = 1; slice < 8; ++slice)
+            asset->sliceStarts.push_back((int)((int64_t)frames * slice / 8));
+    }
+    asset->sliceStarts.push_back(frames);
+
+    constexpr int thumbnailSize = 512;
+    asset->thumbnail.resize(thumbnailSize, 0.0f);
+    for (int bucket = 0; bucket < thumbnailSize; ++bucket) {
+        const int start = (int)((int64_t)bucket * frames / thumbnailSize);
+        const int end = juce::jmax(start + 1, (int)((int64_t)(bucket + 1) * frames / thumbnailSize));
+        float peak = 0.0f;
+        for (int i = start; i < juce::jmin(frames, end); ++i)
+            peak = juce::jmax(peak, juce::jmax(std::abs(asset->left[(size_t)i]),
+                                               std::abs(asset->right[(size_t)i])));
+        asset->thumbnail[(size_t)bucket] = peak;
+    }
+
+    std::atomic_store_explicit(&sampleAsset,
+        std::shared_ptr<const SampleAsset>(std::move(asset)), std::memory_order_release);
+    if (auto* parameter = params.getParameter("sampleRootNote"))
+        parameter->setValueNotifyingHost(parameter->convertTo0to1((float)(60 + bestRoot)));
+    error.clear();
+    juce::ignoreUnused(analysedFrames);
+    return true;
+}
+
+void AuroraProcessor::clearSample() noexcept {
+    std::atomic_store_explicit(&sampleAsset, std::shared_ptr<const SampleAsset>{},
+                               std::memory_order_release);
+}
+
 void AuroraProcessor::clearImportedWavetable() {
     std::atomic_store_explicit(&importedWavetable,
                                std::shared_ptr<const std::vector<float>>{},
@@ -1472,7 +1762,7 @@ void AuroraProcessor::getStateInformation(juce::MemoryBlock& destination) {
         }
     }
     auto* favourites = xml->createNewChildElement("PRESET_FAVOURITES");
-    for (int presetId = 1; presetId <= 25; ++presetId) {
+    for (int presetId = 1; presetId <= 500; ++presetId) {
         if (isPresetFavorite(presetId)) {
             auto* favourite = favourites->createNewChildElement("FAVOURITE");
             favourite->setAttribute("id", presetId);
@@ -1484,6 +1774,10 @@ void AuroraProcessor::getStateInformation(juce::MemoryBlock& destination) {
         const auto encoded = juce::Base64::toBase64(imported->data(), imported->size() * sizeof(float));
         wavetable->addTextElement(encoded);
     }
+    if (const auto sample = getSampleAsset()) {
+        auto* sampleElement = xml->createNewChildElement("IMPORTED_SAMPLE");
+        sampleElement->setAttribute("path", sample->fullPath);
+    }
     copyXmlToBinary(*xml, destination);
 }
 
@@ -1494,13 +1788,22 @@ void AuroraProcessor::setStateInformation(const void* data, int size) {
         for (auto& favourite : presetFavorites)
             favourite.store(false, std::memory_order_relaxed);
         clearImportedWavetable();
+        clearSample();
+        if (auto* sampleElement = xml->getChildByName("IMPORTED_SAMPLE")) {
+            const juce::File sampleFile(sampleElement->getStringAttribute("path"));
+            if (sampleFile.existsAsFile()) {
+                juce::String ignoredError;
+                loadSampleFromFile(sampleFile, ignoredError);
+            }
+            xml->removeChildElement(sampleElement, true);
+        }
         if (auto* favourites = xml->getChildByName("PRESET_FAVOURITES")) {
             for (auto* favourite = favourites->getFirstChildElement(); favourite != nullptr;
                  favourite = favourite->getNextElement()) {
                 if (!favourite->hasTagName("FAVOURITE"))
                     continue;
                 const int presetId = favourite->getIntAttribute("id", 0);
-                if (presetId >= 1 && presetId <= 25)
+                if (presetId >= 1 && presetId <= 500)
                     presetFavorites[(size_t)(presetId - 1)].store(true, std::memory_order_relaxed);
             }
             xml->removeChildElement(favourites, true);
@@ -1553,7 +1856,7 @@ void AuroraProcessor::setStateInformation(const void* data, int size) {
 }
 
 void AuroraProcessor::setPresetFavorite(int presetId, bool favorite) noexcept {
-    if (presetId >= 1 && presetId <= 25)
+    if (presetId >= 1 && presetId <= 500)
         presetFavorites[(size_t)(presetId - 1)].store(favorite, std::memory_order_relaxed);
 }
 
