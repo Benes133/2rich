@@ -308,6 +308,20 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
         f(("mod" + suffix + "Amount").toRawUTF8(), ("Mod " + suffix + " Amount").toRawUTF8(), -1.0f, 1.0f, 0.0f);
     }
 
+    choice("seqMode", "Sequencer Mode", { "Off", "Arpeggiator", "Step Sequencer" }, 0);
+    choice("arpStyle", "Arpeggiator Style", { "Up", "Down", "Up / Down", "Random" }, 0);
+    choice("seqRate", "Sequencer Rate", { "1/4", "1/8", "1/16", "1/32", "1/8T" }, 2);
+    layout.add(std::make_unique<juce::AudioParameterInt>("seqOctaves", "Arpeggiator Octaves", 1, 4, 1));
+    f("seqGate", "Sequencer Gate", 10.0f, 100.0f, 82.0f);
+    f("seqSwing", "Sequencer Swing", 0.0f, 60.0f, 0.0f);
+    for (int step = 0; step < 16; ++step) {
+        const auto suffix = juce::String(step);
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            ("stepOn" + suffix).toRawUTF8(), ("Step " + juce::String(step + 1) + " On").toRawUTF8(), step % 4 == 0));
+        layout.add(std::make_unique<juce::AudioParameterInt>(
+            ("stepPitch" + suffix).toRawUTF8(), ("Step " + juce::String(step + 1) + " Pitch").toRawUTF8(), -12, 12, 0));
+    }
+
     f("master", "Master", 0.0f, 1.0f, 0.8f);
     f("drive", "Drive", 0.0f, 1.0f, 0.0f);
     f("width", "Stereo Width", 0.0f, 1.0f, 0.5f);
@@ -407,7 +421,152 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         }
     }
 
-    synth.renderNextBlock(buffer, midi, 0, samples);
+    const int sequencerMode = (int)value("seqMode");
+    if (sequencerMode == 0) {
+        if (sequencerWasRunning && sequenceNoteActive && sequenceCurrentNote >= 0)
+            midi.addEvent(juce::MidiMessage::noteOff(1, sequenceCurrentNote), 0);
+        sequencerWasRunning = false;
+        sequenceNoteActive = false;
+        sequenceCurrentNote = -1;
+        heldNoteVelocities.fill(0.0f);
+        synth.renderNextBlock(buffer, midi, 0, samples);
+    } else {
+        sequencerWasRunning = true;
+        juce::MidiBuffer sequencedMidi;
+        juce::MidiBuffer::Iterator inputIterator(midi);
+        juce::MidiMessage inputMessage;
+        int nextInputPosition = 0;
+        bool hasInput = inputIterator.getNextEvent(inputMessage, nextInputPosition);
+
+        double bpm = 120.0;
+        if (auto* playHead = getPlayHead()) {
+            const auto position = playHead->getPosition();
+            if (position.has_value()) {
+                const auto hostBpm = position->getBpm();
+                if (hostBpm.has_value() && *hostBpm > 1.0)
+                    bpm = *hostBpm;
+            }
+        }
+
+        const int rateIndex = juce::jlimit(0, 4, (int)value("seqRate"));
+        const double beatMultipliers[5] = { 1.0, 0.5, 0.25, 0.125, 1.0 / 3.0 };
+        const double baseStepSamples = (60.0 / bpm) * sampleRate * beatMultipliers[rateIndex];
+        const float gate = juce::jlimit(0.10f, 1.0f, value("seqGate") * 0.01f);
+        const float swing = juce::jlimit(0.0f, 0.60f, value("seqSwing") * 0.01f);
+        const int octaveCount = juce::jlimit(1, 4, (int)value("seqOctaves"));
+        const int arpStyle = juce::jlimit(0, 3, (int)value("arpStyle"));
+
+        auto stopSequencedNote = [&](int samplePosition) {
+            if (sequenceNoteActive && sequenceCurrentNote >= 0) {
+                sequencedMidi.addEvent(juce::MidiMessage::noteOff(1, sequenceCurrentNote), samplePosition);
+                sequenceNoteActive = false;
+                sequenceCurrentNote = -1;
+            }
+        };
+
+        for (int sample = 0; sample < samples; ++sample) {
+            while (hasInput && nextInputPosition <= sample) {
+                const bool hadHeldNotes = std::any_of(heldNoteVelocities.begin(), heldNoteVelocities.end(),
+                                                       [](float velocity) { return velocity > 0.0f; });
+                if (inputMessage.isNoteOn()) {
+                    heldNoteVelocities[(size_t)inputMessage.getNoteNumber()] = inputMessage.getFloatVelocity();
+                    if (!hadHeldNotes) {
+                        sequenceStepIndex = 0;
+                        sequenceSamplesUntilStep = 0.0;
+                        arpDirection = 1;
+                    }
+                } else if (inputMessage.isNoteOff()) {
+                    heldNoteVelocities[(size_t)inputMessage.getNoteNumber()] = 0.0f;
+                } else if (inputMessage.isAllNotesOff() || inputMessage.isAllSoundOff()) {
+                    heldNoteVelocities.fill(0.0f);
+                } else {
+                    sequencedMidi.addEvent(inputMessage, sample);
+                }
+                hasInput = inputIterator.getNextEvent(inputMessage, nextInputPosition);
+            }
+
+            const int heldCount = (int)std::count_if(heldNoteVelocities.begin(), heldNoteVelocities.end(),
+                                                     [](float velocity) { return velocity > 0.0f; });
+            if (heldCount == 0) {
+                stopSequencedNote(sample);
+                sequenceSamplesUntilStep = 0.0;
+                continue;
+            }
+
+            if (sequenceNoteActive && sequenceSamplesUntilOff <= 0.0)
+                stopSequencedNote(sample);
+
+            if (sequenceSamplesUntilStep <= 0.0) {
+                stopSequencedNote(sample);
+                int note = -1;
+                float velocity = 0.85f;
+
+                if (sequencerMode == 1) {
+                    std::array<int, 128> notes{};
+                    std::array<float, 128> velocities{};
+                    int count = 0;
+                    for (int midiNote = 0; midiNote < 128; ++midiNote) {
+                        const float noteVelocity = heldNoteVelocities[(size_t)midiNote];
+                        if (noteVelocity > 0.0f) {
+                            notes[(size_t)count] = midiNote;
+                            velocities[(size_t)count] = noteVelocity;
+                            ++count;
+                        }
+                    }
+                    const int totalNotes = count * octaveCount;
+                    int sequenceIndex = 0;
+                    if (arpStyle == 3) {
+                        randomSeed ^= randomSeed << 13;
+                        randomSeed ^= randomSeed >> 17;
+                        randomSeed ^= randomSeed << 5;
+                        sequenceIndex = (int)(randomSeed % (uint32_t)totalNotes);
+                    } else if (arpStyle == 1) {
+                        sequenceIndex = totalNotes - 1 - (sequenceStepIndex % totalNotes);
+                    } else if (arpStyle == 2) {
+                        const int cycleLength = juce::jmax(1, totalNotes * 2 - 2);
+                        const int cycle = sequenceStepIndex % cycleLength;
+                        sequenceIndex = cycle < totalNotes ? cycle : cycleLength - cycle;
+                    } else {
+                        sequenceIndex = sequenceStepIndex % totalNotes;
+                    }
+                    const int octave = sequenceIndex / count;
+                    const int noteIndex = sequenceIndex % count;
+                    note = notes[(size_t)noteIndex] + octave * 12;
+                    velocity = velocities[(size_t)noteIndex];
+                } else {
+                    const int root = (int)std::distance(heldNoteVelocities.begin(),
+                        std::find_if(heldNoteVelocities.begin(), heldNoteVelocities.end(),
+                                     [](float v) { return v > 0.0f; }));
+                    const int step = sequenceStepIndex % 16;
+                    const auto suffix = juce::String(step);
+                    if (value(("stepOn" + suffix).toRawUTF8()) > 0.5f) {
+                        const int pitch = (int)value(("stepPitch" + suffix).toRawUTF8());
+                        note = root + pitch;
+                        velocity = heldNoteVelocities[(size_t)root];
+                    }
+                }
+
+                if (note >= 0) {
+                    note = juce::jlimit(0, 127, note);
+                    sequencedMidi.addEvent(juce::MidiMessage::noteOn(1, note, velocity), sample);
+                    sequenceCurrentNote = note;
+                    sequenceNoteActive = true;
+                    sequenceSamplesUntilOff = baseStepSamples * gate;
+                }
+
+                const double swingMultiplier = (sequenceStepIndex & 1) == 0
+                    ? (1.0 + swing * 0.5) : (1.0 - swing * 0.5);
+                sequenceSamplesUntilStep = baseStepSamples * swingMultiplier;
+                ++sequenceStepIndex;
+            }
+
+            sequenceSamplesUntilStep -= 1.0;
+            if (sequenceNoteActive)
+                sequenceSamplesUntilOff -= 1.0;
+        }
+
+        synth.renderNextBlock(buffer, sequencedMidi, 0, samples);
+    }
 
     const float drive = juce::jmax(value("drive"), value("fxDist"));
     if (drive > 0.001f) {
