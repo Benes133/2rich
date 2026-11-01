@@ -164,19 +164,20 @@ public:
         const double beatsPerBar = processor->getHostBeatsPerBar();
         double sampleTempoRatio = 1.0;
         if (sampleTempoSync && sampleAsset && sampleAsset->sampleRate > 0.0) {
-            const int barsChoice = juce::jlimit(0, 5, (int)value("sampleSyncBars"));
-            const double duration = (double)sampleAsset->left.size() / sampleAsset->sampleRate;
-            double bars = duration * sampleAsset->sourceBpm / 240.0;
-            if (barsChoice > 0) bars = std::pow(2.0, (double)(barsChoice - 1));
+            const int syncChoice = juce::jlimit(0, 9, (int)value("sampleSyncBars"));
+            const double duration = (double)juce::jmax(1, sampleEnd - sampleStart) / sampleAsset->sampleRate;
+            const double sourceBeats = duration * sampleAsset->sourceBpm / 60.0;
+            static const double beatChoices[9] = { 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0 };
+            double targetBeats = sourceBeats;
+            if (syncChoice > 0) targetBeats = beatChoices[syncChoice - 1];
             else {
-                static const double choices[5] = { 1.0, 2.0, 4.0, 8.0, 16.0 };
                 double bestDistance = 1.0e30;
-                for (const double candidate : choices) {
-                    const double distance = std::abs(std::log2(juce::jmax(0.01, bars) / candidate));
-                    if (distance < bestDistance) { bestDistance = distance; bars = candidate; }
+                for (const double candidate : beatChoices) {
+                    const double distance = std::abs(std::log2(juce::jmax(0.01, sourceBeats) / candidate));
+                    if (distance < bestDistance) { bestDistance = distance; targetBeats = candidate; }
                 }
             }
-            const double targetDuration = bars * beatsPerBar * 60.0 / juce::jlimit(20.0, 400.0, hostBpm);
+            const double targetDuration = targetBeats * 60.0 / juce::jlimit(20.0, 400.0, hostBpm);
             if (duration > 0.01 && targetDuration > 0.01)
                 sampleTempoRatio = juce::jlimit(0.25, 4.0, duration / targetDuration);
         }
@@ -841,7 +842,7 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     layout.add(std::make_unique<juce::AudioParameterBool>("samplePreservePitch", "Sampler Preserve Pitch", true));
     layout.add(std::make_unique<juce::AudioParameterBool>("sampleLoop", "Sampler Loop", false));
     layout.add(std::make_unique<juce::AudioParameterBool>("sampleReverse", "Sampler Reverse", false));
-    choice("sampleSyncBars", "Sampler Sync Length", { "Auto", "1 Bar", "2 Bars", "4 Bars", "8 Bars", "16 Bars" }, 0);
+    choice("sampleSyncBars", "Sampler Sync Length", { "Auto", "1/16", "1/8", "1/4", "1/2", "1 Bar", "2 Bars", "4 Bars", "8 Bars", "16 Bars" }, 0);
     choice("sampleTargetKey", "Sampler Target Key", { "Auto", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0);
     f("sampleRootNote", "Sample Root MIDI Note", 0.0f, 127.0f, 60.0f);
     f("sampleMix", "Sample Level", 0.0f, 1.0f, 0.85f);
