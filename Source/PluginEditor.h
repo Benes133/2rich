@@ -2,7 +2,7 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 
-class AuroraEditor : public juce::AudioProcessorEditor {
+class AuroraEditor : public juce::AudioProcessorEditor, private juce::AudioProcessorValueTreeState::Listener {
 public:
     explicit AuroraEditor(AuroraProcessor&);
     ~AuroraEditor() override;
@@ -27,5 +27,6 @@ private:
     void addKnob(juce::Slider&, const juce::String&, const juce::String&);
     void applyPreset(int presetId);
     void setPage(int page);
+    void parameterChanged(const juce::String& parameterID, float newValue) override;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AuroraEditor)
 };

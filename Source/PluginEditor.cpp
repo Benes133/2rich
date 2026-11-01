@@ -1,16 +1,16 @@
 #include "PluginEditor.h"
 
 namespace {
-const juce::Colour bg       (0xff0d0c13);
-const juce::Colour surface  (0xff15131e);
-const juce::Colour card     (0xff1c1928);
-const juce::Colour cardHi   (0xff242033);
-const juce::Colour border   (0xff302943);
-const juce::Colour violet   (0xffa78bfa);
-const juce::Colour violetHi (0xffc4b5fd);
-const juce::Colour neon (0xff8b5cf6);
-const juce::Colour white    (0xfff4f0ff);
-const juce::Colour muted    (0xff8f899f);
+const juce::Colour bg       (0xff0b0e14);
+const juce::Colour surface  (0xff121722);
+const juce::Colour card     (0xff192130);
+const juce::Colour cardHi   (0xff222d3d);
+const juce::Colour border   (0xff303d51);
+const juce::Colour violet   (0xff9d8cff);
+const juce::Colour violetHi (0xffc7bdff);
+const juce::Colour neon     (0xff6fe3d3);
+const juce::Colour white    (0xfff2f5fb);
+const juce::Colour muted    (0xff8996aa);
 
 class RichLookAndFeel final : public juce::LookAndFeel_V4 {
 public:
@@ -38,6 +38,22 @@ public:
         g.fillEllipse(cx - 2.0f, cy - 2.0f, 4.0f, 4.0f);
     }
 
+    void drawButtonBackground(juce::Graphics& g, juce::Button& button,
+                              const juce::Colour&, bool highlighted, bool down) override {
+        auto r = button.getLocalBounds().toFloat().reduced(0.5f);
+        const bool active = button.getToggleState();
+        g.setColour(active ? juce::Colour(0xff51458a) : (down ? cardHi : surface));
+        g.fillRoundedRectangle(r, 8.0f);
+        g.setColour(active ? violet : (highlighted ? violet.withAlpha(0.65f) : border));
+        g.drawRoundedRectangle(r, 8.0f, active ? 1.4f : 1.0f);
+    }
+    void drawButtonText(juce::Graphics& g, juce::TextButton& button, bool, bool) override {
+        g.setFont(juce::Font(juce::FontOptions(10.5f, juce::Font::bold)));
+        g.setColour(button.getToggleState() ? white : muted);
+        g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(7, 0),
+                         juce::Justification::centred, 1);
+    }
+
     void drawComboBox(juce::Graphics& g, int width, int height, bool,
                       int, int, int, int, juce::ComboBox& box) override {
         auto r = juce::Rectangle<float>(0.0f, 0.0f, (float)width, (float)height);
@@ -61,6 +77,8 @@ juce::Rectangle<int> scaledBounds(juce::Rectangle<int> r, float scale, int ox, i
 
 AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(p) {
     setSize(960, 640);
+    for (const auto* id : { "wave1", "wave2", "wtTable", "wtPosition" })
+        proc.params.addParameterListener(id, this);
     setResizable(true, true);
     setResizeLimits(820, 560, 1440, 960);
 
@@ -83,6 +101,8 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     }
     wave1.addItemList({ "Saw", "Square", "Triangle", "Sine" }, 1);
     wave2.addItemList({ "Saw", "Square", "Triangle", "Sine" }, 1);
+    wave1.onChange = [this] { repaint(); };
+    wave2.onChange = [this] { repaint(); };
     aWave1 = std::make_unique<ChoiceAttach>(ap, "wave1", wave1);
     aWave2 = std::make_unique<ChoiceAttach>(ap, "wave2", wave2);
 
@@ -106,6 +126,17 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     presets.addItem("Aurora Drift",17); presets.addItem("Deep Space",18); presets.addItem("Ethereal Choir",19); presets.addItem("Frozen Sky",20);
     presets.addSectionHeading("FX & SYNTH");
     presets.addItem("Laser Bloom",21); presets.addItem("Retro Pulse",22); presets.addItem("Wide Unison",23); presets.addItem("Dirty Motion",24); presets.addItem("Dream Sequence",25);
+    presets.addSectionHeading("EXPANSION - MOTION & COLOR");
+    presets.addItem("Prism Lead",26); presets.addItem("Analog Edge",27);
+    presets.addItem("Vocal Formant",28); presets.addItem("Pulse Driver",29);
+    presets.addItem("Velvet Orbit",30); presets.addItem("Amber Motion",31);
+    presets.addItem("Northern Lights",32); presets.addItem("Lunar Glass",33);
+    presets.addItem("FM Bell",34); presets.addItem("Rhodes Circuit",35);
+    presets.addItem("Lo-Fi Keys",36); presets.addItem("Deep Mono",37);
+    presets.addItem("Rubber Sub",38); presets.addItem("Acid Reactor",39);
+    presets.addItem("Neon Droplet",40); presets.addItem("Carbon Pluck",41);
+    presets.addItem("Marble Mallet",42); presets.addItem("Polar Bloom",43);
+    presets.addItem("Static Rain",44); presets.addItem("Hyperdrive",45);
     presets.setTextWhenNothingSelected("SELECT PRESET");
     presets.onChange = [this] { if (presets.getSelectedId() > 0) applyPreset(presets.getSelectedId()); };
 
@@ -127,8 +158,12 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
 }
 
 AuroraEditor::~AuroraEditor() {
+    for (const auto* id : { "wave1", "wave2", "wtTable", "wtPosition" })
+        proc.params.removeParameterListener(id, this);
     for (auto* slider : { &mix, &detune, &sub, &cutoff, &res, &attack, &decay, &sustain,
-                          &release, &master, &drive, &width }) slider->setLookAndFeel(nullptr);
+                          &release, &master, &drive, &width, &wtPosition, &unison, &uniDetune,
+                          &uniSpread, &fxEq, &fxLow, &fxMid, &fxHigh, &fxDist, &fxChorus,
+                          &fxFlange, &fxDelay, &fxReverb }) slider->setLookAndFeel(nullptr);
     wave1.setLookAndFeel(nullptr); wave2.setLookAndFeel(nullptr); presets.setLookAndFeel(nullptr); wtTable.setLookAndFeel(nullptr);
     synthTab.setLookAndFeel(nullptr);wtTab.setLookAndFeel(nullptr);fxTab.setLookAndFeel(nullptr);
 }
@@ -210,128 +245,276 @@ void AuroraEditor::setPage(int page) {
     repaint();resized();
 }
 
+
+void AuroraEditor::parameterChanged(const juce::String& parameterID, float) {
+    if (parameterID == "wave1" || parameterID == "wave2" ||
+        parameterID == "wtTable" || parameterID == "wtPosition")
+        repaint();
+}
+
 void AuroraEditor::paint(juce::Graphics& g) {
     g.fillAll(bg);
     const float scale = juce::jmin(getWidth() / 960.0f, getHeight() / 640.0f);
     const int ox = (getWidth() - juce::roundToInt(960.0f * scale)) / 2;
     const int oy = (getHeight() - juce::roundToInt(640.0f * scale)) / 2;
     g.addTransform(juce::AffineTransform::translation((float)ox, (float)oy).scaled(scale));
+    g.setColour(surface);
+    g.fillRoundedRectangle(14, 14, 932, 612, 18.0f);
+    g.setColour(border);
+    g.drawRoundedRectangle(14.5f, 14.5f, 931.0f, 611.0f, 18.0f, 1.0f);
 
-    g.setColour(surface); g.fillRoundedRectangle(14, 14, 932, 612, 18.0f);
-    g.setColour(border); g.drawRoundedRectangle(14.5f, 14.5f, 931, 611, 18.0f, 1.0f);
-    g.setColour(violet); g.fillRoundedRectangle(32, 79, 38, 3, 1.5f);
-    g.setColour(muted); g.setFont(11.0f);
-    g.drawText("DUAL OSCILLATOR  /  POLYPHONIC SYNTH", 145, 37, 350, 18, juce::Justification::centredLeft);
-    g.setColour(juce::Colour(0xff29243a)); g.fillRoundedRectangle(830, 34, 96, 27, 8);
-    g.setColour(violetHi); g.setFont(10.5f); g.drawText("16 VOICES", 835, 39, 86, 17, juce::Justification::centred);
+    g.setColour(white);
+    g.setFont(juce::Font(juce::FontOptions(29.0f, juce::Font::bold)));
+    g.drawText("2rich", 32, 23, 98, 37, juce::Justification::centredLeft);
+    g.setColour(neon);
+    g.fillRoundedRectangle(33, 62, 34, 3, 1.5f);
+    g.setColour(muted);
+    g.setFont(juce::Font(juce::FontOptions(9.5f, juce::Font::bold)));
+    g.drawText("POLYPHONIC SYNTHESIZER", 145, 28, 250, 15, juce::Justification::centredLeft);
+    g.setFont(juce::Font(juce::FontOptions(9.0f)));
+    g.drawText("NORTHSTAR AUDIO", 145, 45, 180, 13, juce::Justification::centredLeft);
+    g.drawText("PRESET", 645, 20, 170, 12, juce::Justification::centredLeft);
+    g.setColour(violet);
+    g.fillRoundedRectangle(32, 84, 896, 1, 0.5f);
 
-    auto panel = [&](int x, int y, int w, int h, const juce::String& title, const juce::String& subtitle) {
-        g.setColour(card); g.fillRoundedRectangle((float)x, (float)y, (float)w, (float)h, 13);
-        g.setColour(border); g.drawRoundedRectangle((float)x+.5f, (float)y+.5f, (float)w-1, (float)h-1, 13, 1);
-        g.setColour(white); g.setFont(13); g.drawText(title,x+16,y+13,w-32,19,juce::Justification::centredLeft);
-        g.setColour(muted); g.setFont(10); g.drawText(subtitle,x+16,y+34,w-32,15,juce::Justification::centredLeft);
+    auto panel = [&](int x, int y, int w, int h, const juce::String& title, const juce::String& sub) {
+        g.setColour(card);
+        g.fillRoundedRectangle((float)x, (float)y, (float)w, (float)h, 12.0f);
+        g.setColour(border);
+        g.drawRoundedRectangle((float)x + 0.5f, (float)y + 0.5f, (float)w - 1.0f,
+                               (float)h - 1.0f, 12.0f, 1.0f);
+        g.setColour(violet);
+        g.fillRoundedRectangle((float)x + 14.0f, (float)y + 15.0f, 3.0f, 17.0f, 1.5f);
+        g.setColour(white);
+        g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
+        g.drawText(title, x + 25, y + 12, w - 39, 19, juce::Justification::centredLeft);
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(8.5f)));
+        g.drawText(sub, x + 25, y + 32, w - 39, 14, juce::Justification::centredLeft);
+        g.setColour(border.withAlpha(0.65f));
+        g.drawLine((float)x + 14.0f, (float)y + 54.0f, (float)(x + w - 14), (float)y + 54.0f, 1.0f);
     };
-    panel(30,96,900,502,currentPage==0?"OSCILLATORS":(currentPage==1?"WAVETABLE LAB":"FX RACK"),currentPage==0?"SHAPE  /  BLEND  /  TUNING":(currentPage==1?"TABLE MORPHING  /  UNISON ENGINE":"SHAPE THE SOUND  /  INSERT EFFECTS"));
-    g.setColour(juce::Colour(0x228b5cf6));g.drawRoundedRectangle(30.5f,96.5f,899,501,13,2.0f);
-    if(currentPage==0){
-    panel(594,96,336,236,"FILTER","LOW PASS  /  RESONANCE");
-    panel(30,348,620,250,"AMPLIFIER ENVELOPE","ADSR  /  AMP MODULATION");
-    panel(664,348,266,250,"OUTPUT","LEVEL  /  SATURATION  /  STEREO");
-
-    auto drawWave = [&](int x, int y, int w, int h, int choice, const juce::String& label) {
-        g.setColour(juce::Colour(0xff11101a)); g.fillRoundedRectangle((float)x,(float)y,(float)w,(float)h,6);
-        g.setColour(border); g.drawRoundedRectangle((float)x+.5f,(float)y+.5f,(float)w-1,(float)h-1,6,1);
-        g.setColour(muted); g.setFont(9); g.drawText(label,x+7,y+4,50,12,juce::Justification::centredLeft);
+    auto knobLabel = [&](int x, int y, int w, const juce::String& label) {
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(8.8f, juce::Font::bold)));
+        g.drawFittedText(label, x, y, w, 14, juce::Justification::centred, 1);
+    };
+    auto drawWave = [&](int x, int y, int w, int h, int choice, const juce::String& label,
+                        juce::Colour waveColour) {
+        g.setColour(juce::Colour(0xff101722));
+        g.fillRoundedRectangle((float)x, (float)y, (float)w, (float)h, 7.0f);
+        g.setColour(border);
+        g.drawRoundedRectangle((float)x + 0.5f, (float)y + 0.5f, (float)w - 1.0f,
+                               (float)h - 1.0f, 7.0f, 1.0f);
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(8.0f, juce::Font::bold)));
+        g.drawText(label, x + 9, y + 5, 90, 12, juce::Justification::centredLeft);
+        const float mid = y + h * 0.60f, amp = h * 0.28f;
+        g.setColour(border.withAlpha(0.9f));
+        g.drawLine((float)x + 8.0f, mid, (float)(x + w - 8), mid, 0.8f);
         juce::Path path;
-        const float mid = y + h * .59f, amp = h * .27f;
-        for (int i=0;i<=160;++i) {
-            const float t = i/160.0f;
-            float v = 0;
-            switch(choice) {
-                case 1: v = t < .5f ? 1.0f : -1.0f; break;
-                case 2: v = 1.0f - 4.0f * std::abs(t-.5f); break;
+        for (int i = 0; i <= 192; ++i) {
+            const float t = (float)i / 192.0f;
+            float v = 0.0f;
+            switch (choice) {
+                case 1: v = t < 0.5f ? 1.0f : -1.0f; break;
+                case 2: v = 1.0f - 4.0f * std::abs(t - 0.5f); break;
                 case 3: v = std::sin(t * juce::MathConstants<float>::twoPi); break;
-                default: v = 2.0f*t-1.0f; break;
+                default: v = 2.0f * t - 1.0f; break;
             }
-            const float px = x + 7 + t*(w-14), py = mid - v*amp;
-            if (i==0) path.startNewSubPath(px,py); else path.lineTo(px,py);
+            const float px = x + 8.0f + t * (w - 16.0f);
+            const float py = mid - v * amp;
+            if (i == 0) path.startNewSubPath(px, py); else path.lineTo(px, py);
         }
-        g.setColour(juce::Colour(0xff65528f)); g.drawLine((float)x+7,mid,(float)(x+w-7),mid,.6f);
-        g.setColour(violet); g.strokePath(path,juce::PathStrokeType(2.0f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+        g.setColour(waveColour.withAlpha(0.16f));
+        g.strokePath(path, juce::PathStrokeType(6.0f, juce::PathStrokeType::curved,
+                                                juce::PathStrokeType::rounded));
+        g.setColour(waveColour);
+        g.strokePath(path, juce::PathStrokeType(1.9f, juce::PathStrokeType::curved,
+                                                juce::PathStrokeType::rounded));
     };
-    drawWave(49,204,132,72,wave1.getSelectedId()-1,"OSC 1");
-    drawWave(220,204,132,72,wave2.getSelectedId()-1,"OSC 2");
 
-    } else if(currentPage==1) {
-        g.setColour(muted);g.setFont(12);g.drawText("MORPH BETWEEN WAVETABLE FRAMES • BUILT-IN TABLE BANK",55,160,820,24,juce::Justification::centredLeft);
-        juce::Path wave;for(int i=0;i<=256;++i){float t=i/256.0f;float v=std::sin(t*juce::MathConstants<float>::twoPi)+.35f*std::sin(t*juce::MathConstants<float>::twoPi*3);float x=55+t*840,y=300-v*75;if(i==0)wave.startNewSubPath(x,y);else wave.lineTo(x,y);}g.setColour(juce::Colour(0x338b5cf6));g.strokePath(wave,juce::PathStrokeType(10));g.setColour(violetHi);g.strokePath(wave,juce::PathStrokeType(2.2f));
-        g.setColour(muted);g.setFont(10);g.drawText("OSCILLATOR UNISON • UP TO 7 VOICES",55,420,400,18,juce::Justification::centredLeft);
-    } else {
-        auto fxPanel = [&](int x, const juce::String& name, const juce::String& detail) {
-            g.setColour(card); g.fillRoundedRectangle((float)x,190.0f,265.0f,365.0f,12.0f);
-            g.setColour(border); g.drawRoundedRectangle((float)x+.5f,190.5f,264.0f,364.0f,12.0f,1.0f);
-            g.setColour(violetHi); g.setFont(12.5f);
-            g.drawText(name,x+16,207,230,20,juce::Justification::centredLeft);
-            g.setColour(muted); g.setFont(9.5f);
-            g.drawText(detail,x+16,230,230,16,juce::Justification::centredLeft);
-            g.setColour(juce::Colour(0xff352b4b)); g.drawLine((float)x+16,254.0f,(float)x+249,254.0f,1.0f);
-        };
-        fxPanel(48,"01  •  TONE / EQ","3-BAND EQUALIZER");
-        fxPanel(347,"02  •  SATURATION","HARMONICS / DRIVE");
-        fxPanel(646,"03  •  MODULATION & SPACE","CHORUS / FLANGER / DELAY / REVERB");
-        g.setColour(muted);g.setFont(10.5f);
-        g.drawText("Blend",88,365,105,15,juce::Justification::centred);
-        g.drawText("Low",205,365,105,15,juce::Justification::centred);
-        g.drawText("Mid",88,510,105,15,juce::Justification::centred);
-        g.drawText("High",205,510,105,15,juce::Justification::centred);
-        g.drawText("Amount",425,455,112,15,juce::Justification::centred);
-        g.drawText("Chorus",674,365,105,15,juce::Justification::centred);
-        g.drawText("Flanger",791,365,105,15,juce::Justification::centred);
-        g.drawText("Delay",674,510,105,15,juce::Justification::centred);
-        g.drawText("Reverb",791,510,105,15,juce::Justification::centred);
-        g.setColour(violet);g.fillRoundedRectangle(70,535,220,3,1.5f);
-        g.fillRoundedRectangle(369,535,220,3,1.5f);
-        g.fillRoundedRectangle(668,535,220,3,1.5f);
+    if (currentPage == 0) {
+        panel(32,106,262,216,"OSCILLATOR 1","WAVEFORM / PRIMARY TONE");
+        panel(304,106,262,216,"OSCILLATOR 2","WAVEFORM / SECONDARY TONE");
+        panel(576,106,352,216,"VOICE MIX","BLEND / DETUNE / SUB LEVEL");
+        panel(32,338,248,242,"FILTER","LOW PASS / RESONANCE");
+        panel(290,338,404,242,"AMPLIFIER ENVELOPE","SHAPE THE AMP RESPONSE");
+        panel(704,338,224,242,"OUTPUT","FINAL LEVEL / STEREO");
+
+        const int w1 = (int)proc.params.getRawParameterValue("wave1")->load();
+        const int w2 = (int)proc.params.getRawParameterValue("wave2")->load();
+        drawWave(50,205,226,78,w1,"OSC 1 SHAPE",violetHi);
+        drawWave(322,205,226,78,w2,"OSC 2 SHAPE",neon);
+        knobLabel(595,164,98,"OSC MIX");
+        knobLabel(703,164,98,"DETUNE");
+        knobLabel(811,164,98,"SUB LEVEL");
+        knobLabel(49,399,98,"CUTOFF");
+        knobLabel(165,399,98,"RESONANCE");
+        knobLabel(301,400,88,"ATTACK");
+        knobLabel(399,400,88,"DECAY");
+        knobLabel(497,400,88,"SUSTAIN");
+        knobLabel(595,400,88,"RELEASE");
+        knobLabel(710,400,68,"MASTER");
+        knobLabel(782,400,68,"DRIVE");
+        knobLabel(854,400,68,"WIDTH");
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(8.5f)));
+        g.drawText("Choose a waveform to update the live preview.",49,289,230,15,juce::Justification::centredLeft);
+        g.drawText("Four-stage envelope",306,552,210,13,juce::Justification::centredLeft);
+        g.drawText("Clean gain staging",720,552,170,13,juce::Justification::centredLeft);
     }
-    const juce::String footer = "2RICH  •  SOUND WITHOUT LIMITS";
-    g.setColour(juce::Colour(0xff393149)); g.drawLine(31,611,929,611,1);
-    g.setColour(muted); g.setFont(9.5f); g.drawText(footer,34,614,300,12,juce::Justification::centredLeft);
+    else if (currentPage == 1) {
+        panel(32,106,260,218,"TABLE BANK","SOURCE / MORPH POSITION");
+        panel(304,106,624,218,"WAVETABLE PREVIEW","LIVE SHAPE FROM SELECTED TABLE");
+        panel(32,340,896,240,"UNISON ENGINE","VOICE COUNT / DETUNE / STEREO SPREAD");
+        knobLabel(66,199,184,"TABLE POSITION");
+
+        const int table = (int)proc.params.getRawParameterValue("wtTable")->load();
+        const float position = proc.params.getRawParameterValue("wtPosition")->load();
+        auto tableWave = [table, position](float t) {
+            const float saw = 2.0f*t-1.0f;
+            const float sine = std::sin(t*juce::MathConstants<float>::twoPi);
+            const float square = t < 0.5f ? 1.0f : -1.0f;
+            const float triangle = 1.0f-4.0f*std::abs(t-0.5f);
+            float a=saw,b=sine;
+            switch(table) {
+                case 1: a=square; b=triangle; break;
+                case 2: a=triangle; b=sine; break;
+                case 3: a=saw; b=square; break;
+                case 4: a=sine; b=std::sin(t*juce::MathConstants<float>::twoPi*2.0f); break;
+                case 5: a=saw; b=std::tanh(saw*3.0f); break;
+                default: a=saw; b=sine; break;
+            }
+            return juce::jmap(position,a,b);
+        };
+        const int gx=328, gy=174, gw=576, gh=122;
+        g.setColour(juce::Colour(0xff101722));
+        g.fillRoundedRectangle((float)gx,(float)gy,(float)gw,(float)gh,8.0f);
+        g.setColour(border);
+        g.drawRoundedRectangle((float)gx+0.5f,(float)gy+0.5f,(float)gw-1.0f,(float)gh-1.0f,8.0f,1.0f);
+        const float mid=gy+gh*0.53f;
+        g.setColour(border);
+        g.drawLine((float)gx+10.0f,mid,(float)(gx+gw-10),mid,0.8f);
+        juce::Path preview;
+        for(int i=0;i<=256;++i) {
+            const float t=(float)i/256.0f;
+            const float px=gx+10.0f+t*(gw-20.0f);
+            const float py=mid-tableWave(t)*43.0f;
+            if(i==0) preview.startNewSubPath(px,py); else preview.lineTo(px,py);
+        }
+        g.setColour(violet.withAlpha(0.14f));
+        g.strokePath(preview,juce::PathStrokeType(8.0f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+        g.setColour(violetHi);
+        g.strokePath(preview,juce::PathStrokeType(2.0f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(8.5f)));
+        g.drawText("FRAME 01",gx+10,gy+gh-15,90,10,juce::Justification::centredLeft);
+        g.drawText("FRAME 64",gx+gw-100,gy+gh-15,90,10,juce::Justification::centredRight);
+
+        knobLabel(88,418,160,"UNISON VOICES");
+        knobLabel(322,418,160,"DETUNE AMOUNT");
+        knobLabel(556,418,160,"STEREO SPREAD");
+        g.setColour(juce::Colour(0xff202b3b));
+        g.fillRoundedRectangle(754.0f,424.0f,150.0f,128.0f,9.0f);
+        g.setColour(border);
+        g.drawRoundedRectangle(754.5f,424.5f,149.0f,127.0f,9.0f,1.0f);
+        g.setColour(neon);
+        g.setFont(juce::Font(juce::FontOptions(9.0f,juce::Font::bold)));
+        g.drawText("UP TO 7 VOICES",768,440,122,16,juce::Justification::centred);
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(8.5f)));
+        g.drawFittedText("Add weight and width while keeping the centre focused.",
+                         768,463,122,65,juce::Justification::centred,4);
+    }
+    else {
+        panel(32,106,286,474,"TONE / EQ","FOUR CONTROLS / FREQUENCY BALANCE");
+        panel(337,106,286,474,"SATURATION","HARMONICS / DRIVE AMOUNT");
+        panel(642,106,286,474,"MODULATION / SPACE","MOVEMENT / DEPTH / AMBIENCE");
+        knobLabel(51,239,104,"EQ MIX");
+        knobLabel(175,239,104,"LOW");
+        knobLabel(51,395,104,"MID");
+        knobLabel(175,395,104,"HIGH");
+        knobLabel(423,270,112,"DISTORTION");
+        knobLabel(660,239,104,"CHORUS");
+        knobLabel(784,239,104,"FLANGER");
+        knobLabel(660,395,104,"DELAY");
+        knobLabel(784,395,104,"REVERB");
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(8.5f)));
+        g.drawFittedText("Blend the equalizer, then shape low, mid and high frequencies.",
+                         52,178,244,44,juce::Justification::centredLeft,3);
+        g.drawFittedText("Add controlled harmonic density. Keep the amount subtle for cleaner patches.",
+                         357,178,244,58,juce::Justification::centredLeft,4);
+        g.drawFittedText("Use modulation for motion and time effects for depth.",
+                         662,178,244,44,juce::Justification::centredLeft,3);
+        g.setColour(neon.withAlpha(0.8f));
+        g.fillRoundedRectangle(357,532,246,2,1.0f);
+    }
+
+    g.setColour(border);
+    g.drawLine(32.0f,604.0f,928.0f,604.0f,1.0f);
+    g.setColour(muted);
+    g.setFont(juce::Font(juce::FontOptions(8.5f)));
+    g.drawText("2RICH  /  NORTHSTAR AUDIO",34,609,280,12,juce::Justification::centredLeft);
+    g.drawText("SYNTH  /  WAVETABLE  /  FX",700,609,226,12,juce::Justification::centredRight);
 }
 
 void AuroraEditor::resized() {
     const float scale = juce::jmin(getWidth() / 960.0f, getHeight() / 640.0f);
     const int ox = (getWidth() - juce::roundToInt(960.0f * scale)) / 2;
     const int oy = (getHeight() - juce::roundToInt(640.0f * scale)) / 2;
-    auto place = [&](juce::Component& c, juce::Rectangle<int> r) { c.setBounds(scaledBounds(r,scale,ox,oy)); };
+    auto place = [&](juce::Component& component, juce::Rectangle<int> bounds) {
+        component.setBounds(scaledBounds(bounds,scale,ox,oy));
+    };
+    place(heading,{32,23,100,42});
+    place(synthTab,{395,31,88,30});
+    place(wtTab,{491,31,126,30});
+    place(fxTab,{625,31,72,30});
+    place(presets,{645,34,278,30});
 
-    place(heading,{34,24,100,45});
-    place(synthTab,{145,65,105,27}); place(wtTab,{258,65,135,27}); place(fxTab,{401,65,78,27});
-    place(presets,{610,33,205,29});
-    place(wave1,{49,170,132,27}); place(wave2,{220,170,132,27});
-    place(mix,{385,151,82,145}); place(detune,{477,151,82,145});
-    place(sub,{610,157,91,142}); place(cutoff,{711,157,91,142}); place(res,{812,157,91,142});
+    place(wave1,{50,160,226,30});
+    place(wave2,{322,160,226,30});
+    place(mix,{595,176,98,132});
+    place(detune,{703,176,98,132});
+    place(sub,{811,176,98,132});
+    place(cutoff,{49,411,98,145});
+    place(res,{165,411,98,145});
+    place(attack,{301,412,88,145});
+    place(decay,{399,412,88,145});
+    place(sustain,{497,412,88,145});
+    place(release,{595,412,88,145});
+    place(master,{710,412,68,145});
+    place(drive,{782,412,68,145});
+    place(width,{854,412,68,145});
 
-    const int gap=12, knobW=132;
-    place(attack,{43,411,knobW,155}); place(decay,{43+knobW+gap,411,knobW,155});
-    place(sustain,{43+(knobW+gap)*2,411,knobW,155}); place(release,{43+(knobW+gap)*3,411,knobW,155});
-    place(master,{676,405,78,154}); place(drive,{756,405,78,154}); place(width,{836,405,78,154});
-    place(wtTable,{65,230,220,34});place(wtPosition,{70,340,160,155});place(unison,{300,340,145,155});place(uniDetune,{485,340,145,155});place(uniSpread,{670,340,145,155});
-    // FX page: three clearly separated modules, each with its own controls.
-    place(fxEq,{88,245,105,132}); place(fxLow,{205,245,105,132});
-    place(fxMid,{88,390,105,132}); place(fxHigh,{205,390,105,132});
-    place(fxDist,{425,300,112,145});
-    place(fxChorus,{674,245,105,132}); place(fxFlange,{791,245,105,132});
-    place(fxDelay,{674,390,105,132}); place(fxReverb,{791,390,105,132});
-    if(currentPage!=0){
-        juce::Component* synthControls[] = {&mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,&wave1,&wave2};
-        for(auto* c : synthControls) c->setVisible(false);
+    place(wtTable,{54,160,216,31});
+    place(wtPosition,{66,211,184,112});
+    place(unison,{88,430,160,136});
+    place(uniDetune,{322,430,160,136});
+    place(uniSpread,{556,430,160,136});
+
+    place(fxEq,{51,253,104,132});
+    place(fxLow,{175,253,104,132});
+    place(fxMid,{51,409,104,132});
+    place(fxHigh,{175,409,104,132});
+    place(fxDist,{423,299,112,150});
+    place(fxChorus,{660,253,104,132});
+    place(fxFlange,{784,253,104,132});
+    place(fxDelay,{660,409,104,132});
+    place(fxReverb,{784,409,104,132});
+
+    if(currentPage!=0) {
+        juce::Component* controls[]={&mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,
+            &release,&master,&drive,&width,&wave1,&wave2};
+        for(auto* control:controls) control->setVisible(false);
     }
-    if(currentPage!=1){
-        juce::Component* wtControls[] = {&wtTable,&wtPosition,&unison,&uniDetune,&uniSpread};
-        for(auto* c : wtControls) c->setVisible(false);
+    if(currentPage!=1) {
+        juce::Component* controls[]={&wtTable,&wtPosition,&unison,&uniDetune,&uniSpread};
+        for(auto* control:controls) control->setVisible(false);
     }
-    if(currentPage!=2){
-        juce::Component* fxControls[] = {&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb};
-        for(auto* c : fxControls) c->setVisible(false);
+    if(currentPage!=2) {
+        juce::Component* controls[]={&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb};
+        for(auto* control:controls) control->setVisible(false);
     }
 }
