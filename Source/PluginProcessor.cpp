@@ -982,6 +982,50 @@ void AuroraProcessor::clearImportedWavetable() {
     importedWavetableName.clear();
 }
 
+void AuroraProcessor::editImportedWavetableRange(int frame, int firstSample, int lastSample,
+                                                   float firstValue, float lastValue) {
+    constexpr int frameCount = 64;
+    constexpr int frameSize = 2048;
+    frame = juce::jlimit(0, frameCount - 1, frame);
+    firstSample = juce::jlimit(0, frameSize - 1, firstSample);
+    lastSample = juce::jlimit(0, frameSize - 1, lastSample);
+    firstValue = juce::jlimit(-1.0f, 1.0f, firstValue);
+    lastValue = juce::jlimit(-1.0f, 1.0f, lastValue);
+
+    auto current = getImportedWavetable();
+    std::vector<float> edited;
+    if (current && current->size() == (size_t)(frameCount * frameSize)) {
+        edited = *current;
+    } else {
+        edited.resize((size_t)frameCount * (size_t)frameSize);
+        for (int f = 0; f < frameCount; ++f)
+            for (int i = 0; i < frameSize; ++i)
+                edited[(size_t)f * (size_t)frameSize + (size_t)i] =
+                    std::sin((float)i * juce::MathConstants<float>::twoPi / (float)frameSize);
+    }
+
+    int start = firstSample;
+    int end = lastSample;
+    float startValue = firstValue;
+    float endValue = lastValue;
+    if (start > end) {
+        std::swap(start, end);
+        std::swap(startValue, endValue);
+    }
+
+    const float denominator = (float)juce::jmax(1, end - start);
+    for (int i = start; i <= end; ++i) {
+        const float blend = (float)(i - start) / denominator;
+        edited[(size_t)frame * (size_t)frameSize + (size_t)i] =
+            juce::jmap(blend, startValue, endValue);
+    }
+
+    auto updated = std::make_shared<const std::vector<float>>(std::move(edited));
+    std::atomic_store_explicit(&importedWavetable, updated, std::memory_order_release);
+    if (importedWavetableName.isEmpty())
+        importedWavetableName = "Drawn Wavetable";
+}
+
 float AuroraProcessor::getImportedWavetableSample(float phase, float position) const noexcept {
     const auto table = getImportedWavetable();
     if (!table || table->size() < 64u * 2048u)

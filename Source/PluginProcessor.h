@@ -32,6 +32,8 @@ public:
  bool loadUserPattern(int slot);
  bool loadWavetableFromFile(const juce::File& file, juce::String& error);
  void clearImportedWavetable();
+ void editImportedWavetableRange(int frame, int firstSample, int lastSample,
+                                 float firstValue, float lastValue);
  bool hasImportedWavetable() const noexcept {
   return (bool)std::atomic_load_explicit(&importedWavetable, std::memory_order_acquire);
  }

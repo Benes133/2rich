@@ -143,7 +143,9 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     }
     wavetableStatusLabel.setColour(juce::Label::textColourId, muted);
     wavetableStatusLabel.setFont(juce::Font(juce::FontOptions(8.0f)));
-    wavetableStatusLabel.setText("64-FRAME WAV TABLE READY", juce::dontSendNotification);
+    wavetableStatusLabel.setText(proc.hasImportedWavetable()
+        ? "RESTORED: " + proc.getImportedWavetableName()
+        : "DRAW ON THE WAVEFORM OR IMPORT AUDIO", juce::dontSendNotification);
     addAndMakeVisible(wavetableStatusLabel);
 
     importWavetableButton.onClick = [this] {
@@ -464,6 +466,52 @@ void AuroraEditor::writeSelectedStepParameter(const juce::String& baseId, float 
     }
 }
 
+void AuroraEditor::mouseDown(const juce::MouseEvent& event) {
+    if (currentPage != 1)
+        return;
+
+    const float scale = juce::jmin(getWidth() / 960.0f, getHeight() / 640.0f);
+    const int ox = (getWidth() - juce::roundToInt(960.0f * scale)) / 2;
+    const int oy = (getHeight() - juce::roundToInt(640.0f * scale)) / 2;
+    const float x = ((float)event.x - (float)ox) / scale;
+    const float y = ((float)event.y - (float)oy) / scale;
+    if (x < 328.0f || x > 904.0f || y < 174.0f || y > 296.0f)
+        return;
+
+    drawingWavetable = true;
+    drawingFrame = juce::jlimit(0, 63, juce::roundToInt((float)wtPosition.getValue() * 63.0f));
+    wtTable.setSelectedId(7, juce::sendNotification);
+    editWavetableFromMouse(event);
+}
+
+void AuroraEditor::mouseDrag(const juce::MouseEvent& event) {
+    if (drawingWavetable)
+        editWavetableFromMouse(event);
+}
+
+void AuroraEditor::mouseUp(const juce::MouseEvent&) {
+    drawingWavetable = false;
+}
+
+void AuroraEditor::editWavetableFromMouse(const juce::MouseEvent& event) {
+    const float scale = juce::jmin(getWidth() / 960.0f, getHeight() / 640.0f);
+    const int ox = (getWidth() - juce::roundToInt(960.0f * scale)) / 2;
+    const int oy = (getHeight() - juce::roundToInt(640.0f * scale)) / 2;
+    const float x = ((float)event.x - (float)ox) / scale;
+    const float y = ((float)event.y - (float)oy) / scale;
+
+    const int sampleIndex = juce::jlimit(0, 2047,
+        juce::roundToInt((x - 338.0f) / 556.0f * 2047.0f));
+    const float value = juce::jlimit(-1.0f, 1.0f, (238.66f - y) / 43.0f);
+    proc.editImportedWavetableRange(drawingFrame, previousDrawIndex, sampleIndex,
+                                    previousDrawValue, value);
+    previousDrawIndex = sampleIndex;
+    previousDrawValue = value;
+    wavetableStatusLabel.setText("EDITING FRAME " + juce::String(drawingFrame + 1)
+                                 + " / 64", juce::dontSendNotification);
+    repaint();
+}
+
 void AuroraEditor::timerCallback() {
     bool changed = false;
     const int activeStep = proc.getSequencerCurrentStep();
@@ -698,6 +746,10 @@ void AuroraEditor::paint(juce::Graphics& g) {
         g.setFont(juce::Font(juce::FontOptions(8.5f)));
         g.drawText("FRAME 01",gx+10,gy+gh-15,90,10,juce::Justification::centredLeft);
         g.drawText("FRAME 64",gx+gw-100,gy+gh-15,90,10,juce::Justification::centredRight);
+        g.setColour(neon.withAlpha(0.9f));
+        g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
+        g.drawText("DRAW ON THE WAVEFORM TO EDIT THE SELECTED MORPH FRAME",
+                   gx+10,gy+gh+4,gw-20,12,juce::Justification::centred);
 
         knobLabel(88,418,160,"UNISON VOICES");
         knobLabel(322,418,160,"DETUNE AMOUNT");

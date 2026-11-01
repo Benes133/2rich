@@ -9,7 +9,8 @@
 - Filter types: Low Pass, Band Pass and High Pass.
 - WAV/AIFF wavetable import: audio is resampled into a 64-frame, 2048-sample wavetable.
 - Imported tables can be scanned with the existing wavetable position control.
-- Imported wavetable data is embedded in DAW project state and restored when the project is reopened.
+- Draw directly on the waveform preview to edit the selected frame or start a table from a sine wave.
+- Imported and hand-drawn wavetable data is embedded in DAW project state and restored when the project is reopened.
 - Oscillator phase lookup uses normalized cycle position derived from oscillator radians.
 
 ## Modulation (0.7.0)
@@ -30,7 +31,7 @@
 ## Interface
 
 - **SYNTH** — dual oscillators, synthesis mode, FM and sync controls, filter type, ADSR and output.
-- **WAVETABLE** — built-in tables, WAV/AIFF import, 64-frame morph preview, position control and unison.
+- **WAVETABLE** — built-in tables, draw-to-edit waveform preview, WAV/AIFF import, 64-frame morphing and unison.
 - **FX** — tone/EQ, saturation, modulation and space.
 - **MOD** — three LFOs, modulation matrix, MIDI expression and filter envelope.
 - **SEQ** — host-synced arpeggiator and 32-step sequencer.

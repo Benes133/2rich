@@ -9,6 +9,9 @@ public:
     ~AuroraEditor() override;
     void paint(juce::Graphics&) override;
     void resized() override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
 
 private:
     AuroraProcessor& proc;
@@ -36,6 +39,10 @@ private:
     std::array<juce::ComboBox, 4> modSources, modTargets;
     std::array<juce::Slider, 4> modAmounts;
     int currentPage = 0;
+    bool drawingWavetable = false;
+    int drawingFrame = 0;
+    int previousDrawIndex = 0;
+    float previousDrawValue = 0.0f;
 
     using Attach = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ChoiceAttach = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
@@ -49,6 +56,7 @@ private:
     void setPage(int page);
     void refreshSelectedStepControls();
     void writeSelectedStepParameter(const juce::String& baseId, float value);
+    void editWavetableFromMouse(const juce::MouseEvent&);
     void timerCallback() override;
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AuroraEditor)
