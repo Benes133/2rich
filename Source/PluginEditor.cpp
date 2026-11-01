@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "FactoryPresets.h"
 #include <algorithm>
 
 namespace {
@@ -108,52 +109,11 @@ juce::Rectangle<int> scaledBounds(juce::Rectangle<int> r, float scale, int ox, i
 }
 
 juce::String factoryPresetName(int id) {
-    static const char* starterNames[25] = {
-        "Violet Lead", "Neon Saw", "Hollow Lead", "Cloud Pad", "Glass Cathedral",
-        "Slow Motion", "Digital Keys", "Soft Piano-ish", "Pluck Keys", "Sub Pressure",
-        "Reese Machine", "Acid Bloom", "Neon Bass", "Glass Pluck", "Cyber Mallet",
-        "Crystal Keys", "Aurora Drift", "Deep Space", "Ethereal Choir", "Frozen Sky",
-        "Laser Bloom", "Retro Pulse", "Wide Unison", "Dirty Motion", "Dream Sequence"
-    };
-    if (id >= 1 && id <= 25) return starterNames[id - 1];
-
-    static const char* prefixes[10][10] = {
-        { "Neon", "Chrome", "Violet", "Voltage", "Afterglow", "Prism", "Pulse", "Midnight", "Arctic", "Solar" },
-        { "Velvet", "Cloud", "Halo", "Opal", "Dream", "Silk", "Ethereal", "Lunar", "Horizon", "Softlight" },
-        { "Astral", "Nebula", "Infinite", "Weightless", "Orbit", "Celestial", "Drift", "Nocturne", "Stellar", "Ambient" },
-        { "Digital", "Ivory", "Vintage", "Soft", "Tape", "Felt", "Modern", "Warm", "Glass", "Electric" },
-        { "Grand", "Felt", "Velour", "Noir", "Studio", "Cinematic", "Upright", "Velvet", "Chamber", "Sunday" },
-        { "Crystal", "Plucked", "Bamboo", "Marble", "Tiny", "Bell", "Wooden", "Elastic", "Pixel", "Chime" },
-        { "Sub", "Reese", "Mono", "Acid", "Rubber", "Heavy", "Deep", "Circuit", "Industrial", "Round" },
-        { "Analog", "Modular", "Retro", "Digital", "Hybrid", "FM", "Wave", "Unison", "Future", "Classic" },
-        { "Impact", "Reverse", "Riser", "Glitch", "Laser", "Transition", "Signal", "Noise", "Cinematic", "Spectral" },
-        { "Organic", "Frozen", "Dusty", "Granular", "Shimmer", "Fractal", "Hollow", "Textured", "Worn", "Distant" }
-    };
-    static const char* flavours[5] = { "Motion", "Bloom", "Dream", "Signal", "Echo" };
-    static const char* nouns[10] = {
-        "Lead", "Pad", "Atmosphere", "Keys", "Piano", "Pluck", "Bass", "Synth", "FX", "Texture"
-    };
-    const int offset = juce::jlimit(0, 474, id - 26);
-    const int group = juce::jmin(9, offset / 50);
-    const int local = offset % 50;
-    return juce::String(prefixes[group][local % 10]) + " "
-        + flavours[local / 10] + " " + nouns[group] + " "
-        + juce::String(local + 1).paddedLeft('0', 2);
+    return FactoryPresets::name(id);
 }
 
 juce::String factoryPresetCategory(int id) {
-    if (id <= 3) return "LEADS";
-    if (id <= 6) return "PADS";
-    if (id <= 9) return "KEYS";
-    if (id <= 13) return "BASS";
-    if (id <= 16) return "PLUCKS";
-    if (id <= 20) return "ATMOSPHERE";
-    if (id <= 25) return "FX & SYNTH";
-    static const char* groups[10] = {
-        "LEADS / VOL. 2", "PADS / VOL. 2", "ATMOSPHERES", "KEYS",
-        "PIANOS", "PLUCKS", "BASS", "SYNTHS", "SOUND FX", "TEXTURES"
-    };
-    return groups[juce::jlimit(0, 9, (id - 26) / 50)];
+    return FactoryPresets::category(id);
 }
 }
 
@@ -211,14 +171,14 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     presetCategoryFilter.setColour(juce::ComboBox::textColourId, white);
     presetCategoryFilter.setColour(juce::ComboBox::arrowColourId, violetHi);
     presetCategoryFilter.addItemList({ "ALL SOUNDS", "LEADS", "PADS", "ATMOSPHERES",
-        "KEYS", "PIANOS", "PLUCKS", "BASS", "SYNTHS", "SOUND FX", "TEXTURES", "FX & SYNTH" }, 1);
+        "KEYS", "PIANOS", "PLUCKS", "BASS", "SYNTHS", "SOUND FX", "TEXTURES", "SEQUENCES" }, 1);
     presetCategoryFilter.setSelectedId(1, juce::dontSendNotification);
     presetCategoryFilter.onChange = [this] { rebuildPresetList(); };
     presetCategoryFilter.setVisible(false);
 
     static const char* presetFamilies[12] = {
         "ALL SOUNDS", "LEADS", "PADS", "ATMOSPHERES", "KEYS", "PIANOS",
-        "PLUCKS", "BASS", "SYNTHS", "SOUND FX", "TEXTURES", "FX & SYNTH"
+        "PLUCKS", "BASS", "SYNTHS", "SOUND FX", "TEXTURES", "SEQUENCES"
     };
     for (size_t i = 0; i < presetCategoryButtons.size(); ++i) {
         auto& button = presetCategoryButtons[i];
@@ -706,7 +666,7 @@ void AuroraEditor::rebuildPresetList() {
         else if (category.startsWith("SYNTHS")) normalizedCategory = "SYNTHS";
         else if (category.startsWith("SOUND FX")) normalizedCategory = "SOUND FX";
         else if (category.startsWith("TEXTURES")) normalizedCategory = "TEXTURES";
-        else if (category.startsWith("FX &")) normalizedCategory = "FX & SYNTH";
+        else if (category.startsWith("FX &")) normalizedCategory = "SEQUENCES";
         const bool categoryMatches = categoryFilter == "ALL SOUNDS" || normalizedCategory == categoryFilter;
         const bool nameMatches = query.isEmpty() || name.toLowerCase().contains(query);
         const bool favouriteMatches = !(showFavoritesOnly || queryFavoritesOnly) || proc.isPresetFavorite(id);
@@ -736,7 +696,7 @@ void AuroraEditor::updatePresetInformation() {
     presetSelectedLabel.setText(selectedId > 0 ? factoryPresetName(selectedId) : "SELECT A PATCH",
                                 juce::dontSendNotification);
     if (selectedId <= 0) {
-        presetInfoLabel.setText("FACTORY BANK\n500 patches across 10 sound families.\n\nChoose a family on the left, search by name, or open FAVOURITES to narrow the list.\n\nClick any patch to load it. SAVE exports your current sound as a .2richpreset file.",
+        presetInfoLabel.setText("FACTORY BANK\n500 redesigned patches: 100 distinct sound designs with five purposeful variations each.\n\nChoose a family on the left, search by name, or open FAVOURITES to narrow the list.\n\nClick any patch to load it. SAVE exports your current sound as a .2richpreset file.",
                                 juce::dontSendNotification);
         return;
     }
@@ -753,6 +713,7 @@ void AuroraEditor::updatePresetInformation() {
     else if (lower.startsWith("synth")) description = "A versatile electronic tone with a distinct oscillator and filter character.";
     else if (lower.startsWith("sound fx")) description = "A designed effect patch for accents, transitions and sound design.";
     else if (lower.startsWith("texture")) description = "A detailed, layered tone for subtle motion and background depth.";
+    else if (lower.startsWith("sequence")) description = "A playable arpeggio or programmed step pattern with its own synth tone and rhythmic character.";
     else if (lower.startsWith("fx &")) description = "An experimental hybrid patch for unusual melodic and textural parts.";
     presetInfoLabel.setText("SOUND FAMILY\n" + category + "\n\n" + description
         + "\n\nPATCH ID\n" + juce::String(selectedId).paddedLeft('0', 3)
@@ -821,198 +782,10 @@ void AuroraEditor::addKnob(juce::Slider& s, const juce::String&, const juce::Str
 }
 
 void AuroraEditor::applyPreset(int id) {
-    // Each preset is a complete patch: oscillator, envelope, filter, unison and FX.
-    struct Patch {
-        int w1, w2, table;
-        float mix, detune, sub, cutoff, res, attack, decay, sustain, release;
-        float master, drive, width, voices, uniDetune, uniSpread, position;
-        float eq, low, mid, high, fxDist, chorus, flange, delay, reverb;
-    };
-    static const Patch patches[] = {
-        {0,2,0,.42f,11,.18f,10500,.22f,.004f,.22f,.72f,.18f,.80f,.12f,.72f,1,12,.65f,.20f,.20f,0,0,.12f,.15f,0,.08f,.12f,0.0f},
-        {0,1,3,.58f,18,.10f,8500,.35f,.002f,.16f,.62f,.12f,.78f,.24f,.85f,3,18,.85f,.28f,.35f,1,2,.24f,.10f,.18f,.16f,.10f,0.0f},
-        {3,0,2,.25f,5,.05f,6200,.18f,.015f,.35f,.48f,.32f,.82f,.05f,.55f,1,8,.40f,.18f,.10f,0,1,.05f,.05f,.0f,.10f,.08f,0.0f},
-        {2,3,2,.62f,7,.28f,5200,.28f,1.8f,3.2f,.82f,4.0f,.76f,.08f,.95f,3,18,.9f,.65f,.25f,2,3,.04f,.48f,.0f,.22f,.48f,0.0f},
-        {3,2,4,.50f,3,.12f,4300,.42f,2.6f,3.8f,.76f,4.5f,.78f,.04f,.9f,5,24,1.0f,.72f,.35f,3,4,.02f,.62f,.0f,.28f,.62f,0.0f},
-        {0,2,1,.38f,9,.20f,6800,.25f,1.2f,2.4f,.68f,3.8f,.76f,.10f,.8f,4,20,.9f,.58f,.22f,1,2,.10f,.55f,.0f,.25f,.52f,0.0f},
-        {2,3,3,.32f,2,.10f,9200,.12f,.002f,.18f,.35f,.55f,.82f,.02f,.35f,1,5,.25f,.12f,.10f,0,1,.02f,.08f,.0f,.08f,.08f,0.0f},
-        {3,2,4,.45f,4,.08f,7400,.20f,.008f,.42f,.48f,.8f,.82f,.02f,.45f,1,6,.35f,.16f,.12f,0,2,.02f,.10f,.0f,.12f,.12f,0.0f},
-        {1,3,1,.22f,12,.05f,5800,.16f,.001f,.24f,.20f,.38f,.84f,.16f,.3f,1,10,.30f,.14f,.12f,0,1,.16f,.04f,.0f,.10f,.08f,0.0f},
-        {0,1,5,.48f,24,.35f,2600,.62f,.01f,.42f,.50f,.8f,.78f,.38f,.72f,2,22,.75f,.35f,.32f,2,1,.38f,.12f,.15f,.22f,.18f,0.0f},
-        {0,3,5,.55f,31,.18f,1800,.72f,.02f,.55f,.42f,.9f,.76f,.62f,.68f,4,30,.95f,.42f,.38f,3,2,.62f,.18f,.28f,.26f,.12f,0.0f},
-        {1,0,3,.20f,8,.28f,1400,.82f,.003f,.28f,.58f,.35f,.82f,.72f,.42f,1,12,.40f,.12f,.20f,1,0,.72f,.0f,.10f,.05f,.08f,0.0f},
-        {0,2,4,.42f,16,.32f,2200,.48f,.006f,.38f,.52f,.55f,.80f,.44f,.75f,3,25,.88f,.38f,.30f,1,2,.44f,.22f,.12f,.22f,.16f,0.0f},
-        {3,2,2,.28f,6,.04f,7600,.16f,.001f,.20f,.18f,.24f,.84f,.08f,.38f,1,7,.35f,.18f,.12f,0,2,.08f,.08f,.0f,.14f,.10f,0.0f},
-        {2,3,3,.36f,14,.06f,6400,.28f,.001f,.32f,.22f,.32f,.82f,.18f,.52f,2,14,.65f,.28f,.18f,1,3,.18f,.18f,.18f,.20f,.14f,0.0f},
-        {3,1,4,.30f,9,.08f,8200,.22f,.002f,.26f,.24f,.40f,.82f,.12f,.58f,2,11,.72f,.30f,.22f,1,4,.12f,.24f,.08f,.18f,.18f,0.0f},
-        {3,2,4,.52f,5,.12f,5400,.24f,1.1f,2.8f,.78f,4.2f,.76f,.04f,.95f,5,18,1.0f,.68f,.25f,1,3,.04f,.55f,.0f,.35f,.62f,0.0f},
-        {0,3,5,.44f,20,.22f,3100,.38f,.8f,2.2f,.62f,3.6f,.78f,.20f,.88f,6,28,1.0f,.62f,.32f,2,4,.20f,.62f,.22f,.38f,.58f,0.0f},
-        {3,2,4,.60f,4,.10f,4800,.30f,1.5f,3.4f,.90f,4.8f,.74f,.02f,.98f,5,16,1.0f,.74f,.28f,2,3,.02f,.72f,.0f,.34f,.72f,0.0f},
-        {2,3,2,.48f,10,.18f,3900,.34f,2.2f,3.0f,.84f,4.5f,.76f,.08f,.92f,7,24,1.0f,.68f,.34f,2,3,.08f,.68f,.12f,.32f,.68f,0.0f},
-        {1,0,3,.32f,22,.02f,9800,.12f,.001f,.12f,.05f,.45f,.82f,.48f,.72f,3,32,.95f,.22f,.15f,0,3,.48f,.04f,.55f,.25f,.10f,0.0f},
-        {1,3,1,.40f,15,.10f,7200,.40f,.001f,.24f,.16f,.55f,.80f,.30f,.80f,4,26,.92f,.34f,.24f,2,2,.30f,.18f,.45f,.28f,.18f,0.0f},
-        {0,2,4,.50f,8,.12f,6100,.22f,.006f,.45f,.72f,2.8f,.78f,.10f,.96f,7,28,1.0f,.72f,.30f,1,3,.10f,.62f,.0f,.35f,.62f,0.0f},
-        {0,1,5,.58f,38,.28f,1700,.68f,.003f,.38f,.48f,.72f,.76f,.72f,.86f,7,42,1.0f,.48f,.42f,3,4,.72f,.25f,.48f,.30f,.24f,0.0f},
-        {3,0,4,.46f,13,.16f,4600,.26f,.45f,2.6f,.86f,4.6f,.76f,.14f,.94f,6,30,1.0f,.70f,.30f,2,3,.14f,.58f,.30f,.48f,.70f,0.0f}
-    };
-    if (id < 1 || id > 500) return;
-    Patch generated{};
-    const Patch* selectedPatch = nullptr;
-    int generatedGroup = -1;
-    int oscillatorMode = 0;
-    uint32_t seed = (uint32_t)id * 0x9e3779b9u + 0x6d2b79f5u;
-    auto random01 = [&seed]() {
-        seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
-        return (float)(seed & 0x00ffffffu) / 16777215.0f;
-    };
-    auto randomRange = [&random01](float low, float high) {
-        return low + (high - low) * random01();
-    };
-
-    if (id <= (int)std::size(patches)) {
-        selectedPatch = &patches[id - 1];
-    } else {
-        generatedGroup = juce::jlimit(0, 9, (id - 26) / 50);
-        auto& p = generated;
-        p.w1=(int)randomRange(0.0f,4.0f);p.w2=(int)randomRange(0.0f,4.0f);p.table=(int)randomRange(0.0f,6.0f);
-        p.mix=randomRange(0.18f,0.78f);p.detune=randomRange(2.0f,28.0f);p.sub=randomRange(0.0f,0.34f);
-        p.cutoff=randomRange(1600.0f,14500.0f);p.res=randomRange(0.08f,0.58f);
-        p.attack=0.005f;p.decay=0.35f;p.sustain=0.55f;p.release=0.35f;
-        p.master=randomRange(0.68f,0.84f);p.drive=randomRange(0.0f,0.28f);p.width=randomRange(0.55f,1.0f);
-        p.voices=randomRange(1.0f,5.0f);p.uniDetune=randomRange(5.0f,28.0f);p.uniSpread=randomRange(0.25f,1.0f);
-        p.position=random01();p.eq=randomRange(0.05f,0.55f);
-        p.low=randomRange(-2.0f,2.0f);p.mid=randomRange(-2.5f,2.5f);p.high=randomRange(-2.0f,3.0f);
-        p.fxDist=randomRange(0.0f,0.35f);p.chorus=randomRange(0.0f,0.48f);
-        p.flange=randomRange(0.0f,0.42f);p.delay=randomRange(0.0f,0.42f);p.reverb=randomRange(0.0f,0.55f);
-        switch (generatedGroup) {
-            case 0: // Leads
-                p.attack=randomRange(0.001f,0.035f);p.decay=randomRange(0.12f,0.55f);
-                p.sustain=randomRange(0.48f,0.86f);p.release=randomRange(0.12f,0.65f);
-                p.cutoff=randomRange(4200.0f,15500.0f);p.voices=randomRange(1.0f,4.0f);
-                p.reverb=randomRange(0.03f,0.22f);p.delay=randomRange(0.08f,0.38f);break;
-            case 1: // Pads
-                p.attack=randomRange(0.35f,3.2f);p.decay=randomRange(1.0f,4.0f);
-                p.sustain=randomRange(0.68f,0.98f);p.release=randomRange(1.8f,5.0f);
-                p.cutoff=randomRange(1800.0f,9000.0f);p.voices=randomRange(4.0f,7.0f);
-                p.uniSpread=randomRange(0.72f,1.0f);p.reverb=randomRange(0.35f,0.78f);
-                p.chorus=randomRange(0.24f,0.62f);break;
-            case 2: // Atmospheres
-                p.attack=randomRange(0.8f,4.0f);p.decay=randomRange(1.5f,4.0f);
-                p.sustain=randomRange(0.72f,1.0f);p.release=randomRange(2.8f,5.0f);
-                p.cutoff=randomRange(900.0f,7200.0f);p.voices=randomRange(4.0f,7.0f);
-                p.position=randomRange(0.2f,0.9f);p.reverb=randomRange(0.48f,0.88f);
-                p.chorus=randomRange(0.25f,0.68f);p.delay=randomRange(0.12f,0.42f);oscillatorMode=4;break;
-            case 3: // Keys
-                p.attack=randomRange(0.001f,0.025f);p.decay=randomRange(0.18f,0.85f);
-                p.sustain=randomRange(0.18f,0.58f);p.release=randomRange(0.12f,0.8f);
-                p.cutoff=randomRange(4800.0f,16000.0f);p.voices=randomRange(1.0f,3.0f);
-                p.reverb=randomRange(0.08f,0.32f);break;
-            case 4: // Piano family
-                p.w1=3;p.w2=2;p.table=4;p.mix=randomRange(0.25f,0.62f);
-                p.attack=0.001f;p.decay=randomRange(0.75f,2.1f);p.sustain=randomRange(0.04f,0.32f);
-                p.release=randomRange(0.45f,1.8f);p.cutoff=randomRange(6500.0f,17000.0f);
-                p.voices=1.0f;p.uniSpread=0.0f;p.drive=randomRange(0.0f,0.12f);
-                p.reverb=randomRange(0.12f,0.42f);oscillatorMode=1;break;
-            case 5: // Plucks
-                p.attack=0.001f;p.decay=randomRange(0.14f,0.85f);p.sustain=randomRange(0.02f,0.28f);
-                p.release=randomRange(0.12f,0.72f);p.cutoff=randomRange(5200.0f,17000.0f);
-                p.voices=randomRange(1.0f,3.0f);p.reverb=randomRange(0.08f,0.38f);
-                p.delay=randomRange(0.0f,0.28f);p.sub=0.0f;break;
-            case 6: // Bass
-                p.attack=0.001f;p.decay=randomRange(0.12f,0.6f);p.sustain=randomRange(0.45f,0.9f);
-                p.release=randomRange(0.08f,0.38f);p.cutoff=randomRange(280.0f,4200.0f);
-                p.res=randomRange(0.18f,0.78f);p.voices=randomRange(1.0f,2.0f);
-                p.uniSpread=randomRange(0.0f,0.32f);p.sub=randomRange(0.28f,0.72f);
-                p.drive=randomRange(0.12f,0.62f);p.reverb=randomRange(0.0f,0.12f);
-                p.chorus=randomRange(0.0f,0.14f);oscillatorMode=random01()>0.55f?2:0;break;
-            case 7: // Hybrid synths
-                p.attack=randomRange(0.001f,1.0f);p.decay=randomRange(0.2f,2.0f);
-                p.sustain=randomRange(0.25f,0.86f);p.release=randomRange(0.2f,2.0f);
-                p.voices=randomRange(2.0f,7.0f);p.uniSpread=randomRange(0.55f,1.0f);
-                p.reverb=randomRange(0.05f,0.42f);p.chorus=randomRange(0.08f,0.48f);
-                oscillatorMode=(int)randomRange(0.0f,5.0f);break;
-            case 8: // Sound design
-                p.attack=randomRange(0.001f,1.5f);p.decay=randomRange(0.15f,3.5f);
-                p.sustain=randomRange(0.05f,0.8f);p.release=randomRange(0.2f,4.0f);
-                p.cutoff=randomRange(350.0f,15000.0f);p.drive=randomRange(0.2f,0.85f);
-                p.reverb=randomRange(0.18f,0.75f);p.delay=randomRange(0.15f,0.72f);
-                p.flange=randomRange(0.2f,0.68f);oscillatorMode=(int)randomRange(0.0f,5.0f);break;
-            case 9: // Textures
-                p.attack=randomRange(0.4f,3.8f);p.decay=randomRange(1.0f,4.0f);
-                p.sustain=randomRange(0.55f,1.0f);p.release=randomRange(2.2f,5.0f);
-                p.cutoff=randomRange(600.0f,11000.0f);p.voices=randomRange(3.0f,7.0f);
-                p.position=random01();p.reverb=randomRange(0.35f,0.82f);
-                p.chorus=randomRange(0.18f,0.62f);oscillatorMode=4;break;
-            default: break;
-        }
-        selectedPatch = &generated;
-    }
-    const auto& p = *selectedPatch;
-    auto set = [this](const char* key, float value) {
-        if (auto* parameter = proc.params.getParameter(key))
-            parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
-    };
-    set("wave1",(float)p.w1); set("wave2",(float)p.w2); set("wtTable",(float)p.table);
-    set("mix",p.mix); set("detune",p.detune); set("sub",p.sub);
-    set("cutoff",p.cutoff); set("res",p.res);
-    set("attack",p.attack); set("decay",p.decay); set("sustain",p.sustain); set("release",p.release);
-    set("master",p.master); set("drive",p.drive); set("width",p.width);
-    set("unison",p.voices); set("uniDetune",p.uniDetune); set("uniSpread",p.uniSpread);
-    set("wtPosition",p.position);
-    set("fxEq",p.eq); set("fxLow",p.low); set("fxMid",p.mid); set("fxHigh",p.high);
-    set("fxDist",p.fxDist); set("fxChorus",p.chorus); set("fxFlange",p.flange);
-    set("fxDelay",p.delay); set("fxReverb",p.reverb);
-    if (generatedGroup < 0) {
-        set("fxSlot1", (p.drive > 0.01f || p.fxDist > 0.01f) ? 2.0f : 0.0f);
-        set("fxSlot2", 1.0f);
-        set("fxSlot3", p.flange > 0.01f ? 3.0f : 0.0f);
-        set("fxSlot4", p.delay > 0.01f ? 4.0f : 0.0f);
-        set("fxSlot5", p.reverb > 0.01f ? 5.0f : 0.0f);
-        set("fxSlot6", p.chorus > 0.01f ? 6.0f : 0.0f);
-    } else {
-        set("fxSlot1", p.fxDist > 0.16f ? 2.0f : (generatedGroup == 8 ? 9.0f : 0.0f));
-        set("fxSlot2", p.reverb > 0.22f ? 5.0f : 0.0f);
-        set("fxSlot3", p.chorus > 0.16f ? 6.0f : 0.0f);
-        set("fxSlot4", p.delay > 0.18f ? 4.0f : 0.0f);
-        set("fxSlot5", generatedGroup == 8 ? (id % 2 == 0 ? 14.0f : 12.0f) : 0.0f);
-        set("fxSlot6", p.flange > 0.22f ? 3.0f : 0.0f);
-    }
-    set("oscMode", (float)oscillatorMode);
-    set("fmAmount", generatedGroup == 4 ? 3.2f : randomRange(0.5f, 5.0f));
-    set("syncRatio", randomRange(1.5f, 5.0f));
-    set("fxCompEnabled", generatedGroup == 6 && p.drive > 0.3f ? 1.0f : 0.0f);
-    set("fxSatTone", randomRange(-0.25f, 0.25f));
-    set("fxSatMix", 0.85f);
-    set("fxPhaserFeedback", randomRange(0.08f, 0.48f));
-    set("fxPingTone", randomRange(0.35f, 0.85f));
-    set("fxReverbWidth", randomRange(0.65f, 1.0f));
-    set("fxChorusRate", randomRange(0.08f, 1.2f));
-    set("fxChorusDepth", randomRange(0.2f, 0.85f));
-    set("fxChorusWidth", randomRange(0.3f, 1.0f));
-    set("fxFlangerRate", randomRange(0.08f, 1.5f));
-    set("fxFlangerDepth", randomRange(0.15f, 0.75f));
-    set("fxFlangerFeedback", randomRange(-0.3f, 0.55f));
-    set("fxFlangerTime", randomRange(1.0f, 8.0f));
-    set("fxFlangerMix", p.flange);
-    set("fxTremRate", randomRange(2.0f, 9.0f));
-    set("fxTremDepth", generatedGroup == 8 ? randomRange(0.2f,0.8f) : 0.4f);
-    set("fxRingFreq", randomRange(70.0f, 900.0f));
-    set("fxRingMix", generatedGroup == 8 ? randomRange(0.2f,0.75f) : 0.0f);
-    set("fxBitDepth", randomRange(5.0f, 12.0f));
-    set("fxBitRate", randomRange(2.0f, 12.0f));
-    set("fxBitMix", generatedGroup == 8 ? randomRange(0.25f,0.75f) : 0.0f);
-
-    // Keep factory patches predictable: modulation is opt-in unless a patch explicitly defines it.
-    set("filterEnvAmount", 0.0f);
-    for (int route = 1; route <= 4; ++route) {
-        const auto suffix = juce::String(route);
-        set(("mod" + suffix + "Source").toRawUTF8(), 0.0f);
-        set(("mod" + suffix + "Target").toRawUTF8(), 0.0f);
-        set(("mod" + suffix + "Amount").toRawUTF8(), 0.0f);
-    }
+    FactoryPresets::apply(proc.params, id);
+    updatePresetInformation();
     repaint();
 }
-
 void AuroraEditor::refreshSelectedStepControls() {
     const int pageOffset = seqPageBox.getSelectedId() == 2 ? 16 : 0;
     const int globalStep = pageOffset + selectedStep;
