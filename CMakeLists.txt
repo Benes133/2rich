@@ -18,6 +18,8 @@ juce_add_plugin(AuroraSynth
     COPY_PLUGIN_AFTER_BUILD FALSE
 )
 
+juce_generate_juce_header(AuroraSynth)
+
 target_sources(AuroraSynth PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
