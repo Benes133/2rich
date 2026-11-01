@@ -304,6 +304,7 @@ public:
     void setProcessor(AuroraProcessor* p) { processor = p; }
 
 private:
+    AuroraProcessor* processor = nullptr;
     float wave(float phase, int type, int table, float position,
                const std::vector<float>* importedTable) {
         // Oscillator phases are stored in radians; convert to a normalized cycle.

@@ -53,6 +53,7 @@ private:
     juce::ToggleButton fxCompEnabledButton { "COMPRESSOR" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aFxCompEnabled;
     juce::TextButton synthTab{"VOICE"}, wtTab{"MOTION"}, fxTab{"FX"}, modTab{"MOD"}, seqTab{"SEQ"};
+    juce::TextButton presetsTab{"PRESETS"};
     juce::ListBox presetBrowserList;
     juce::ComboBox presetCategoryFilter; // Hidden category index used by the directory buttons.
     std::array<juce::TextButton, 12> presetCategoryButtons;
