@@ -1314,28 +1314,30 @@ void AuroraEditor::updateFxEditor() {
 }
 
 void AuroraEditor::updateSampleEditor() {
-    const bool visible = currentPage == 3;
-    for (juce::Component* component : std::array<juce::Component*, 22>{
-            &sampleLoadButton,&sampleClearButton,&sampleResliceButton,&sampleStatusLabel,
-            &sampleSliceButton,&sampleTempoButton,&sampleKeyButton,&samplePreservePitchButton,
-            &sampleLoopButton,&sampleReverseButton,&sampleSyncBarsBox,&sampleTargetKeyBox,
-            &sampleRootNote,&sampleMix,&sampleTranspose,&sampleFineTune,&sampleStart,&sampleEnd,
+    const bool samplerPage = currentPage == 3;
+    const bool sourcePage = samplerPage || currentPage == 4;
+    // These source controls are shared by both engines.
+    for (juce::Component* component : std::array<juce::Component*, 5>{
+            &sampleLoadButton,&sampleClearButton,&sampleSliceButton,&sampleLoopButton,&sampleReverseButton })
+        component->setVisible(sourcePage);
+    for (juce::Component* component : std::array<juce::Component*, 17>{
+            &sampleResliceButton,&sampleStatusLabel,&sampleTempoButton,&sampleKeyButton,
+            &samplePreservePitchButton,&sampleSyncBarsBox,&sampleTargetKeyBox,&sampleRootNote,
+            &sampleMix,&sampleTranspose,&sampleFineTune,&sampleStart,&sampleEnd,
             &sampleSliceSensitivity,&sampleSliceMinGap,&sampleMaxSlices,&sampleStretchGrainMs })
-        component->setVisible(visible);
+        component->setVisible(samplerPage);
 }
 
 void AuroraEditor::updateGranularEditor() {
     const bool visible = currentPage == 4;
-    for (juce::Component* component : std::array<juce::Component*, 16>{
-            &sampleLoadButton,&sampleClearButton,&granularStatusLabel,&sampleSliceButton,
-            &sampleLoopButton,&sampleReverseButton,&grainTempoButton,&grainKeyButton,
-            &grainTargetKeyBox,&grainSyncDivisionBox,&granularPresetBox,&grainSize,
-            &grainDensity,&grainPosition,&grainSpray,&grainPitch })
+    for (juce::Component* component : std::array<juce::Component*, 11>{
+            &granularStatusLabel,&grainTempoButton,&grainKeyButton,&grainTargetKeyBox,
+            &grainSyncDivisionBox,&granularPresetBox,&grainSize,&grainDensity,&grainPosition,
+            &grainSpray,&grainPitch })
         component->setVisible(visible);
-    for (juce::Component* component : std::array<juce::Component*, 4>{
-            &grainTranspose,&grainFineTune,&grainJitter,&grainWindow })
+    for (juce::Component* component : std::array<juce::Component*, 5>{
+            &grainTranspose,&grainFineTune,&grainJitter,&grainWindow,&grainStereo })
         component->setVisible(visible);
-    grainStereo.setVisible(visible);
 }
 
 void AuroraEditor::updatePresetBrowser() {
@@ -1355,8 +1357,12 @@ void AuroraEditor::updateSampleStatus() {
         return;
     }
     const int sliceCount = juce::jmax(0, (int)sample->sliceStarts.size() - 1);
-    const juce::String info = "FILE: " + sample->fileName + "   /   KEY: "
-        + sample->keyName + "   /   SOURCE BPM: " + juce::String(sample->sourceBpm, 1)
+    static const char* noteNames[12] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+    const int projectKey = proc.getProjectKeyClass();
+    const juce::String projectKeyText = projectKey >= 0 ? noteNames[projectKey] : "WAITING FOR MIDI";
+    const juce::String info = "FILE: " + sample->fileName + "   /   SOURCE: "
+        + sample->keyName + "   /   MIDI KEY: " + projectKeyText
+        + "   /   SOURCE BPM: " + juce::String(sample->sourceBpm, 1)
         + "   /   PROJECT BPM: " + juce::String(proc.getHostTempoBpm(), 1)
         + "   /   " + juce::String(sliceCount) + " SLICES";
     sampleStatusLabel.setText(info, juce::dontSendNotification);
