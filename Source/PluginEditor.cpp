@@ -300,7 +300,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
     g.drawText("POLYPHONIC SYNTHESIZER", 145, 28, 250, 15, juce::Justification::centredLeft);
     g.setFont(juce::Font(juce::FontOptions(9.0f)));
     g.drawText("NORTHSTAR AUDIO", 145, 45, 180, 13, juce::Justification::centredLeft);
-    g.drawText("PRESET", 690, 20, 170, 12, juce::Justification::centredLeft);
+    g.drawText("PRESET", 700, 20, 170, 12, juce::Justification::centredLeft);
     g.setColour(violet);
     g.fillRoundedRectangle(32, 84, 896, 1, 0.5f);
 
@@ -493,10 +493,10 @@ void AuroraEditor::resized() {
         component.setBounds(scaledBounds(bounds,scale,ox,oy));
     };
     place(heading,{32,23,100,42});
-    place(synthTab,{352,31,92,30});
-    place(wtTab,{450,31,128,30});
-    place(fxTab,{584,31,70,30});
-    place(presets,{690,34,233,30});
+    place(synthTab,{395,31,82,30});
+    place(wtTab,{483,31,124,30});
+    place(fxTab,{615,31,60,30});
+    place(presets,{700,34,223,30});
 
     place(wave1,{50,160,226,30});
     place(wave2,{322,160,226,30});
