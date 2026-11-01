@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.22)
-project(AuroraSynth VERSION 1.0.1 LANGUAGES CXX)
+project(AuroraSynth VERSION 1.1.0 LANGUAGES CXX)
 include(FetchContent)
 FetchContent_Declare(JUCE GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 8.0.6 GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(JUCE)
 
 juce_add_plugin(AuroraSynth
-    COMPANY_NAME "Northstar Audio"
-    BUNDLE_ID "audio.northstar.aurora"
+    COMPANY_NAME "TIMAUDIO"
+    BUNDLE_ID "audio.timaudio.2rich"
     PLUGIN_MANUFACTURER_CODE NSta
     PLUGIN_CODE Auro
     FORMATS VST3

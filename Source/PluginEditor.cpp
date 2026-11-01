@@ -17,48 +17,59 @@ public:
     void drawRotarySlider(juce::Graphics& g, int x, int y, int w, int h,
                           float sliderPos, float startAngle, float endAngle,
                           juce::Slider&) override {
-        const float size = juce::jmax(28.0f, (float)juce::jmin(w, h) - 25.0f);
-        const float cx = x + w * 0.5f;
-        const float cy = y + h * 0.42f;
-        const float radius = size * 0.5f;
+        const float size = juce::jmax(30.0f, (float)juce::jmin(w, h) - 24.0f);
+        const float cx = x + w * 0.5f, cy = y + h * 0.405f, radius = size * 0.5f;
         const float angle = startAngle + sliderPos * (endAngle - startAngle);
-
-        g.setColour(juce::Colour(0xff2e2841));
-        g.drawEllipse(cx - radius, cy - radius, size, size, 4.0f);
-
+        g.setColour(juce::Colour(0xff08090d));
+        g.fillEllipse(cx-radius-3.0f,cy-radius-3.0f,size+6.0f,size+6.0f);
+        juce::ColourGradient bezel(juce::Colour(0xff858892),cx,cy-radius,
+                                   juce::Colour(0xff20232a),cx,cy+radius,false);
+        g.setGradientFill(bezel);
+        g.fillEllipse(cx-radius,cy-radius,size,size);
+        g.setColour(juce::Colour(0xffb6b8c0).withAlpha(0.55f));
+        g.drawEllipse(cx-radius+1,cy-radius+1,size-2,size-2,1.0f);
+        for(int i=0;i<=24;++i){
+            const float a=startAngle+(float)i/24.0f*(endAngle-startAngle);
+            const float inner=radius+5.0f, outer=inner+(i%3==0?5.0f:2.5f);
+            juce::Path tick;
+            tick.startNewSubPath(cx+std::cos(a)*inner,cy+std::sin(a)*inner);
+            tick.lineTo(cx+std::cos(a)*outer,cy+std::sin(a)*outer);
+            g.setColour((float)i/24.0f<=sliderPos?violetHi:juce::Colour(0xff77737f).withAlpha(0.8f));
+            g.strokePath(tick,juce::PathStrokeType(i%3==0?1.5f:0.8f));
+        }
         juce::Path arc;
-        arc.addCentredArc(cx, cy, radius, radius, 0.0f, startAngle, angle, true);
-        g.setColour(violet);
-        g.strokePath(arc, juce::PathStrokeType(4.0f, juce::PathStrokeType::curved,
-                                               juce::PathStrokeType::rounded));
-
-        g.setColour(juce::Colour(0xff211c33));
-        g.fillEllipse(cx - radius + 6.0f, cy - radius + 6.0f, size - 12.0f, size - 12.0f);
-        g.setColour(juce::Colour(0xff302748));
-        g.drawEllipse(cx - radius + 8.0f, cy - radius + 8.0f, size - 16.0f, size - 16.0f, 1.0f);
-
-        juce::Path pointer;
-        pointer.addRoundedRectangle(-1.6f, -radius + 10.0f, 3.2f, radius * 0.48f, 1.6f);
+        arc.addCentredArc(cx,cy,radius+7.0f,radius+7.0f,0.0f,startAngle,angle,true);
+        g.setColour(violet.withAlpha(0.18f));
+        g.strokePath(arc,juce::PathStrokeType(5.0f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
         g.setColour(violetHi);
-        g.fillPath(pointer, juce::AffineTransform::rotation(angle).translated(cx, cy));
-        g.setColour(white.withAlpha(0.9f));
-        g.fillEllipse(cx - 2.0f, cy - 2.0f, 4.0f, 4.0f);
+        g.strokePath(arc,juce::PathStrokeType(2.0f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+        juce::ColourGradient cap(juce::Colour(0xff5b606b),cx-radius*0.35f,cy-radius*0.75f,
+                                 juce::Colour(0xff171a22),cx+radius*0.45f,cy+radius*0.85f,false);
+        g.setGradientFill(cap);
+        g.fillEllipse(cx-radius+6,cy-radius+6,size-12,size-12);
+        g.setColour(juce::Colour(0xffc1c3cb).withAlpha(0.3f));
+        g.drawEllipse(cx-radius+7,cy-radius+7,size-14,size-14,1.0f);
+        juce::Path pointer;
+        pointer.addRoundedRectangle(-1.5f,-radius+10.0f,3.0f,radius*0.46f,1.2f);
+        g.setColour(juce::Colour(0xff07090e).withAlpha(0.7f));
+        g.fillPath(pointer,juce::AffineTransform::rotation(angle+0.04f).translated(cx+1,cy+1));
+        g.setColour(juce::Colour(0xfff5efff));
+        g.fillPath(pointer,juce::AffineTransform::rotation(angle).translated(cx,cy));
+        g.setColour(violetHi); g.fillEllipse(cx-2.2f,cy-2.2f,4.4f,4.4f);
     }
 
     void drawButtonBackground(juce::Graphics& g, juce::Button& button,
                               const juce::Colour&, bool highlighted, bool down) override {
-        auto r = button.getLocalBounds().toFloat().reduced(0.5f);
-        const bool active = button.getToggleState();
-        if (active) {
-            juce::ColourGradient fill(juce::Colour(0xff6742a7), r.getX(), r.getY(),
-                                      juce::Colour(0xff39265f), r.getRight(), r.getBottom(), false);
-            g.setGradientFill(fill);
-        } else {
-            g.setColour(down ? cardHi : surface);
-        }
-        g.fillRoundedRectangle(r, 8.0f);
-        g.setColour(active ? violetHi : (highlighted ? violet.withAlpha(0.8f) : border));
-        g.drawRoundedRectangle(r, 8.0f, active ? 1.5f : 1.0f);
+        auto r=button.getLocalBounds().toFloat().reduced(0.5f);
+        const bool active=button.getToggleState();
+        const auto top=active?juce::Colour(0xff7254ab):(down?juce::Colour(0xff252936):juce::Colour(0xff454954));
+        const auto bottom=active?juce::Colour(0xff302044):juce::Colour(0xff171a21);
+        juce::ColourGradient fill(top,r.getX(),r.getY(),bottom,r.getX(),r.getBottom(),false);
+        g.setGradientFill(fill); g.fillRoundedRectangle(r,6.0f);
+        g.setColour(active?violetHi.withAlpha(0.95f):(highlighted?violet.withAlpha(0.8f):juce::Colour(0xff777b86).withAlpha(0.75f)));
+        g.drawRoundedRectangle(r.reduced(0.5f),6.0f,active?1.35f:0.85f);
+        g.setColour(juce::Colours::white.withAlpha(active?0.12f:0.07f));
+        g.drawLine(r.getX()+7,r.getY()+1.5f,r.getRight()-7,r.getY()+1.5f,0.8f);
     }
 
     void drawButtonText(juce::Graphics& g, juce::TextButton& button, bool, bool) override {
@@ -322,7 +333,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addChoice(seqPatternSlotBox, { "PATTERN 01", "PATTERN 02", "PATTERN 03", "PATTERN 04",
                                    "PATTERN 05", "PATTERN 06", "PATTERN 07", "PATTERN 08" }, "seqPatternSlot");
     auto addExtra=[&](juce::Slider& s,const juce::String& id,const juce::String& label){addKnob(s,label,id);attachments.push_back(std::make_unique<Attach>(ap,id,s));};
-    addExtra(wtPosition,"wtPosition","POSITION"); addExtra(unison,"unison","VOICES"); addExtra(uniDetune,"uniDetune","DETUNE"); addExtra(uniSpread,"uniSpread","SPREAD");
+    addExtra(wtPosition,"wtPosition","POSITION"); wtPosition.setSliderStyle(juce::Slider::LinearHorizontal); wtPosition.setTextBoxStyle(juce::Slider::TextBoxRight,false,42,18); addExtra(unison,"unison","VOICES"); addExtra(uniDetune,"uniDetune","DETUNE"); addExtra(uniSpread,"uniSpread","SPREAD");
     addExtra(fmAmount,"fmAmount","FM AMOUNT"); addExtra(syncRatio,"syncRatio","SYNC RATIO");
     for (auto* slider : { &fmAmount, &syncRatio }) {
         slider->setSliderStyle(juce::Slider::LinearHorizontal);
@@ -350,7 +361,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addExtra(lfo3Rate,"lfo3Rate","RATE");
     addExtra(filterAttack,"filterAttack","ATTACK"); addExtra(filterDecay,"filterDecay","DECAY");
     addExtra(filterSustain,"filterSustain","SUSTAIN"); addExtra(filterRelease,"filterRelease","RELEASE");
-    addExtra(filterEnvAmount,"filterEnvAmount","AMOUNT");
+    addExtra(filterEnvAmount,"filterEnvAmount","AMOUNT"); filterEnvAmount.setSliderStyle(juce::Slider::LinearHorizontal); filterEnvAmount.setTextBoxStyle(juce::Slider::TextBoxRight,false,42,18);
     addExtra(seqOctaves,"seqOctaves","OCTAVES");
     addExtra(seqGate,"seqGate","GATE");
     addExtra(seqSwing,"seqSwing","SWING");
@@ -445,7 +456,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         modAmounts[(size_t)i].setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
     }
     for(auto* tab:{&synthTab,&wtTab,&fxTab,&modTab,&seqTab}){tab->setLookAndFeel(&richLook);tab->setColour(juce::TextButton::textColourOffId,white);tab->setColour(juce::TextButton::textColourOnId,violetHi);tab->setClickingTogglesState(false);addAndMakeVisible(*tab);}
-    synthTab.onClick=[this]{setPage(0);};wtTab.onClick=[this]{setPage(1);};fxTab.onClick=[this]{setPage(2);};modTab.onClick=[this]{setPage(3);};seqTab.onClick=[this]{setPage(4);};
+    synthTab.onClick=[this]{setPage(0);};wtTab.onClick=[this]{setPage(1);};fxTab.onClick=[this]{setPage(2);};modTab.onClick=[this]{setPage(1);};seqTab.onClick=[this]{setPage(1);};
     unison.setRange(1,7,1); unison.setNumDecimalPlacesToDisplay(0);
     add(mix, "mix", "MIX"); add(detune, "detune", "DETUNE"); add(sub, "sub", "SUB");
     add(cutoff, "cutoff", "CUTOFF"); add(res, "res", "RES");
@@ -542,11 +553,11 @@ void AuroraEditor::updateFavoriteButton() {
 void AuroraEditor::addKnob(juce::Slider& s, const juce::String&, const juce::String&) {
     s.setLookAndFeel(&richLook);
     s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 66, 19);
-    s.setColour(juce::Slider::textBoxTextColourId, white);
-    s.setColour(juce::Slider::textBoxBackgroundColourId, cardHi);
-    s.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-    s.setColour(juce::Slider::textBoxHighlightColourId, violet);
+    s.setTextBoxStyle(juce::Slider::TextBoxBelow,false,50,16);
+    s.setColour(juce::Slider::textBoxTextColourId,white);
+    s.setColour(juce::Slider::textBoxBackgroundColourId,juce::Colour(0xff10131a));
+    s.setColour(juce::Slider::textBoxOutlineColourId,juce::Colour(0xff555966).withAlpha(0.65f));
+    s.setColour(juce::Slider::textBoxHighlightColourId,violet);
     addAndMakeVisible(s);
 }
 
@@ -654,23 +665,18 @@ void AuroraEditor::writeSelectedStepParameter(const juce::String& baseId, float 
 }
 
 void AuroraEditor::mouseDown(const juce::MouseEvent& event) {
-    if (currentPage != 1)
-        return;
-
-    const float scale = juce::jmin(getWidth() / 1200.0f, getHeight() / 820.0f);
-    const int ox = (getWidth() - juce::roundToInt(1200.0f * scale)) / 2;
-    const int oy = (getHeight() - juce::roundToInt(820.0f * scale)) / 2;
-    const float x = ((float)event.x - (float)ox) / scale;
-    const float y = ((float)event.y - (float)oy) / scale;
-    if (x < 342.0f || x > 1144.0f || y < 210.0f || y > 366.0f)
-        return;
-
-    drawingWavetable = true;
-    drawingFrame = juce::jlimit(0, 63, juce::roundToInt((float)wtPosition.getValue() * 63.0f));
-    previousDrawIndex = juce::jlimit(0, 2047,
-        juce::roundToInt((x - 352.0f) / 782.0f * 2047.0f));
-    previousDrawValue = juce::jlimit(-1.0f, 1.0f, (296.0f - y) / 58.0f);
-    wtTable.setSelectedId(7, juce::sendNotification);
+    if(currentPage!=0)return;
+    const float scale=juce::jmin(getWidth()/1200.0f,getHeight()/820.0f);
+    const int ox=(getWidth()-juce::roundToInt(1200.0f*scale))/2;
+    const int oy=(getHeight()-juce::roundToInt(820.0f*scale))/2;
+    const float x=((float)event.x-(float)ox)/scale;
+    const float y=((float)event.y-(float)oy)/scale;
+    if(x<628.0f||x>1148.0f||y<248.0f||y>378.0f)return;
+    drawingWavetable=true;
+    drawingFrame=juce::jlimit(0,63,juce::roundToInt((float)wtPosition.getValue()*63.0f));
+    previousDrawIndex=juce::jlimit(0,2047,juce::roundToInt((x-638.0f)/500.0f*2047.0f));
+    previousDrawValue=juce::jlimit(-1.0f,1.0f,(313.0f-y)/50.0f);
+    wtTable.setSelectedId(7,juce::sendNotification);
     editWavetableFromMouse(event);
 }
 
@@ -684,21 +690,15 @@ void AuroraEditor::mouseUp(const juce::MouseEvent&) {
 }
 
 void AuroraEditor::editWavetableFromMouse(const juce::MouseEvent& event) {
-    const float scale = juce::jmin(getWidth() / 1200.0f, getHeight() / 820.0f);
-    const int ox = (getWidth() - juce::roundToInt(1200.0f * scale)) / 2;
-    const int oy = (getHeight() - juce::roundToInt(820.0f * scale)) / 2;
-    const float x = ((float)event.x - (float)ox) / scale;
-    const float y = ((float)event.y - (float)oy) / scale;
-
-    const int sampleIndex = juce::jlimit(0, 2047,
-        juce::roundToInt((x - 352.0f) / 782.0f * 2047.0f));
-    const float value = juce::jlimit(-1.0f, 1.0f, (296.0f - y) / 58.0f);
-    proc.editImportedWavetableRange(drawingFrame, previousDrawIndex, sampleIndex,
-                                    previousDrawValue, value);
-    previousDrawIndex = sampleIndex;
-    previousDrawValue = value;
-    wavetableStatusLabel.setText("EDITING FRAME " + juce::String(drawingFrame + 1)
-                                 + " / 64", juce::dontSendNotification);
+    const float scale=juce::jmin(getWidth()/1200.0f,getHeight()/820.0f);
+    const int ox=(getWidth()-juce::roundToInt(1200.0f*scale))/2;
+    const int oy=(getHeight()-juce::roundToInt(820.0f*scale))/2;
+    const float x=((float)event.x-(float)ox)/scale, y=((float)event.y-(float)oy)/scale;
+    const int sampleIndex=juce::jlimit(0,2047,juce::roundToInt((x-638.0f)/500.0f*2047.0f));
+    const float value=juce::jlimit(-1.0f,1.0f,(313.0f-y)/50.0f);
+    proc.editImportedWavetableRange(drawingFrame,previousDrawIndex,sampleIndex,previousDrawValue,value);
+    previousDrawIndex=sampleIndex; previousDrawValue=value;
+    wavetableStatusLabel.setText("EDITING FRAME "+juce::String(drawingFrame+1)+" / 64",juce::dontSendNotification);
     repaint();
 }
 
@@ -715,7 +715,7 @@ void AuroraEditor::timerCallback() {
         changed = true;
     }
 
-    if (currentPage == 3) {
+    if (currentPage == 1) {
         for (int route = 0; route < 4; ++route) {
             const float activity = proc.getModRouteActivity(route);
             if (std::abs(activity - lastModRouteActivity[(size_t)route]) > 0.012f) {
@@ -730,43 +730,35 @@ void AuroraEditor::timerCallback() {
 }
 
 void AuroraEditor::setPage(int page) {
-    currentPage = page;
-    synthTab.setToggleState(page == 0, juce::dontSendNotification);
-    wtTab.setToggleState(page == 1, juce::dontSendNotification);
-    fxTab.setToggleState(page == 2, juce::dontSendNotification);
-    modTab.setToggleState(page == 3, juce::dontSendNotification);
-    seqTab.setToggleState(page == 4, juce::dontSendNotification);
-    auto show = [page](std::initializer_list<juce::Component*> list, bool visible) {
-        for (auto* component : list) component->setVisible(visible);
+    currentPage=juce::jlimit(0,2,page);
+    synthTab.setToggleState(currentPage==0,juce::dontSendNotification);
+    wtTab.setToggleState(currentPage==1,juce::dontSendNotification);
+    fxTab.setToggleState(currentPage==2,juce::dontSendNotification);
+    modTab.setVisible(false); seqTab.setVisible(false);
+    auto show=[](std::initializer_list<juce::Component*> list,bool visible){
+        for(auto* c:list)c->setVisible(visible);
     };
-    show({ &mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,&wave1,&wave2,
-           &oscModeBox,&filterTypeBox,&fmAmount,&syncRatio }, page == 0);
-    show({ &wtTable,&wtPosition,&unison,&uniDetune,&uniSpread,&importWavetableButton,
-           &clearWavetableButton,&wavetableStatusLabel }, page == 1);
-    show({ &fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb,
-            &fxCompThreshold,&fxCompRatio,&fxCompAttack,&fxCompRelease,&fxCompMakeup,&fxCompMix,
-            &fxCompEnabledButton,&fxPhaserRate,&fxPingTime,&fxPingFeedback,&fxReverbRoom,
-            &fxReverbDamping,&fxLimiterCeiling }, page == 2);
-    for (auto& slot : fxSlots)
-        slot.setVisible(page == 2);
-    show({ &lfo1Rate,&lfo2Rate,&lfo3Rate,&filterAttack,&filterDecay,&filterSustain,&filterRelease,&filterEnvAmount,
-           &lfo1Shape,&lfo2Shape,&lfo3Shape }, page == 3);
-    for (int i = 0; i < 4; ++i) {
-        modSources[(size_t)i].setVisible(page == 3);
-        modTargets[(size_t)i].setVisible(page == 3);
-        modAmounts[(size_t)i].setVisible(page == 3);
+    show({&mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,
+          &wave1,&wave2,&oscModeBox,&filterTypeBox,&fmAmount,&syncRatio,&wtTable,&wtPosition,
+          &unison,&uniDetune,&uniSpread,&importWavetableButton,&clearWavetableButton,&wavetableStatusLabel},currentPage==0);
+    show({&lfo1Rate,&lfo2Rate,&lfo3Rate,&filterAttack,&filterDecay,&filterSustain,&filterRelease,
+          &filterEnvAmount,&lfo1Shape,&lfo2Shape,&lfo3Shape},currentPage==1);
+    for(int i=0;i<4;++i){
+        modSources[(size_t)i].setVisible(currentPage==1);
+        modTargets[(size_t)i].setVisible(currentPage==1);
+        modAmounts[(size_t)i].setVisible(currentPage==1);
     }
-    show({ &seqModeBox, &arpStyleBox, &seqRateBox, &seqDirectionBox, &seqLengthBox,
-           &seqPageBox, &seqPatternSlotBox, &seqOctaves, &seqGate, &seqSwing,
-           &stepPitch, &stepVelocity, &stepGate, &stepAccentButton, &savePatternButton,
-           &loadPatternButton, &selectedStepLabel, &patternStatusLabel }, page == 4);
-    for (auto& button : stepButtons)
-        button.setVisible(page == 4);
-    if (page == 4)
-        refreshSelectedStepControls();
-    startTimerHz(30);
-    repaint();
-    resized();
+    show({&seqModeBox,&arpStyleBox,&seqRateBox,&seqDirectionBox,&seqLengthBox,&seqPageBox,
+          &seqPatternSlotBox,&seqOctaves,&seqGate,&seqSwing,&stepPitch,&stepVelocity,&stepGate,
+          &stepAccentButton,&savePatternButton,&loadPatternButton,&selectedStepLabel,&patternStatusLabel},currentPage==1);
+    for(auto& b:stepButtons)b.setVisible(currentPage==1);
+    show({&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb,
+          &fxCompThreshold,&fxCompRatio,&fxCompAttack,&fxCompRelease,&fxCompMakeup,&fxCompMix,
+          &fxCompEnabledButton,&fxPhaserRate,&fxPingTime,&fxPingFeedback,&fxReverbRoom,
+          &fxReverbDamping,&fxLimiterCeiling},currentPage==2);
+    for(auto& slot:fxSlots)slot.setVisible(currentPage==2);
+    if(currentPage==1)refreshSelectedStepControls();
+    startTimerHz(30); repaint(); resized();
 }
 
 
@@ -777,458 +769,234 @@ void AuroraEditor::parameterChanged(const juce::String& parameterID, float) {
 }
 
 void AuroraEditor::paint(juce::Graphics& g) {
-    juce::ColourGradient background(juce::Colour(0xff171026), 0.0f, 0.0f,
-                                    bg, 1200.0f, 820.0f, false);
-    g.setGradientFill(background);
-    g.fillAll();
+    const float scale=juce::jmin(getWidth()/1200.0f,getHeight()/820.0f);
+    const int ox=(getWidth()-juce::roundToInt(1200.0f*scale))/2;
+    const int oy=(getHeight()-juce::roundToInt(820.0f*scale))/2;
+    juce::ColourGradient bgMetal(juce::Colour(0xff41444d),0,0,juce::Colour(0xff11141b),1200,820,false);
+    g.setGradientFill(bgMetal); g.fillAll();
+    g.addTransform(juce::AffineTransform::translation((float)ox,(float)oy).scaled(scale));
 
-    const float scale = juce::jmin(getWidth() / 1200.0f, getHeight() / 820.0f);
-    const int ox = (getWidth() - juce::roundToInt(1200.0f * scale)) / 2;
-    const int oy = (getHeight() - juce::roundToInt(820.0f * scale)) / 2;
-    g.addTransform(juce::AffineTransform::translation((float)ox, (float)oy).scaled(scale));
-
-    g.setColour(surface);
-    g.fillRoundedRectangle(12.0f, 12.0f, 1176.0f, 796.0f, 19.0f);
-    g.setColour(border);
-    g.drawRoundedRectangle(12.5f, 12.5f, 1175.0f, 795.0f, 19.0f, 1.0f);
-
-    // Header / patch browser.
-    g.setColour(violet);
-    g.fillRoundedRectangle(34.0f, 26.0f, 4.0f, 40.0f, 2.0f);
-    g.setColour(muted);
-    g.setFont(juce::Font(juce::FontOptions(8.5f, juce::Font::bold)));
-    g.drawText("NORTHSTAR AUDIO  /  VIRTUAL INSTRUMENT", 43, 65, 205, 12,
-               juce::Justification::centredLeft);
-    g.setColour(white);
-    g.setFont(juce::Font(juce::FontOptions(10.0f, juce::Font::bold)));
-    g.drawText("PATCH BROWSER", 748, 17, 170, 12, juce::Justification::centredLeft);
-
-    g.setColour(border);
-    g.drawLine(32.0f, 108.0f, 1168.0f, 108.0f, 1.0f);
-    g.setColour(violet.withAlpha(0.9f));
-    g.fillRoundedRectangle(32.0f, 106.0f, 190.0f, 3.0f, 1.5f);
-
-    g.setColour(muted);
-    g.setFont(juce::Font(juce::FontOptions(8.5f, juce::Font::bold)));
-    g.drawText("OUT", 982, 72, 30, 12, juce::Justification::centredLeft);
-    g.setColour(cardHi);
-    g.fillRoundedRectangle(1013.0f, 76.0f, 155.0f, 5.0f, 2.5f);
-    g.setColour(violetHi.withAlpha(0.95f));
-    g.fillRoundedRectangle(1013.0f, 76.0f,
-        155.0f * juce::jlimit(0.0f, 1.0f, proc.getOutputPeak()), 5.0f, 2.5f);
-
-    auto panel = [&](int x, int y, int w, int h, const juce::String& title,
-                     const juce::String& subtitle) {
-        g.setColour(card);
-        g.fillRoundedRectangle((float)x, (float)y, (float)w, (float)h, 12.0f);
-        g.setColour(border.withAlpha(0.9f));
-        g.drawRoundedRectangle((float)x + 0.5f, (float)y + 0.5f,
-                               (float)w - 1.0f, (float)h - 1.0f, 12.0f, 1.0f);
-        g.setColour(violet);
-        g.fillRoundedRectangle((float)x + 15.0f, (float)y + 15.0f, 3.0f, 17.0f, 1.5f);
-        g.setColour(white);
-        g.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
-        g.drawText(title, x + 27, y + 11, w - 42, 20, juce::Justification::centredLeft);
-        g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.8f)));
-        g.drawText(subtitle, x + 27, y + 33, w - 42, 14, juce::Justification::centredLeft);
-        g.setColour(border.withAlpha(0.75f));
-        g.drawLine((float)x + 14.0f, (float)y + 60.0f,
-                   (float)(x + w - 14), (float)y + 60.0f, 1.0f);
-    };
-
-    auto label = [&](int x, int y, int w, const juce::String& text) {
-        g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.8f, juce::Font::bold)));
-        g.drawFittedText(text, x, y, w, 14, juce::Justification::centred, 1);
-    };
-
-    auto waveform = [&](int x, int y, int w, int h, int shape, const juce::String& title) {
-        g.setColour(juce::Colour(0xff100e1a));
-        g.fillRoundedRectangle((float)x, (float)y, (float)w, (float)h, 8.0f);
-        g.setColour(border);
-        g.drawRoundedRectangle((float)x + 0.5f, (float)y + 0.5f,
-                               (float)w - 1.0f, (float)h - 1.0f, 8.0f, 1.0f);
-        g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.0f, juce::Font::bold)));
-        g.drawText(title, x + 10, y + 7, w - 20, 12, juce::Justification::centredLeft);
-        const float mid = y + h * 0.62f;
-        const float amp = h * 0.28f;
-        g.setColour(border);
-        g.drawLine((float)x + 9.0f, mid, (float)(x + w - 9), mid, 0.8f);
-        juce::Path path;
-        for (int i = 0; i <= 192; ++i) {
-            const float t = (float)i / 192.0f;
-            float value = 0.0f;
-            switch (shape) {
-                case 1: value = t < 0.5f ? 1.0f : -1.0f; break;
-                case 2: value = 1.0f - 4.0f * std::abs(t - 0.5f); break;
-                case 3: value = std::sin(t * juce::MathConstants<float>::twoPi); break;
-                default: value = 2.0f * t - 1.0f; break;
-            }
-            const float px = x + 9.0f + t * (w - 18.0f);
-            const float py = mid - value * amp;
-            if (i == 0) path.startNewSubPath(px, py); else path.lineTo(px, py);
-        }
-        g.setColour(violet.withAlpha(0.15f));
-        g.strokePath(path, juce::PathStrokeType(6.0f, juce::PathStrokeType::curved,
-                                                juce::PathStrokeType::rounded));
-        g.setColour(violetHi);
-        g.strokePath(path, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved,
-                                                juce::PathStrokeType::rounded));
-    };
-
-    if (currentPage == 0) {
-        panel(32, 128, 250, 276, "OSCILLATOR 1", "PRIMARY WAVEFORM");
-        panel(294, 128, 250, 276, "OSCILLATOR 2", "SECONDARY / MODULATOR");
-        panel(556, 128, 280, 276, "VOICE MIX", "BLEND / DETUNE / SUB");
-        panel(848, 128, 320, 276, "FILTER", "TONE SHAPING");
-        panel(32, 410, 700, 316, "AMPLIFIER ENVELOPE", "ATTACK / DECAY / SUSTAIN / RELEASE");
-        panel(744, 410, 424, 316, "OUTPUT", "LEVEL / DRIVE / STEREO WIDTH");
-
-        const int w1 = (int)proc.params.getRawParameterValue("wave1")->load();
-        const int w2 = (int)proc.params.getRawParameterValue("wave2")->load();
-        waveform(52, 238, 210, 80, w1, "OSC 1 WAVE");
-        waveform(314, 238, 210, 80, w2, "OSC 2 WAVE");
-        label(52, 190, 210, "WAVEFORM");
-        label(314, 190, 210, "WAVEFORM");
-        label(572, 190, 248, "ENGINE MODE");
-        label(314, 320, 210, "FM AMOUNT");
-        label(314, 359, 210, "HARD SYNC RATIO");
-        label(568, 230, 80, "OSC MIX");
-        label(656, 230, 80, "DETUNE");
-        label(744, 230, 80, "SUB LEVEL");
-        label(867, 190, 280, "FILTER TYPE");
-        label(874, 252, 128, "CUTOFF");
-        label(1022, 252, 128, "RESONANCE");
-        label(62, 480, 142, "ATTACK");
-        label(224, 480, 142, "DECAY");
-        label(386, 480, 142, "SUSTAIN");
-        label(548, 480, 142, "RELEASE");
-        label(768, 480, 112, "MASTER");
-        label(900, 480, 112, "DRIVE");
-        label(1032, 480, 112, "WIDTH");
-        g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.5f)));
-        g.drawText("SELECT A SHAPE TO CHANGE THE OSCILLATOR", 52, 355, 210, 14,
-                   juce::Justification::centredLeft);
+    juce::ColourGradient chassis(juce::Colour(0xff3b3e46),18,18,juce::Colour(0xff171a21),1180,800,false);
+    g.setGradientFill(chassis); g.fillRoundedRectangle(12,12,1176,796,18);
+    for(int y=18;y<800;y+=4){
+        g.setColour(juce::Colours::white.withAlpha((y%16==0)?0.032f:0.012f));
+        g.drawLine(20,(float)y,1180,(float)y,0.5f);
     }
-    else if (currentPage == 1) {
-        panel(32, 128, 270, 268, "TABLE SOURCE", "SELECT / IMPORT / MORPH");
-        panel(318, 128, 850, 268, "WAVETABLE DISPLAY", "64-FRAME MORPH TABLE / DRAW TO EDIT");
-        panel(32, 414, 1136, 312, "UNISON ENGINE", "VOICE STACK / DETUNE / STEREO SPREAD");
+    g.setColour(juce::Colour(0xff858994).withAlpha(0.45f));
+    g.drawRoundedRectangle(12.5f,12.5f,1175,795,18,1.0f);
+    g.setColour(juce::Colour(0xff050609).withAlpha(0.8f));
+    g.drawRoundedRectangle(16,16,1168,788,15,1.0f);
 
-        label(54, 190, 226, "WAVETABLE BANK");
-        label(82, 226, 166, "MORPH POSITION");
-        const int table = (int)proc.params.getRawParameterValue("wtTable")->load();
-        const float position = proc.params.getRawParameterValue("wtPosition")->load();
-        auto tableWave = [this, table, position](float t) {
-            if (table == 6)
-                return proc.getImportedWavetableSample(t, position);
-            const float saw = 2.0f * t - 1.0f;
-            const float sine = std::sin(t * juce::MathConstants<float>::twoPi);
-            const float square = t < 0.5f ? 1.0f : -1.0f;
-            const float triangle = 1.0f - 4.0f * std::abs(t - 0.5f);
-            float a = saw, b = sine;
-            switch (table) {
-                case 1: a = square; b = triangle; break;
-                case 2: a = triangle; b = sine; break;
-                case 3: a = saw; b = square; break;
-                case 4: a = sine; b = std::sin(t * juce::MathConstants<float>::twoPi * 2.0f); break;
-                case 5: a = saw; b = std::tanh(saw * 3.0f); break;
-                default: a = saw; b = sine; break;
-            }
-            return juce::jmap(position, a, b);
+    auto screw=[&](float x,float y){
+        juce::ColourGradient metal(juce::Colour(0xffa0a3ac),x,y-4,juce::Colour(0xff252830),x,y+4,false);
+        g.setGradientFill(metal);g.fillEllipse(x-4,y-4,8,8);
+        g.setColour(juce::Colour(0xff111319));g.drawLine(x-2.1f,y+1.8f,x+2.1f,y-1.8f,0.9f);
+    };
+    screw(25,25);screw(1175,25);screw(25,795);screw(1175,795);
+
+    g.setColour(juce::Colour(0xff0c0f15));g.fillRoundedRectangle(28,24,1144,78,10);
+    g.setColour(juce::Colour(0xff777b86).withAlpha(0.6f));g.drawRoundedRectangle(28.5f,24.5f,1143,77,10,1);
+    g.setColour(violet);g.fillRoundedRectangle(40,34,4,42,2);
+    g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
+    g.drawText("TIMAUDIO  /  VIRTUAL ANALOG SYNTH",52,67,195,12,juce::Justification::centredLeft);
+    g.setColour(white);g.setFont(juce::Font(juce::FontOptions(9.5f,juce::Font::bold)));
+    g.drawText("PATCH",758,17,54,12,juce::Justification::centredLeft);
+    g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
+    g.drawText("OUT",1008,67,30,12,juce::Justification::centredLeft);
+    g.setColour(juce::Colour(0xff080b11));g.fillRoundedRectangle(1040,70,112,6,3);
+    g.setColour(juce::Colour(0xff737986).withAlpha(0.6f));g.drawRoundedRectangle(1040,70,112,6,3,0.8f);
+    g.setColour(violetHi);g.fillRoundedRectangle(1040,70,112*juce::jlimit(0.0f,1.0f,proc.getOutputPeak()),6,3);
+
+    auto panel=[&](int x,int y,int w,int h,const juce::String& title,const juce::String& sub){
+        juce::ColourGradient face(juce::Colour(0xff41444d),(float)x,(float)y,juce::Colour(0xff20232b),(float)x,(float)(y+h),false);
+        g.setGradientFill(face);g.fillRoundedRectangle((float)x,(float)y,(float)w,(float)h,10);
+        g.setColour(juce::Colour(0xff9296a1).withAlpha(0.45f));g.drawRoundedRectangle(x+0.5f,y+0.5f,w-1.0f,h-1.0f,10,1);
+        g.setColour(juce::Colour(0xff090b10).withAlpha(0.8f));g.drawRoundedRectangle(x+3.0f,y+3.0f,w-6.0f,h-6.0f,8,0.8f);
+        for(int yy=y+5;yy<y+h-5;yy+=5){
+            g.setColour(juce::Colours::white.withAlpha((yy%20==0)?0.022f:0.008f));
+            g.drawLine(x+5.0f,(float)yy,x+w-5.0f,(float)yy,0.45f);
+        }
+        g.setColour(juce::Colour(0xff0b0d12).withAlpha(0.92f));g.fillRoundedRectangle(x+10.0f,y+10.0f,w-20.0f,48.0f,5);
+        g.setColour(violet);g.fillRoundedRectangle(x+15.0f,y+20.0f,3,17,1.4f);
+        g.setColour(white);g.setFont(juce::Font(juce::FontOptions(12.0f,juce::Font::bold)));
+        g.drawText(title,x+26,y+14,w-40,18,juce::Justification::centredLeft);
+        g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(7.8f,juce::Font::bold)));
+        g.drawFittedText(sub,x+26,y+34,w-42,14,juce::Justification::centredLeft,1);
+        g.setColour(juce::Colour(0xffa1a5ae).withAlpha(0.25f));g.drawLine(x+12.0f,y+64.0f,x+w-12.0f,y+64.0f,0.8f);
+        screw((float)x+12,(float)y+12);screw((float)(x+w-12),(float)y+12);
+    };
+    auto label=[&](int x,int y,int w,const juce::String& t){
+        g.setColour(juce::Colour(0xffc7c8cf));g.setFont(juce::Font(juce::FontOptions(8.2f,juce::Font::bold)));
+        g.drawFittedText(t,x,y,w,13,juce::Justification::centred,1);
+    };
+    auto waveform=[&](int x,int y,int w,int h,int shape,const juce::String& title){
+        juce::ColourGradient screen(juce::Colour(0xff080d13),(float)x,(float)y,juce::Colour(0xff151c27),(float)x,(float)(y+h),false);
+        g.setGradientFill(screen);g.fillRoundedRectangle(x,y,w,h,5);
+        g.setColour(juce::Colour(0xff7b8796).withAlpha(0.55f));g.drawRoundedRectangle(x+0.5f,y+0.5f,w-1.0f,h-1.0f,5,0.8f);
+        for(int i=1;i<8;++i){float gx=x+(float)i*w/8.0f;g.setColour(juce::Colour(0xff8290a1).withAlpha(0.2f));g.drawLine(gx,y+5.0f,gx,y+h-5.0f,0.55f);}
+        const float mid=y+h*0.58f;g.setColour(juce::Colour(0xff8793a2).withAlpha(0.3f));g.drawLine(x+6.0f,mid,x+w-6.0f,mid,0.6f);
+        juce::Path p;
+        for(int i=0;i<=192;++i){
+            float t=(float)i/192.0f,v=0;
+            switch(shape){case 1:v=t<0.5f?1.0f:-1.0f;break;case 2:v=1.0f-4.0f*std::abs(t-0.5f);break;case 3:v=std::sin(t*juce::MathConstants<float>::twoPi);break;default:v=2.0f*t-1.0f;break;}
+            float px=x+6.0f+t*(w-12.0f),py=mid-v*h*0.3f;
+            if(i==0)p.startNewSubPath(px,py);else p.lineTo(px,py);
+        }
+        g.setColour(violet.withAlpha(0.2f));g.strokePath(p,juce::PathStrokeType(5.0f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+        g.setColour(violetHi);g.strokePath(p,juce::PathStrokeType(1.7f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+        g.setColour(juce::Colour(0xffaeb4c0));g.setFont(juce::Font(juce::FontOptions(7.0f,juce::Font::bold)));
+        g.drawText(title,x+8,y+3,w-16,10,juce::Justification::centredLeft);
+    };
+
+    g.setColour(juce::Colour(0xff969ba5).withAlpha(0.25f));g.drawLine(748,20,1160,20,0.8f);
+    g.setColour(violet.withAlpha(0.9f));g.fillRoundedRectangle(32,106,1136,2,1);
+
+    if(currentPage==0){
+        panel(32,128,560,300,"OSCILLATOR SECTION","DUAL VCO  /  PHASE / FM / HARD SYNC");
+        panel(608,128,560,300,"WAVETABLE LAB","64 FRAME MORPH ENGINE  /  DRAW OR IMPORT");
+        panel(32,448,300,278,"FILTER","STATE VARIABLE / RESONANCE");
+        panel(348,448,480,278,"AMPLIFIER ENVELOPE","ADSR / AMPLITUDE SHAPING");
+        panel(844,448,324,278,"VOICE / OUTPUT","MIX / UNISON / MASTER");
+
+        label(52,194,155,"OSCILLATOR 1");label(216,194,155,"OSCILLATOR 2");label(380,194,190,"ENGINE MODE");
+        const int w1=(int)proc.params.getRawParameterValue("wave1")->load();
+        const int w2=(int)proc.params.getRawParameterValue("wave2")->load();
+        waveform(52,239,230,74,w1,"VCO 1");waveform(302,239,248,74,w2,"VCO 2");
+        label(52,324,230,"FM AMOUNT");label(310,324,240,"HARD SYNC RATIO");
+
+        label(628,193,240,"SOURCE BANK");label(880,193,132,"IMPORT AUDIO");label(1022,193,126,"CLEAR TABLE");
+        label(628,380,520,"MORPH POSITION  /  DRAW ON THE SCOPE TO EDIT THE ACTIVE FRAME");
+        const int table=(int)proc.params.getRawParameterValue("wtTable")->load();
+        const float position=proc.params.getRawParameterValue("wtPosition")->load();
+        auto tableWave=[this,table,position](float t){
+            if(table==6)return proc.getImportedWavetableSample(t,position);
+            const float saw=2.0f*t-1.0f,sine=std::sin(t*juce::MathConstants<float>::twoPi);
+            const float square=t<0.5f?1.0f:-1.0f,triangle=1.0f-4.0f*std::abs(t-0.5f);
+            float a=saw,b=sine;
+            switch(table){case 1:a=square;b=triangle;break;case 2:a=triangle;b=sine;break;case 3:a=saw;b=square;break;case 4:a=sine;b=std::sin(t*juce::MathConstants<float>::twoPi*2.0f);break;case 5:a=saw;b=std::tanh(saw*3.0f);break;default:break;}
+            return juce::jmap(position,a,b);
         };
-        const int gx = 342, gy = 210, gw = 802, gh = 156;
-        g.setColour(juce::Colour(0xff100e1a));
-        g.fillRoundedRectangle((float)gx, (float)gy, (float)gw, (float)gh, 9.0f);
-        g.setColour(border);
-        g.drawRoundedRectangle((float)gx + 0.5f, (float)gy + 0.5f,
-                               (float)gw - 1.0f, (float)gh - 1.0f, 9.0f, 1.0f);
-        const float mid = gy + gh * 0.55f;
-        g.setColour(border);
-        for (int i = 1; i < 8; ++i) {
-            const float gxLine = gx + (float)i * gw / 8.0f;
-            g.drawLine(gxLine, (float)gy + 8.0f, gxLine, (float)(gy + gh - 8), 0.5f);
+        juce::ColourGradient scope(juce::Colour(0xff080d13),628,248,juce::Colour(0xff141b25),628,378,false);
+        g.setGradientFill(scope);g.fillRoundedRectangle(628,248,520,130,6);
+        g.setColour(juce::Colour(0xff778393).withAlpha(0.55f));g.drawRoundedRectangle(628.5f,248.5f,519,129,6,0.8f);
+        for(int i=1;i<9;++i){float gx=628.0f+(float)i*520.0f/9.0f;g.setColour(juce::Colour(0xff8793a2).withAlpha(0.18f));g.drawLine(gx,255,gx,371,0.6f);}
+        g.setColour(juce::Colour(0xff8793a2).withAlpha(0.3f));g.drawLine(638,313,1138,313,0.7f);
+        juce::Path scopePath;
+        for(int i=0;i<=320;++i){float t=(float)i/320.0f,px=638.0f+t*500.0f,py=313.0f-tableWave(t)*50.0f;if(i==0)scopePath.startNewSubPath(px,py);else scopePath.lineTo(px,py);}
+        g.setColour(violet.withAlpha(0.22f));g.strokePath(scopePath,juce::PathStrokeType(7.0f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+        g.setColour(violetHi);g.strokePath(scopePath,juce::PathStrokeType(1.8f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+
+        label(52,500,260,"FILTER TYPE");label(52,548,116,"CUTOFF");label(184,548,116,"RESONANCE");
+        label(368,520,100,"ATTACK");label(480,520,100,"DECAY");label(592,520,100,"SUSTAIN");label(704,520,100,"RELEASE");
+        label(858,510,92,"OSC MIX");label(958,510,92,"DETUNE");label(1058,510,92,"SUB");
+        label(858,578,92,"UNISON");label(958,578,92,"UNI DETUNE");label(1058,578,92,"SPREAD");
+        label(858,646,92,"MASTER");label(958,646,92,"DRIVE");label(1058,646,92,"WIDTH");
+    }else if(currentPage==1){
+        panel(32,128,272,178,"LFO 1","GLOBAL MODULATOR");panel(316,128,272,178,"LFO 2","GLOBAL MODULATOR");
+        panel(600,128,272,178,"LFO 3","GLOBAL MODULATOR");panel(884,128,284,178,"FILTER ENVELOPE","PER-VOICE CUTOFF SHAPING");
+        label(50,200,90,"RATE");label(150,200,122,"WAVE SHAPE");label(334,200,90,"RATE");label(434,200,122,"WAVE SHAPE");
+        label(618,200,90,"RATE");label(718,200,122,"WAVE SHAPE");label(900,200,54,"A");label(954,200,54,"D");
+        label(1008,200,54,"S");label(1062,200,54,"R");label(910,276,230,"FILTER ENV AMOUNT");
+        panel(32,326,1136,140,"MODULATION MATRIX","FOUR ASSIGNABLE ROUTES  /  SOURCE TO TARGET");
+        for(int i=0;i<4;++i){
+            int x=48+i*282;
+            g.setColour(juce::Colour(0xff0d1017).withAlpha(0.7f));g.fillRoundedRectangle((float)x,390,268,62,5);
+            g.setColour(juce::Colour(0xff808592).withAlpha(0.25f));g.drawRoundedRectangle(x+0.5f,390.5f,267,61,5,0.7f);
+            g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(7.3f,juce::Font::bold)));
+            g.drawText("ROUTE "+juce::String(i+1),x+8,376,100,11,juce::Justification::centredLeft);
+            float activity=proc.getModRouteActivity(i);
+            g.setColour(juce::Colour(0xff252a34));g.fillRoundedRectangle(x+9.0f,442,248,3,1.5f);
+            g.setColour(violetHi);g.fillRoundedRectangle(x+9.0f,442,248*juce::jlimit(0.0f,1.0f,activity),3,1.5f);
         }
-        g.drawLine((float)gx + 10.0f, mid, (float)(gx + gw - 10), mid, 0.8f);
-        juce::Path preview;
-        for (int i = 0; i <= 320; ++i) {
-            const float t = (float)i / 320.0f;
-            const float px = gx + 10.0f + t * (gw - 20.0f);
-            const float py = mid - tableWave(t) * 58.0f;
-            if (i == 0) preview.startNewSubPath(px, py); else preview.lineTo(px, py);
+        panel(32,484,1136,242,"PERFORMANCE SEQUENCER","ARPEGGIATOR / 32 STEP PATTERN  /  HOST SYNC");
+        label(52,536,140,"MODE");label(200,536,130,"ARP ORDER");label(338,536,100,"RATE");label(446,536,130,"DIRECTION");
+        label(584,536,110,"LENGTH");label(704,536,140,"OCTAVES");label(852,536,140,"GLOBAL GATE");label(1000,536,150,"SWING");
+        const int pageOffset=seqPageBox.getSelectedId()==2?16:0;
+        if(lastActiveStep>=pageOffset&&lastActiveStep<pageOffset+16){
+            const int local=lastActiveStep-pageOffset,x=52+(local%8)*61,y=610+(local/8)*34;
+            g.setColour(violetHi.withAlpha(0.8f));g.drawRoundedRectangle((float)x-2,(float)y-2,58,32,4,1.5f);
         }
-        g.setColour(violet.withAlpha(0.14f));
-        g.strokePath(preview, juce::PathStrokeType(7.0f, juce::PathStrokeType::curved,
-                                                   juce::PathStrokeType::rounded));
-        g.setColour(violetHi);
-        g.strokePath(preview, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved,
-                                                   juce::PathStrokeType::rounded));
-        g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.0f, juce::Font::bold)));
-        g.drawText("FRAME 01", gx + 12, gy + gh - 18, 90, 12, juce::Justification::centredLeft);
-        g.drawText("FRAME 64", gx + gw - 102, gy + gh - 18, 90, 12, juce::Justification::centredRight);
-        g.setColour(violetHi);
-        g.drawText("DRAW DIRECTLY ON THE WAVEFORM TO EDIT THE SELECTED FRAME",
-                   gx + 12, gy + gh + 8, gw - 24, 14, juce::Justification::centred);
-        label(174, 490, 140, "UNISON VOICES");
-        label(510, 490, 140, "DETUNE AMOUNT");
-        label(846, 490, 140, "STEREO SPREAD");
-        g.setColour(cardHi);
-        g.fillRoundedRectangle(1016.0f, 510.0f, 120.0f, 142.0f, 9.0f);
-        g.setColour(border);
-        g.drawRoundedRectangle(1016.5f, 510.5f, 119.0f, 141.0f, 9.0f, 1.0f);
-        g.setColour(violetHi);
-        g.setFont(juce::Font(juce::FontOptions(9.0f, juce::Font::bold)));
-        g.drawText("7 VOICE", 1026, 530, 100, 18, juce::Justification::centred);
-        g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.5f)));
-        g.drawFittedText("Wide stacked voices with a focused centre.", 1028, 558, 96, 72,
-                         juce::Justification::centred, 4);
+        const int selectedX=52+(selectedStep%8)*61,selectedY=610+(selectedStep/8)*34;
+        g.setColour(violet.withAlpha(0.95f));g.drawRoundedRectangle((float)selectedX-1.5f,(float)selectedY-1.5f,57,31,4,1.4f);
+    }else{
+        panel(32,128,1136,112,"FX SIGNAL CHAIN","SIX INSERT SLOTS / LEFT TO RIGHT");
+        for(int i=0;i<6;++i){
+            const int sx=42+i*186;
+            g.setColour(juce::Colour(0xff090c12).withAlpha(0.9f));g.fillRoundedRectangle((float)sx,193,178,32,6);
+            g.setColour(violet.withAlpha(0.32f));g.drawRoundedRectangle(sx+0.5f,193.5f,177,31,6,0.9f);
+            g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(7.8f,juce::Font::bold)));
+            g.drawText("INSERT 0"+juce::String(i+1),sx+6,176,164,12,juce::Justification::centredLeft);
+        }
+        panel(32,256,258,470,"EQ / DRIVE","TONE / HARMONICS");panel(304,256,420,470,"DYNAMICS","COMPRESSOR / LEVEL CONTROL");
+        panel(738,256,430,470,"TIME / SPACE","MODULATION / AMBIENCE / LIMITING");
+        label(42,338,70,"EQ MIX");label(114,338,70,"LOW");label(186,338,70,"MID");label(78,502,70,"HIGH");label(150,502,70,"SATURATION");
+        label(324,362,110,"THRESHOLD");label(450,362,110,"RATIO");label(576,362,110,"ATTACK");
+        label(324,526,110,"RELEASE");label(450,526,110,"MAKEUP");label(576,526,110,"MIX");
+        label(750,326,92,"CHORUS");label(844,326,92,"FLANGER");label(938,326,92,"DELAY");label(1032,326,92,"REVERB");
+        label(752,492,180,"PHASER RATE");label(950,492,190,"PING TIME");label(752,555,180,"PING FEEDBACK");
+        label(950,555,190,"ROOM SIZE");label(752,618,180,"DAMPING");label(950,618,190,"LIMITER CEILING");
     }
-    else if (currentPage == 2) {
-        panel(32, 128, 1136, 112, "FX SIGNAL CHAIN", "SIX INSERT SLOTS / LEFT TO RIGHT");
-        for (int i = 0; i < 6; ++i) {
-            const int sx = 42 + i * 186;
-            g.setColour(muted);
-            g.setFont(juce::Font(juce::FontOptions(8.0f, juce::Font::bold)));
-            g.drawText("SLOT " + juce::String(i + 1), sx + 6, 176, 164, 12,
-                       juce::Justification::centredLeft);
-            g.setColour(violet.withAlpha(0.24f));
-            g.fillRoundedRectangle((float)sx, 193.0f, 178.0f, 32.0f, 7.0f);
-            g.setColour(border);
-            g.drawRoundedRectangle((float)sx + 0.5f, 193.5f, 177.0f, 31.0f, 7.0f, 1.0f);
-        }
-
-        panel(32, 256, 258, 470, "EQ / DRIVE", "TONE SHAPING / HARMONICS");
-        panel(304, 256, 420, 470, "DYNAMICS", "COMPRESSOR / LEVEL CONTROL");
-        panel(738, 256, 430, 470, "TIME / SPACE", "MODULATION / AMBIENCE / LIMITING");
-
-        label(42, 338, 70, "EQ MIX");
-        label(114, 338, 70, "LOW");
-        label(186, 338, 70, "MID");
-        label(78, 502, 70, "HIGH");
-        label(150, 502, 70, "SATURATION");
-
-        label(324, 362, 110, "THRESHOLD");
-        label(450, 362, 110, "RATIO");
-        label(576, 362, 110, "ATTACK");
-        label(324, 526, 110, "RELEASE");
-        label(450, 526, 110, "MAKEUP");
-        label(576, 526, 110, "MIX");
-
-        label(750, 326, 92, "CHORUS");
-        label(844, 326, 92, "PHASER");
-        label(938, 326, 92, "PING-PONG");
-        label(1032, 326, 92, "REVERB");
-        label(752, 492, 180, "PHASER RATE");
-        label(950, 492, 190, "PING TIME");
-        label(752, 555, 180, "PING FEEDBACK");
-        label(950, 555, 190, "ROOM SIZE");
-        label(752, 618, 180, "DAMPING");
-        label(950, 618, 190, "LIMITER CEILING");
-    }
-    else if (currentPage == 3) {
-        panel(32, 128, 360, 212, "LFO 1", "GLOBAL MODULATOR");
-        panel(420, 128, 360, 212, "LFO 2", "GLOBAL MODULATOR");
-        panel(808, 128, 360, 212, "LFO 3", "GLOBAL MODULATOR");
-        panel(32, 360, 730, 366, "MODULATION MATRIX", "ROUTE A SOURCE TO A DESTINATION");
-        panel(780, 360, 388, 366, "FILTER ENVELOPE", "PER-VOICE CUTOFF SHAPING");
-
-        label(52, 190, 90, "RATE");
-        label(170, 190, 190, "WAVE SHAPE");
-        label(440, 190, 90, "RATE");
-        label(558, 190, 190, "WAVE SHAPE");
-        label(828, 190, 90, "RATE");
-        label(946, 190, 190, "WAVE SHAPE");
-
-        g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.5f, juce::Font::bold)));
-        g.drawText("SOURCE", 54, 428, 145, 13, juce::Justification::centredLeft);
-        g.drawText("DESTINATION", 224, 428, 145, 13, juce::Justification::centredLeft);
-        g.drawText("DEPTH / ACTIVITY", 400, 428, 315, 13, juce::Justification::centredLeft);
-        for (int i = 0; i < 4; ++i) {
-            const int rowY = 444 + i * 62;
-            const float activity = proc.getModRouteActivity(i);
-            g.setColour(cardHi);
-            g.fillRoundedRectangle(400.0f, (float)(rowY + 37), 310.0f, 4.0f, 2.0f);
-            g.setColour(violetHi.withAlpha(0.95f));
-            g.fillRoundedRectangle(400.0f, (float)(rowY + 37),
-                310.0f * juce::jlimit(0.0f, 1.0f, activity), 4.0f, 2.0f);
-            g.setColour(border.withAlpha(0.7f));
-            g.drawLine(52.0f, (float)(rowY + 52), 738.0f, (float)(rowY + 52), 0.8f);
-        }
-        label(800, 448, 82, "ATTACK");
-        label(888, 448, 82, "DECAY");
-        label(976, 448, 82, "SUSTAIN");
-        label(1064, 448, 82, "RELEASE");
-        label(824, 610, 300, "FILTER ENV AMOUNT");
-    }
-    else {
-        panel(32, 128, 1136, 176, "PERFORMANCE", "HOST SYNC / ARPEGGIATOR / STEP SEQUENCER");
-        panel(32, 328, 1136, 398, "STEP PATTERN", "32 STEPS / SELECT A STEP TO EDIT ITS PARAMETERS");
-        label(54, 172, 180, "MODE");
-        label(252, 172, 180, "ARP ORDER");
-        label(450, 172, 180, "RATE");
-        label(648, 172, 460, "OCTAVES");
-        label(54, 248, 180, "DIRECTION");
-        label(252, 248, 160, "LENGTH");
-        label(430, 248, 300, "GLOBAL GATE");
-        label(750, 248, 370, "SWING");
-
-        panel(590, 386, 548, 318, "STEP DETAIL", "PITCH / VELOCITY / GATE / ACCENT");
-        g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(8.5f, juce::Font::bold)));
-        g.drawText("PITCH (SEMITONES)", 620, 456, 420, 12, juce::Justification::centredLeft);
-        g.drawText("VELOCITY", 620, 530, 420, 12, juce::Justification::centredLeft);
-        g.drawText("STEP GATE", 620, 604, 420, 12, juce::Justification::centredLeft);
-        g.drawText("USER PATTERN BANK", 54, 654, 180, 12, juce::Justification::centredLeft);
-
-        const int pageOffset = seqPageBox.getSelectedId() == 2 ? 16 : 0;
-        if (lastActiveStep >= pageOffset && lastActiveStep < pageOffset + 16) {
-            const int local = lastActiveStep - pageOffset;
-            const int x = 54 + (local % 4) * 124;
-            const int y = 414 + (local / 4) * 60;
-            g.setColour(violetHi.withAlpha(0.85f));
-            g.drawRoundedRectangle((float)x - 3.0f, (float)y - 3.0f, 118.0f, 48.0f, 7.0f, 2.0f);
-        }
-        const int selectedX = 54 + (selectedStep % 4) * 124;
-        const int selectedY = 414 + (selectedStep / 4) * 60;
-        g.setColour(violet.withAlpha(0.9f));
-        g.drawRoundedRectangle((float)selectedX - 2.0f, (float)selectedY - 2.0f,
-                               116.0f, 46.0f, 7.0f, 1.5f);
-    }
-
-    g.setColour(border);
-    g.drawLine(32.0f, 776.0f, 1168.0f, 776.0f, 1.0f);
-    g.setColour(muted);
-    g.setFont(juce::Font(juce::FontOptions(8.5f)));
-    g.drawText("2RICH  /  NORTHSTAR AUDIO", 34, 784, 280, 12, juce::Justification::centredLeft);
-    g.drawText("SYNTH  /  WAVETABLE  /  FX  /  MOD  /  SEQ", 828, 784, 340, 12,
-               juce::Justification::centredRight);
+    g.setColour(juce::Colour(0xff9398a3).withAlpha(0.28f));g.drawLine(32,778,1168,778,0.8f);
+    g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(7.8f,juce::Font::bold)));
+    g.drawText("2RICH  /  TIMAUDIO",36,784,260,12,juce::Justification::centredLeft);
+    g.drawText("VOICE  /  MOTION  /  FX",850,784,318,12,juce::Justification::centredRight);
 }
 
 void AuroraEditor::resized() {
-    const float scale = juce::jmin(getWidth() / 1200.0f, getHeight() / 820.0f);
-    const int ox = (getWidth() - juce::roundToInt(1200.0f * scale)) / 2;
-    const int oy = (getHeight() - juce::roundToInt(820.0f * scale)) / 2;
-    auto place = [&](juce::Component& component, juce::Rectangle<int> bounds) {
-        component.setBounds(scaledBounds(bounds, scale, ox, oy));
-    };
+    const float scale=juce::jmin(getWidth()/1200.0f,getHeight()/820.0f);
+    const int ox=(getWidth()-juce::roundToInt(1200.0f*scale))/2,oy=(getHeight()-juce::roundToInt(820.0f*scale))/2;
+    auto place=[&](juce::Component& c,juce::Rectangle<int> b){c.setBounds(scaledBounds(b,scale,ox,oy));};
 
-    // Header: brand, navigation and patch browser.
-    place(heading, {43, 22, 180, 40});
-    place(synthTab, {258, 34, 86, 34});
-    place(wtTab, {352, 34, 112, 34});
-    place(fxTab, {472, 34, 72, 34});
-    place(modTab, {552, 34, 78, 34});
-    place(seqTab, {638, 34, 80, 34});
-    place(presetSearch, {748, 34, 142, 30});
-    place(presets, {898, 34, 270, 30});
-    place(presetFavoriteButton, {748, 72, 66, 24});
-    place(savePresetButton, {822, 72, 66, 24});
-    place(loadPresetButton, {896, 72, 66, 24});
+    place(heading,{52,26,176,40});place(synthTab,{258,35,86,32});place(wtTab,{352,35,124,32});place(fxTab,{484,35,72,32});
+    place(presetSearch,{758,34,142,29});place(presets,{908,34,244,29});
+    place(presetFavoriteButton,{758,70,66,22});place(savePresetButton,{832,70,66,22});place(loadPresetButton,{906,70,66,22});
+    modTab.setVisible(false);seqTab.setVisible(false);
 
-    // Main synth page.
-    place(wave1, {52, 205, 210, 30});
-    place(wave2, {314, 205, 210, 30});
-    place(oscModeBox, {572, 205, 248, 30});
-    place(fmAmount, {314, 337, 210, 22});
-    place(syncRatio, {314, 375, 210, 22});
-    place(mix, {568, 248, 80, 126});
-    place(detune, {656, 248, 80, 126});
-    place(sub, {744, 248, 80, 126});
-    place(filterTypeBox, {868, 205, 280, 30});
-    place(cutoff, {874, 270, 128, 126});
-    place(res, {1022, 270, 128, 126});
-    place(attack, {62, 504, 142, 188});
-    place(decay, {224, 504, 142, 188});
-    place(sustain, {386, 504, 142, 188});
-    place(release, {548, 504, 142, 188});
-    place(master, {768, 504, 112, 188});
-    place(drive, {900, 504, 112, 188});
-    place(width, {1032, 504, 112, 188});
+    // VOICE: oscillator and wavetable top row.
+    place(wave1,{52,207,155,28});place(wave2,{216,207,155,28});place(oscModeBox,{380,207,190,28});
+    place(fmAmount,{52,343,230,24});place(syncRatio,{310,343,240,24});
+    place(wtTable,{628,207,240,28});place(importWavetableButton,{880,207,132,28});place(clearWavetableButton,{1022,207,126,28});
+    place(wavetableStatusLabel,{628,232,520,15});place(wtPosition,{628,393,520,23});
+    place(filterTypeBox,{52,520,260,28});place(cutoff,{52,562,116,150});place(res,{184,562,116,150});
+    place(attack,{368,535,100,172});place(decay,{480,535,100,172});place(sustain,{592,535,100,172});place(release,{704,535,100,172});
+    const int vx[3]={858,958,1058},vy[3]={518,584,650};
+    juce::Slider* voice[9]={&mix,&detune,&sub,&unison,&uniDetune,&uniSpread,&master,&drive,&width};
+    for(int i=0;i<9;++i)place(*voice[i],{vx[i%3],vy[i/3],92,64});
 
-    // Wavetable page.
-    place(wtTable, {54, 205, 226, 30});
-    place(wtPosition, {82, 238, 166, 96});
-    place(importWavetableButton, {54, 344, 106, 27});
-    place(clearWavetableButton, {174, 344, 106, 27});
-    place(wavetableStatusLabel, {54, 374, 226, 18});
-    place(unison, {174, 518, 140, 174});
-    place(uniDetune, {510, 518, 140, 174});
-    place(uniSpread, {846, 518, 140, 174});
-
-    // FX page: six insert slots, EQ/drive, dynamics and time/space.
-    for (int i = 0; i < 6; ++i)
-        place(fxSlots[(size_t)i], {42 + i * 186, 193, 178, 32});
-    place(fxEq, {42, 356, 70, 126});
-    place(fxLow, {114, 356, 70, 126});
-    place(fxMid, {186, 356, 70, 126});
-    place(fxHigh, {78, 520, 70, 126});
-    place(fxDist, {150, 520, 70, 126});
-    place(fxCompEnabledButton, {326, 328, 376, 28});
-    place(fxCompThreshold, {324, 382, 110, 132});
-    place(fxCompRatio, {450, 382, 110, 132});
-    place(fxCompAttack, {576, 382, 110, 132});
-    place(fxCompRelease, {324, 548, 110, 132});
-    place(fxCompMakeup, {450, 548, 110, 132});
-    place(fxCompMix, {576, 548, 110, 132});
-    place(fxChorus, {750, 344, 92, 132});
-    place(fxFlange, {844, 344, 92, 132});
-    place(fxDelay, {938, 344, 92, 132});
-    place(fxReverb, {1032, 344, 92, 132});
-    place(fxPhaserRate, {752, 512, 180, 28});
-    place(fxPingTime, {950, 512, 190, 28});
-    place(fxPingFeedback, {752, 575, 180, 28});
-    place(fxReverbRoom, {950, 575, 190, 28});
-    place(fxReverbDamping, {752, 638, 180, 28});
-    place(fxLimiterCeiling, {950, 638, 190, 28});
-
-    // Modulation matrix page.
-    place(lfo1Rate, {52, 216, 90, 118});
-    place(lfo1Shape, {170, 222, 190, 30});
-    place(lfo2Rate, {440, 216, 90, 118});
-    place(lfo2Shape, {558, 222, 190, 30});
-    place(lfo3Rate, {828, 216, 90, 118});
-    place(lfo3Shape, {946, 222, 190, 30});
-    for (int i = 0; i < 4; ++i) {
-        const int rowY = 444 + i * 62;
-        place(modSources[(size_t)i], {54, rowY, 145, 30});
-        place(modTargets[(size_t)i], {224, rowY, 145, 30});
-        place(modAmounts[(size_t)i], {400, rowY + 4, 310, 26});
+    // MOTION: LFOs and filter envelope.
+    place(lfo1Rate,{50,216,90,82});place(lfo1Shape,{150,224,122,30});
+    place(lfo2Rate,{334,216,90,82});place(lfo2Shape,{434,224,122,30});
+    place(lfo3Rate,{618,216,90,82});place(lfo3Shape,{718,224,122,30});
+    place(filterAttack,{900,218,54,72});place(filterDecay,{954,218,54,72});
+    place(filterSustain,{1008,218,54,72});place(filterRelease,{1062,218,54,72});
+    place(filterEnvAmount,{910,276,230,22});
+    for(int i=0;i<4;++i){
+        const int x=48+i*282;
+        place(modSources[(size_t)i],{x+8,398,124,28});
+        place(modTargets[(size_t)i],{x+140,398,120,28});
+        place(modAmounts[(size_t)i],{x+8,426,252,24});
     }
-    place(filterAttack, {800, 476, 82, 126});
-    place(filterDecay, {888, 476, 82, 126});
-    place(filterSustain, {976, 476, 82, 126});
-    place(filterRelease, {1064, 476, 82, 126});
-    place(filterEnvAmount, {824, 638, 300, 42});
 
-    // Sequencer page: performance controls above the step grid and detail editor.
-    place(seqModeBox, {54, 193, 180, 30});
-    place(arpStyleBox, {252, 193, 180, 30});
-    place(seqRateBox, {450, 193, 180, 30});
-    place(seqOctaves, {648, 193, 460, 30});
-    place(seqDirectionBox, {54, 267, 180, 30});
-    place(seqLengthBox, {252, 267, 160, 30});
-    place(seqGate, {430, 267, 300, 30});
-    place(seqSwing, {750, 267, 370, 30});
-    for (int i = 0; i < 16; ++i) {
-        const int x = 54 + (i % 4) * 124;
-        const int y = 414 + (i / 4) * 60;
-        place(stepButtons[(size_t)i], {x, y, 112, 42});
-    }
-    place(selectedStepLabel, {1004, 394, 120, 24});
-    place(stepPitch, {620, 472, 460, 32});
-    place(stepVelocity, {620, 546, 460, 32});
-    place(stepGate, {620, 620, 460, 32});
-    place(stepAccentButton, {620, 666, 160, 28});
-    place(seqPageBox, {54, 680, 160, 28});
-    place(seqPatternSlotBox, {230, 680, 156, 28});
-    place(savePatternButton, {402, 680, 76, 28});
-    place(loadPatternButton, {488, 680, 76, 28});
-    place(patternStatusLabel, {806, 680, 328, 24});
+    // Sequencer performance controls, 16 pads and selected-step inspector.
+    place(seqModeBox,{52,554,140,28});place(arpStyleBox,{200,554,130,28});place(seqRateBox,{338,554,100,28});
+    place(seqDirectionBox,{446,554,130,28});place(seqLengthBox,{584,554,110,28});
+    place(seqOctaves,{704,554,140,28});place(seqGate,{852,554,140,28});place(seqSwing,{1000,554,150,28});
+    for(int i=0;i<16;++i){const int x=52+(i%8)*61,y=610+(i/8)*34;place(stepButtons[(size_t)i],{x,y,56,28});}
+    place(stepPitch,{580,592,330,28});place(stepVelocity,{580,626,330,28});place(stepGate,{580,660,330,28});
+    place(selectedStepLabel,{930,578,100,24});place(stepAccentButton,{1040,578,110,28});
+    place(seqPageBox,{930,612,100,28});place(seqPatternSlotBox,{1040,612,110,28});
+    place(savePatternButton,{930,650,100,28});place(loadPatternButton,{1040,650,110,28});place(patternStatusLabel,{580,694,550,18});
+
+    // FX.
+    for(int i=0;i<6;++i)place(fxSlots[(size_t)i],{42+i*186,193,178,32});
+    place(fxEq,{42,356,70,126});place(fxLow,{114,356,70,126});place(fxMid,{186,356,70,126});
+    place(fxHigh,{78,520,70,126});place(fxDist,{150,520,70,126});
+    place(fxCompEnabledButton,{326,328,376,28});
+    place(fxCompThreshold,{324,382,110,132});place(fxCompRatio,{450,382,110,132});place(fxCompAttack,{576,382,110,132});
+    place(fxCompRelease,{324,548,110,132});place(fxCompMakeup,{450,548,110,132});place(fxCompMix,{576,548,110,132});
+    place(fxChorus,{750,344,92,132});place(fxFlange,{844,344,92,132});place(fxDelay,{938,344,92,132});place(fxReverb,{1032,344,92,132});
+    place(fxPhaserRate,{752,512,180,28});place(fxPingTime,{950,512,190,28});
+    place(fxPingFeedback,{752,575,180,28});place(fxReverbRoom,{950,575,190,28});
+    place(fxReverbDamping,{752,638,180,28});place(fxLimiterCeiling,{950,638,190,28});
 }
 
