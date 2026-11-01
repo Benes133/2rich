@@ -174,12 +174,14 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         attachments.push_back(std::make_unique<Attach>(ap, id, s));
     };
 
-    for (auto* box : { &wave1, &wave2, &presets }) {
+    for (auto* box : { &wave1, &wave2 }) {
         box->setLookAndFeel(&richLook);
         box->setColour(juce::ComboBox::textColourId, white);
         box->setColour(juce::ComboBox::arrowColourId, violetHi);
         addAndMakeVisible(*box);
     }
+    presets.setLookAndFeel(&richLook);
+    presets.setVisible(false); // Retains the selected factory ID for legacy preset-state helpers.
     wave1.addItemList({ "Saw", "Square", "Triangle", "Sine" }, 1);
     wave2.addItemList({ "Saw", "Square", "Triangle", "Sine" }, 1);
     wave1.onChange = [this] { repaint(); };
@@ -195,8 +197,8 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         updateFavoriteButton();
     };
 
-    presetSearch.setTextToShowWhenEmpty("SEARCH / fav:", muted);
-    presetSearch.setTooltip("Search factory presets by name. Type fav: to show only favourites, or fav:lead to narrow the favourite list.");
+    presetSearch.setTextToShowWhenEmpty("SEARCH 500 FACTORY PATCHES", muted);
+    presetSearch.setTooltip("Search all factory sounds. Prefix with fav: to show favourites only.");
     presetSearch.setColour(juce::TextEditor::backgroundColourId, surface);
     presetSearch.setColour(juce::TextEditor::textColourId, white);
     presetSearch.setColour(juce::TextEditor::highlightColourId, violet);
@@ -204,6 +206,27 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     presetSearch.setColour(juce::TextEditor::focusedOutlineColourId, violetHi);
     presetSearch.onTextChange = [this] { rebuildPresetList(); };
     addAndMakeVisible(presetSearch);
+    presetCategoryFilter.setLookAndFeel(&richLook);
+    presetCategoryFilter.setColour(juce::ComboBox::textColourId, white);
+    presetCategoryFilter.setColour(juce::ComboBox::arrowColourId, violetHi);
+    presetCategoryFilter.addItemList({ "ALL SOUNDS", "LEADS", "PADS", "ATMOSPHERES",
+        "KEYS", "PIANOS", "PLUCKS", "BASS", "SYNTHS", "SOUND FX", "TEXTURES", "FX & SYNTH" }, 1);
+    presetCategoryFilter.onChange = [this] { rebuildPresetList(); };
+    addAndMakeVisible(presetCategoryFilter);
+    presetBrowserList.setModel(this);
+    presetBrowserList.setRowHeight(30);
+    presetBrowserList.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff0d1017));
+    presetBrowserList.setColour(juce::ListBox::outlineColourId, border);
+    presetBrowserList.setOutlineThickness(1);
+    presetBrowserList.setMultipleSelectionEnabled(false);
+    presetBrowserList.setClickingTogglesRowSelection(false);
+    addAndMakeVisible(presetBrowserList);
+    presetCountLabel.setColour(juce::Label::textColourId, muted);
+    presetCountLabel.setFont(juce::Font(juce::FontOptions(9.0f)));
+    addAndMakeVisible(presetCountLabel);
+    presetSelectedLabel.setColour(juce::Label::textColourId, violetHi);
+    presetSelectedLabel.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
+    addAndMakeVisible(presetSelectedLabel);
 
     for (auto* button : { &presetFavoriteButton, &savePresetButton, &loadPresetButton }) {
         button->setLookAndFeel(&richLook);
