@@ -865,7 +865,7 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("grainTranspose", "Granular Transpose", -48.0f, 48.0f, 0.0f);
     f("grainFineTune", "Granular Fine Tune", -100.0f, 100.0f, 0.0f);
     f("grainJitter", "Grain Timing Jitter", 0.0f, 1.0f, 0.0f);
-    f("grainWindow", "Grain Window", 0.0f, 1.0f, 0.0f);
+    f("grainWindow", "Grain Window", 0.0f, 3.0f, 0.0f);
     f("grainStereo", "Grain Stereo Spread", 0.0f, 1.0f, 0.35f);
     f("grainFeedback", "Granular Feedback", 0.0f, 0.85f, 0.0f);
 
