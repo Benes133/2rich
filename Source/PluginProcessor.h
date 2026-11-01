@@ -1,5 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
+#include <array>
+#include <vector>
 class AuroraProcessor : public juce::AudioProcessor {
 public:
  using APVTS=juce::AudioProcessorValueTreeState;
@@ -14,7 +16,7 @@ public:
  bool acceptsMidi() const override { return true; }
  bool producesMidi() const override { return false; }
  bool isMidiEffect() const override { return false; }
- double getTailLengthSeconds() const override { return 2.0; }
+ double getTailLengthSeconds() const override { return 4.0; }
  int getNumPrograms() override { return 1; }
  int getCurrentProgram() override { return 0; }
  void setCurrentProgram(int) override {}
@@ -28,5 +30,10 @@ private:
  class Voice;
  juce::Synthesiser synth;
  juce::dsp::StateVariableTPTFilter<float> filter;
+ juce::dsp::Reverb reverb;
+ std::array<std::vector<float>,2> delayBuffer;
+ int delayWrite=0;
+ double sampleRate=44100.0;
+ float fxLfoPhase=0.0f;
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AuroraProcessor)
 };
