@@ -513,7 +513,8 @@ public:
                     target->age = 0;
                     target->length = grainLength;
                     target->active = true;
-                    grainCountdown = spawnInterval;
+                    grainCountdown = juce::jmax(1, (int)std::round(
+                        (double)spawnInterval * (1.0 + (double)random * (double)grainJitter * 0.65)));
                 }
                 --grainCountdown;
 
@@ -552,9 +553,8 @@ public:
                     ++activeGrains;
                 }
                 const float normaliser = 1.0f / std::sqrt((float)juce::jmax(1, activeGrains));
-                const float jitterGain = 1.0f - grainJitter * 0.08f;
-                left = grainL * normaliser * sampleGain * vel * env * 1.45f * jitterGain;
-                right = grainR * normaliser * sampleGain * vel * env * 1.45f * jitterGain;
+                left = grainL * normaliser * sampleGain * vel * env * 1.45f;
+                right = grainR * normaliser * sampleGain * vel * env * 1.45f;
             }
 
             // Recalculate filter coefficients every four samples to reduce per-voice DSP cost.
@@ -868,7 +868,6 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("grainJitter", "Grain Timing Jitter", 0.0f, 1.0f, 0.0f);
     f("grainWindow", "Grain Window", 0.0f, 3.0f, 0.0f);
     f("grainStereo", "Grain Stereo Spread", 0.0f, 1.0f, 0.35f);
-    f("grainFeedback", "Granular Feedback", 0.0f, 0.85f, 0.0f);
 
     return layout;
 }
@@ -1888,8 +1887,9 @@ bool AuroraProcessor::loadSampleFromFile(const juce::File& file, juce::String& e
     if (asset->sliceStarts.size() < 4u) {
         asset->sliceStarts.clear();
         asset->sliceStarts.push_back(0);
-        for (int slice = 1; slice < 8; ++slice)
-            asset->sliceStarts.push_back((int)((int64_t)frames * slice / 8));
+        const int fallbackSlices = juce::jmax(1, juce::jmin(8, maximumSlices));
+        for (int slice = 1; slice < fallbackSlices; ++slice)
+            asset->sliceStarts.push_back((int)((int64_t)frames * slice / fallbackSlices));
     }
     asset->sliceStarts.push_back(frames);
 
