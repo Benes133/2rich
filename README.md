@@ -1,4 +1,4 @@
-# 2rich 1.2.0 — TIMAUDIO
+# 2rich 1.3.0 — TIMAUDIO
 
 2rich is a JUCE-based polyphonic virtual analog synthesizer for Windows VST3.
 
@@ -26,18 +26,22 @@
 - Host-synchronised arpeggiator and 32-step sequencer with per-step pitch, velocity, gate and accent.
 - 500 factory presets across leads, pads, atmospheres, keys, pianos, plucks, basses, synths, sound effects and textures.
 - Preset search and favourites across the complete factory bank, plus external .2richpreset save/load.
-- Integrated audio Sample Lab with WAV/AIFF import, estimated musical-key detection, transient-based slicing and MIDI slice mapping from C2.
-- Polyphonic sample playback with automatic root-note pitch tracking.
-- Granular engine with adjustable grain size, density, position, spray and pitch.
+- Dedicated Sampler and Granular workspaces with separate, task-focused controls.
+- Full-screen 500-patch Preset Browser with category filtering, live search, favourite filtering and a selected-patch view.
+- Sampler: WAV/AIFF import, source-key and source-tempo analysis, adjustable transient slicing, MIDI slice mapping from C2, trim start/end, sensitivity, minimum slice gap and slice-count controls.
+- Sampler: project-tempo sync for Auto, bar and sub-bar divisions, pitch-preserving overlapping-window stretch, varispeed mode, loop, reverse, root note, transpose and fine tune.
+- Granular: independent tempo-locked grain duration, 17 dedicated granular patches, window shape, density, source position, spray, timing jitter, stereo spread, transpose, fine tune and pitch.
+- Automatic target-key matching can use the key inferred from the incoming MIDI part; target key can also be manually selected.
 - Sample source paths are stored with DAW state; the original audio file must remain accessible at the saved path.
-- Sample playback uses varispeed pitch tracking; it does not yet provide Serato-style transient-preserving time-stretch or beat-grid warping.
+- The MIDI-derived project-key estimate is a track-local estimate, not a DAW-wide global key signature. Standard JUCE VST3 playhead position information exposes tempo and time signature, but not a global key signature.
+- Sampler pitch-preserving stretch uses overlapping windows and is not intended to replace specialist algorithms such as Serato Sample's transient-aware time-stretching.
 
 ## Build
 
 - Framework: JUCE 8.0.6.
 - Build system: CMake.
 - Plugin format: Windows VST3.
-- Current version: 1.2.0.
+- Current version: 1.3.0.
 - Company/manufacturer display name: TIMAUDIO.
 
 GitHub Actions builds the Windows VST3 when changes are pushed to main. Download the 2rich-Windows-VST3 artifact from a successful workflow run.
