@@ -146,8 +146,12 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     const juce::StringArray lfoShapes = { "Sine", "Triangle", "Saw", "Square", "Sample & Hold" };
     addChoice(lfo1Shape, lfoShapes, "lfo1Shape");
     addChoice(lfo2Shape, lfoShapes, "lfo2Shape");
-    const juce::StringArray modSourceNames = { "Off", "LFO 1", "LFO 2", "Velocity", "Amp Env", "Filter Env", "Mod Wheel" };
-    const juce::StringArray modTargetNames = { "Off", "Cutoff", "Osc Mix", "WT Position", "Pitch", "Pan", "Resonance" };
+    addChoice(lfo3Shape, lfoShapes, "lfo3Shape");
+    // Preserve existing source indices in saved projects; append new sources.
+    const juce::StringArray modSourceNames = { "Off", "LFO 1", "LFO 2", "Velocity", "Amp Env",
+        "Filter Env", "Mod Wheel", "LFO 3", "Pitch Bend", "Aftertouch" };
+    const juce::StringArray modTargetNames = { "Off", "Cutoff", "Osc Mix", "WT Position", "Pitch",
+        "Pan", "Resonance", "Volume", "FX Chorus", "FX Delay", "FX Reverb" };
     for (int i = 0; i < 4; ++i) {
         const auto suffix = juce::String(i + 1);
         addChoice(this->modSources[(size_t)i], modSourceNames, "mod" + suffix + "Source");
@@ -167,6 +171,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addExtra(fxEq,"fxEq","EQ MIX"); addExtra(fxLow,"fxLow","LOW"); addExtra(fxMid,"fxMid","MID"); addExtra(fxHigh,"fxHigh","HIGH");
     addExtra(fxDist,"fxDist","DISTORT"); addExtra(fxChorus,"fxChorus","CHORUS"); addExtra(fxFlange,"fxFlange","FLANGER"); addExtra(fxDelay,"fxDelay","DELAY"); addExtra(fxReverb,"fxReverb","REVERB");
     addExtra(lfo1Rate,"lfo1Rate","RATE"); addExtra(lfo2Rate,"lfo2Rate","RATE");
+    addExtra(lfo3Rate,"lfo3Rate","RATE");
     addExtra(filterAttack,"filterAttack","ATTACK"); addExtra(filterDecay,"filterDecay","DECAY");
     addExtra(filterSustain,"filterSustain","SUSTAIN"); addExtra(filterRelease,"filterRelease","RELEASE");
     addExtra(filterEnvAmount,"filterEnvAmount","AMOUNT");
@@ -280,13 +285,13 @@ AuroraEditor::~AuroraEditor() {
     for (auto* slider : { &mix, &detune, &sub, &cutoff, &res, &attack, &decay, &sustain,
                           &release, &master, &drive, &width, &wtPosition, &unison, &uniDetune,
                           &uniSpread, &fxEq, &fxLow, &fxMid, &fxHigh, &fxDist, &fxChorus,
-                          &fxFlange, &fxDelay, &fxReverb, &lfo1Rate, &lfo2Rate, &filterAttack,
+                          &fxFlange, &fxDelay, &fxReverb, &lfo1Rate, &lfo2Rate, &lfo3Rate, &filterAttack,
                           &filterDecay, &filterSustain, &filterRelease, &filterEnvAmount,
                           &modAmounts[0], &modAmounts[1], &modAmounts[2], &modAmounts[3],
                           &seqOctaves, &seqGate, &seqSwing, &stepPitch, &stepVelocity, &stepGate })
         slider->setLookAndFeel(nullptr);
     wave1.setLookAndFeel(nullptr); wave2.setLookAndFeel(nullptr); presets.setLookAndFeel(nullptr); wtTable.setLookAndFeel(nullptr);
-    lfo1Shape.setLookAndFeel(nullptr); lfo2Shape.setLookAndFeel(nullptr);
+    lfo1Shape.setLookAndFeel(nullptr); lfo2Shape.setLookAndFeel(nullptr); lfo3Shape.setLookAndFeel(nullptr);
     for (auto& box : modSources) box.setLookAndFeel(nullptr);
     for (auto& box : modTargets) box.setLookAndFeel(nullptr);
     for (auto& button : stepButtons) button.setLookAndFeel(nullptr);
@@ -654,25 +659,32 @@ void AuroraEditor::paint(juce::Graphics& g) {
         g.fillRoundedRectangle(357,532,246,2,1.0f);
     }
     else if (currentPage == 3) {
-        panel(32,106,438,174,"LFO 1","GLOBAL MODULATOR / RATE AND SHAPE");
-        panel(490,106,438,174,"LFO 2","GLOBAL MODULATOR / RATE AND SHAPE");
+        panel(32,106,286,174,"LFO 1","GLOBAL MODULATOR / RATE AND SHAPE");
+        panel(337,106,286,174,"LFO 2","GLOBAL MODULATOR / RATE AND SHAPE");
+        panel(642,106,286,174,"LFO 3","GLOBAL MODULATOR / RATE AND SHAPE");
         panel(32,296,610,284,"MODULATION MATRIX","FOUR ROUTES / SOURCE TO TARGET");
         panel(660,296,268,284,"FILTER ENVELOPE","PER-VOICE CUTOFF SHAPING");
 
-        knobLabel(55,164,112,"RATE");
-        knobLabel(515,164,112,"RATE");
-        g.setColour(muted);
-        g.setFont(juce::Font(juce::FontOptions(9.0f,juce::Font::bold)));
-        g.drawText("SHAPE",195,164,245,14,juce::Justification::centredLeft);
-        g.drawText("SHAPE",655,164,245,14,juce::Justification::centredLeft);
+        knobLabel(45,164,76,"RATE");
+        knobLabel(128,164,145,"SHAPE");
+        knobLabel(350,164,76,"RATE");
+        knobLabel(433,164,145,"SHAPE");
+        knobLabel(655,164,76,"RATE");
+        knobLabel(738,164,145,"SHAPE");
 
         g.setColour(muted);
         g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
         g.drawText("SOURCE",52,356,140,14,juce::Justification::centredLeft);
-        g.drawText("TARGET",214,356,140,14,juce::Justification::centredLeft);
-        g.drawText("DEPTH",394,356,100,14,juce::Justification::centredLeft);
+        g.drawText("DESTINATION",214,356,150,14,juce::Justification::centredLeft);
+        g.drawText("DEPTH / ACTIVITY",394,356,205,14,juce::Justification::centredLeft);
         for (int i = 0; i < 4; ++i) {
             const int rowY = 365 + i * 48;
+            g.setColour(border.withAlpha(0.7f));
+            const float activity = proc.getModRouteActivity(i);
+            g.setColour(juce::Colour(0xff263244));
+            g.fillRoundedRectangle(394.0f,(float)(rowY+31),205.0f,4.0f,2.0f);
+            g.setColour(neon.withAlpha(0.9f));
+            g.fillRoundedRectangle(394.0f,(float)(rowY+31),205.0f * juce::jlimit(0.0f,1.0f,activity),4.0f,2.0f);
             g.setColour(border.withAlpha(0.7f));
             g.drawLine(50.0f,(float)(rowY+40),622.0f,(float)(rowY+40),0.8f);
             g.setColour(muted);
@@ -777,10 +789,12 @@ void AuroraEditor::resized() {
     place(fxDelay,{660,409,104,132});
     place(fxReverb,{784,409,104,132});
 
-    place(lfo1Rate,{55,180,112,86});
-    place(lfo1Shape,{195,188,245,34});
-    place(lfo2Rate,{515,180,112,86});
-    place(lfo2Shape,{655,188,245,34});
+    place(lfo1Rate,{45,180,76,86});
+    place(lfo1Shape,{128,188,145,34});
+    place(lfo2Rate,{350,180,76,86});
+    place(lfo2Shape,{433,188,145,34});
+    place(lfo3Rate,{655,180,76,86});
+    place(lfo3Shape,{738,188,145,34});
     place(filterAttack,{666,398,53,90});
     place(filterDecay,{719,398,53,90});
     place(filterSustain,{772,398,53,90});
@@ -832,8 +846,8 @@ void AuroraEditor::resized() {
         for(auto* control:controls) control->setVisible(false);
     }
     if(currentPage!=3) {
-        juce::Component* controls[]={&lfo1Rate,&lfo2Rate,&filterAttack,&filterDecay,&filterSustain,
-            &filterRelease,&filterEnvAmount,&lfo1Shape,&lfo2Shape};
+        juce::Component* controls[]={&lfo1Rate,&lfo2Rate,&lfo3Rate,&filterAttack,&filterDecay,&filterSustain,
+            &filterRelease,&filterEnvAmount,&lfo1Shape,&lfo2Shape,&lfo3Shape};
         for(auto* control:controls) control->setVisible(false);
         for(int i=0;i<4;++i) {
             modSources[(size_t)i].setVisible(false);

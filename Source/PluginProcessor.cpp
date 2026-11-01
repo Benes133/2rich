@@ -102,6 +102,7 @@ public:
             value("mod1Amount"), value("mod2Amount"),
             value("mod3Amount"), value("mod4Amount")
         };
+        std::array<float, 4> routePeaks{};
 
         for (int i = 0; i < count; ++i) {
             const int blockIndex = start + i;
@@ -109,6 +110,12 @@ public:
                 ? processor->lfo1Block[(size_t)blockIndex] : 0.0f;
             const float lfo2 = blockIndex < (int)processor->lfo2Block.size()
                 ? processor->lfo2Block[(size_t)blockIndex] : 0.0f;
+            const float lfo3 = blockIndex < (int)processor->lfo3Block.size()
+                ? processor->lfo3Block[(size_t)blockIndex] : 0.0f;
+            const float pitchBend = blockIndex < (int)processor->pitchBendBlock.size()
+                ? processor->pitchBendBlock[(size_t)blockIndex] : 0.0f;
+            const float aftertouch = blockIndex < (int)processor->aftertouchBlock.size()
+                ? processor->aftertouchBlock[(size_t)blockIndex] : 0.0f;
 
             if (stage == 1) {
                 env += 1.0f / (float)(sr * ampAttack);
@@ -137,8 +144,8 @@ public:
                 if (filterEnv <= 0.0f) { filterEnv = 0.0f; filterStage = 0; }
             }
 
-            const float sources[7] = {
-                0.0f, lfo1, lfo2, vel, env, filterEnv, modWheel
+            const float sources[10] = {
+                0.0f, lfo1, lfo2, vel, env, filterEnv, modWheel, lfo3, pitchBend, aftertouch
             };
             float cutoffOctaves = filterEnv * filtEnvAmount * 4.0f;
             float mixMod = 0.0f;
@@ -146,14 +153,18 @@ public:
             float pitchCents = 0.0f;
             float panMod = 0.0f;
             float resonanceMod = 0.0f;
+            float volumeMod = 0.0f;
+            float fxChorusMod = 0.0f, fxDelayMod = 0.0f, fxReverbMod = 0.0f;
+            bool hasFxModulation = false;
 
             for (int route = 0; route < 4; ++route) {
                 const int source = sourceIds[route];
                 const int target = targetIds[route];
-                if (source <= 0 || source >= 7 || target <= 0 || target >= 7)
+                if (source <= 0 || source >= 10 || target <= 0 || target >= 11)
                     continue;
 
                 const float mod = sources[source] * routeAmounts[route];
+                routePeaks[(size_t)route] = juce::jmax(routePeaks[(size_t)route], std::abs(mod));
                 switch (target) {
                     case 1: cutoffOctaves += mod * 4.0f; break;
                     case 2: mixMod += mod; break;
@@ -161,6 +172,10 @@ public:
                     case 4: pitchCents += mod * 1200.0f; break;
                     case 5: panMod += mod; break;
                     case 6: resonanceMod += mod * 0.45f; break;
+                    case 7: volumeMod += mod; break;
+                    case 8: fxChorusMod += mod; hasFxModulation = true; break;
+                    case 9: fxDelayMod += mod; hasFxModulation = true; break;
+                    case 10: fxReverbMod += mod; hasFxModulation = true; break;
                     default: break;
                 }
             }
@@ -201,8 +216,17 @@ public:
             }
 
             const float gain = 0.22f / std::sqrt((float)unisonVoices);
-            left *= gain;
-            right *= gain;
+            const float modulationGain = juce::jlimit(0.0f, 2.0f, 1.0f + volumeMod);
+            left *= gain * modulationGain;
+            right *= gain * modulationGain;
+
+            if (hasFxModulation && blockIndex < (int)processor->fxModWeightBlock.size()) {
+                const float weight = juce::jmax(0.001f, env);
+                processor->fxChorusModBlock[(size_t)blockIndex] += fxChorusMod * weight;
+                processor->fxDelayModBlock[(size_t)blockIndex] += fxDelayMod * weight;
+                processor->fxReverbModBlock[(size_t)blockIndex] += fxReverbMod * weight;
+                processor->fxModWeightBlock[(size_t)blockIndex] += weight;
+            }
 
             // Recalculate filter coefficients every four samples to reduce per-voice DSP cost.
             if ((i & 3) == 0) {
@@ -215,6 +239,14 @@ public:
             buffer.addSample(0, blockIndex, left);
             if (buffer.getNumChannels() > 1)
                 buffer.addSample(1, blockIndex, right);
+        }
+
+        for (int route = 0; route < 4; ++route) {
+            auto& meter = processor->modRouteActivity[(size_t)route];
+            float previous = meter.load(std::memory_order_relaxed);
+            while (routePeaks[(size_t)route] > previous
+                   && !meter.compare_exchange_weak(previous, routePeaks[(size_t)route],
+                                                   std::memory_order_relaxed)) {}
         }
     }
 
@@ -298,11 +330,16 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
 
     f("lfo1Rate", "LFO 1 Rate", 0.02f, 20.0f, 1.0f, 0.35f);
     f("lfo2Rate", "LFO 2 Rate", 0.02f, 20.0f, 0.25f, 0.35f);
+    f("lfo3Rate", "LFO 3 Rate", 0.02f, 20.0f, 0.50f, 0.35f);
     choice("lfo1Shape", "LFO 1 Shape", { "Sine", "Triangle", "Saw", "Square", "Sample & Hold" }, 0);
     choice("lfo2Shape", "LFO 2 Shape", { "Sine", "Triangle", "Saw", "Square", "Sample & Hold" }, 1);
+    choice("lfo3Shape", "LFO 3 Shape", { "Sine", "Triangle", "Saw", "Square", "Sample & Hold" }, 0);
 
-    const juce::StringArray sources = { "Off", "LFO 1", "LFO 2", "Velocity", "Amp Env", "Filter Env", "Mod Wheel" };
-    const juce::StringArray targets = { "Off", "Cutoff", "Osc Mix", "WT Position", "Pitch", "Pan", "Resonance" };
+    // Keep the first seven source indices stable for projects saved before 0.7.0.
+    const juce::StringArray sources = { "Off", "LFO 1", "LFO 2", "Velocity", "Amp Env",
+        "Filter Env", "Mod Wheel", "LFO 3", "Pitch Bend", "Aftertouch" };
+    const juce::StringArray targets = { "Off", "Cutoff", "Osc Mix", "WT Position", "Pitch",
+        "Pan", "Resonance", "Volume", "FX Chorus", "FX Delay", "FX Reverb" };
     for (int route = 1; route <= 4; ++route) {
         const auto suffix = juce::String(route);
         choice(("mod" + suffix + "Source").toRawUTF8(), ("Mod " + suffix + " Source").toRawUTF8(), sources, 0);
@@ -367,6 +404,13 @@ void AuroraProcessor::prepareToPlay(double sr, int maximumBlockSize) {
     const auto storageSize = (size_t)juce::jmax(8192, maximumBlockSize + 1);
     lfo1Block.resize(storageSize);
     lfo2Block.resize(storageSize);
+    lfo3Block.resize(storageSize);
+    pitchBendBlock.resize(storageSize);
+    aftertouchBlock.resize(storageSize);
+    fxChorusModBlock.resize(storageSize);
+    fxDelayModBlock.resize(storageSize);
+    fxReverbModBlock.resize(storageSize);
+    fxModWeightBlock.resize(storageSize);
     for (auto& channel : delayBuffer)
         channel.assign((size_t)juce::jmax(1, (int)sr * 2), 0.0f);
     delayWrite = 0;
@@ -395,13 +439,23 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const int samples = buffer.getNumSamples();
     if ((int)lfo1Block.size() < samples) lfo1Block.resize((size_t)samples);
     if ((int)lfo2Block.size() < samples) lfo2Block.resize((size_t)samples);
+    if ((int)lfo3Block.size() < samples) lfo3Block.resize((size_t)samples);
+    if ((int)pitchBendBlock.size() < samples) pitchBendBlock.resize((size_t)samples);
+    if ((int)aftertouchBlock.size() < samples) aftertouchBlock.resize((size_t)samples);
+    if ((int)fxChorusModBlock.size() < samples) fxChorusModBlock.resize((size_t)samples);
+    if ((int)fxDelayModBlock.size() < samples) fxDelayModBlock.resize((size_t)samples);
+    if ((int)fxReverbModBlock.size() < samples) fxReverbModBlock.resize((size_t)samples);
+    if ((int)fxModWeightBlock.size() < samples) fxModWeightBlock.resize((size_t)samples);
 
     const float rate1 = value("lfo1Rate");
     const float rate2 = value("lfo2Rate");
+    const float rate3 = value("lfo3Rate");
     const int shape1 = (int)value("lfo1Shape");
     const int shape2 = (int)value("lfo2Shape");
+    const int shape3 = (int)value("lfo3Shape");
     const double phaseStep1 = rate1 / sampleRate;
     const double phaseStep2 = rate2 / sampleRate;
+    const double phaseStep3 = rate3 / sampleRate;
 
     auto nextRandom = [this]() {
         randomSeed ^= randomSeed << 13;
@@ -422,8 +476,10 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     for (int i = 0; i < samples; ++i) {
         lfo1Block[(size_t)i] = lfoShape(shape1, (float)lfo1Phase, lfo1Hold);
         lfo2Block[(size_t)i] = lfoShape(shape2, (float)lfo2Phase, lfo2Hold);
+        lfo3Block[(size_t)i] = lfoShape(shape3, (float)lfo3Phase, lfo3Hold);
         lfo1Phase += phaseStep1;
         lfo2Phase += phaseStep2;
+        lfo3Phase += phaseStep3;
         if (lfo1Phase >= 1.0) {
             lfo1Phase -= std::floor(lfo1Phase);
             lfo1Hold = nextRandom();
@@ -431,6 +487,38 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         if (lfo2Phase >= 1.0) {
             lfo2Phase -= std::floor(lfo2Phase);
             lfo2Hold = nextRandom();
+        }
+        if (lfo3Phase >= 1.0) {
+            lfo3Phase -= std::floor(lfo3Phase);
+            lfo3Hold = nextRandom();
+        }
+    }
+
+    // Build sample-accurate expression lanes from incoming MIDI.
+    std::fill(fxChorusModBlock.begin(), fxChorusModBlock.begin() + samples, 0.0f);
+    std::fill(fxDelayModBlock.begin(), fxDelayModBlock.begin() + samples, 0.0f);
+    std::fill(fxReverbModBlock.begin(), fxReverbModBlock.begin() + samples, 0.0f);
+    std::fill(fxModWeightBlock.begin(), fxModWeightBlock.begin() + samples, 0.0f);
+    for (auto& meter : modRouteActivity)
+        meter.store(0.0f, std::memory_order_relaxed);
+
+    std::fill(pitchBendBlock.begin(), pitchBendBlock.begin() + samples, pitchBendValue);
+    std::fill(aftertouchBlock.begin(), aftertouchBlock.begin() + samples, aftertouchValue);
+    for (const auto metadata : midi) {
+        const auto message = metadata.getMessage();
+        const int position = juce::jlimit(0, juce::jmax(0, samples - 1), metadata.samplePosition);
+        if (message.isPitchWheel())
+            pitchBendValue = ((float)message.getPitchWheelValue() - 8192.0f) / 8192.0f;
+        else if (message.isChannelPressure())
+            aftertouchValue = (float)message.getChannelPressureValue() / 127.0f;
+        else if (message.isAftertouch())
+            aftertouchValue = (float)message.getAfterTouchValue() / 127.0f;
+        else
+            continue;
+
+        for (int sample = position; sample < samples; ++sample) {
+            pitchBendBlock[(size_t)sample] = pitchBendValue;
+            aftertouchBlock[(size_t)sample] = aftertouchValue;
         }
     }
 
@@ -664,9 +752,14 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         const int read = (delayWrite - tap + delaySize) % delaySize;
         const float delayedLeft = delayBuffer[0][(size_t)read];
         const float delayedRight = delayBuffer[1][(size_t)read];
-        const float chorus = value("fxChorus");
+        const float fxWeight = fxModWeightBlock[(size_t)i];
+        const float chorusMod = fxWeight > 0.0001f
+            ? fxChorusModBlock[(size_t)i] / fxWeight : 0.0f;
+        const float delayMod = fxWeight > 0.0001f
+            ? fxDelayModBlock[(size_t)i] / fxWeight : 0.0f;
+        const float chorus = juce::jlimit(0.0f, 1.0f, value("fxChorus") + chorusMod * 0.5f);
         const float flange = value("fxFlange");
-        const float delay = value("fxDelay");
+        const float delay = juce::jlimit(0.0f, 1.0f, value("fxDelay") + delayMod * 0.5f);
         delayBuffer[0][(size_t)delayWrite] = left + delayedLeft * (delay * 0.35f + chorus * 0.16f + flange * 0.45f);
         delayBuffer[1][(size_t)delayWrite] = right + delayedRight * (delay * 0.35f + chorus * 0.16f + flange * 0.45f);
         left += delayedLeft * (delay * 0.28f + chorus * 0.18f + flange * 0.45f);
@@ -682,7 +775,20 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     juce::dsp::Reverb::Parameters reverbParameters;
     reverbParameters.roomSize = 0.55f;
     reverbParameters.damping = 0.48f;
-    reverbParameters.wetLevel = value("fxReverb") * 0.35f;
+    float reverbModAverage = 0.0f;
+    int reverbModSamples = 0;
+    for (int i = 0; i < samples; ++i) {
+        const float weight = fxModWeightBlock[(size_t)i];
+        if (weight > 0.0001f) {
+            reverbModAverage += fxReverbModBlock[(size_t)i] / weight;
+            ++reverbModSamples;
+        }
+    }
+    if (reverbModSamples > 0)
+        reverbModAverage /= (float)reverbModSamples;
+    const float modulatedReverb = juce::jlimit(0.0f, 1.0f,
+        value("fxReverb") + reverbModAverage * 0.5f);
+    reverbParameters.wetLevel = modulatedReverb * 0.35f;
     reverbParameters.dryLevel = 1.0f;
     reverbParameters.width = 1.0f;
     reverb.setParameters(reverbParameters);

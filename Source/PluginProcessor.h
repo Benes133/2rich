@@ -30,6 +30,9 @@ public:
  void saveUserPattern(int slot);
  bool loadUserPattern(int slot);
  int getSequencerCurrentStep() const noexcept { return sequenceCurrentStep.load(std::memory_order_relaxed); }
+ float getModRouteActivity(int route) const noexcept {
+  return route >= 0 && route < 4 ? modRouteActivity[(size_t)route].load(std::memory_order_relaxed) : 0.0f;
+ }
 private:
  struct StepData { bool enabled = true; int pitch = 0; float velocity = 127.0f; float gate = 100.0f; bool accent = false; };
  struct UserPattern {
@@ -41,9 +44,13 @@ private:
  std::array<bool, 8> userPatternValid{};
  class Voice;
  juce::Synthesiser synth;
- std::vector<float> lfo1Block, lfo2Block;
- double lfo1Phase=0.0, lfo2Phase=0.0;
- float lfo1Hold=0.0f, lfo2Hold=0.0f;
+ std::vector<float> lfo1Block, lfo2Block, lfo3Block;
+ std::vector<float> pitchBendBlock, aftertouchBlock;
+ std::vector<float> fxChorusModBlock, fxDelayModBlock, fxReverbModBlock, fxModWeightBlock;
+ double lfo1Phase=0.0, lfo2Phase=0.0, lfo3Phase=0.0;
+ float lfo1Hold=0.0f, lfo2Hold=0.0f, lfo3Hold=0.0f;
+ float pitchBendValue=0.0f, aftertouchValue=0.0f;
+ std::array<std::atomic<float>, 4> modRouteActivity{};
  uint32_t randomSeed=0x6d2b79f5u;
  std::array<float, 128> heldNoteVelocities{};
  double sequenceSamplesUntilStep=0.0, sequenceSamplesUntilOff=0.0;
