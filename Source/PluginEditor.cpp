@@ -777,7 +777,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
     g.setColour(cardHi);
     g.fillRoundedRectangle(735.0f,91.0f,188.0f,5.0f,2.5f);
     g.setColour(neon.withAlpha(0.9f));
-    g.fillRoundedRectangle(735.0f,91.0f,188.0f * juce::jlimit(0.0f,1.0f,proc.getOutputPeak()),2.5f);
+    g.fillRoundedRectangle(735.0f,91.0f,188.0f * juce::jlimit(0.0f,1.0f,proc.getOutputPeak()),5.0f,2.5f);
 
     auto panel = [&](int x, int y, int w, int h, const juce::String& title, const juce::String& sub) {
         g.setColour(card);
