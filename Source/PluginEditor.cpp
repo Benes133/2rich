@@ -461,12 +461,18 @@ AuroraEditor::~AuroraEditor() {
     for (auto* slider : { &mix, &detune, &sub, &cutoff, &res, &attack, &decay, &sustain,
                           &release, &master, &drive, &width, &wtPosition, &unison, &uniDetune,
                           &uniSpread, &fmAmount, &syncRatio, &fxEq, &fxLow, &fxMid, &fxHigh, &fxDist, &fxChorus,
-                          &fxFlange, &fxDelay, &fxReverb, &lfo1Rate, &lfo2Rate, &lfo3Rate, &filterAttack,
+                          &fxFlange, &fxDelay, &fxReverb, &fxCompThreshold, &fxCompRatio, &fxCompAttack,
+                          &fxCompRelease, &fxCompMakeup, &fxCompMix, &fxPhaserRate, &fxPingTime,
+                          &fxPingFeedback, &fxReverbRoom, &fxReverbDamping, &fxLimiterCeiling,
+                          &lfo1Rate, &lfo2Rate, &lfo3Rate, &filterAttack,
                           &filterDecay, &filterSustain, &filterRelease, &filterEnvAmount,
                           &modAmounts[0], &modAmounts[1], &modAmounts[2], &modAmounts[3],
                           &seqOctaves, &seqGate, &seqSwing, &stepPitch, &stepVelocity, &stepGate })
         slider->setLookAndFeel(nullptr);
     wave1.setLookAndFeel(nullptr); wave2.setLookAndFeel(nullptr); presets.setLookAndFeel(nullptr); wtTable.setLookAndFeel(nullptr);
+    for (auto& slot : fxSlots) slot.setLookAndFeel(nullptr);
+    for (auto* button : { &presetFavoriteButton, &savePresetButton, &loadPresetButton,
+                          &fxCompEnabledButton }) button->setLookAndFeel(nullptr);
     lfo1Shape.setLookAndFeel(nullptr); lfo2Shape.setLookAndFeel(nullptr); lfo3Shape.setLookAndFeel(nullptr);
     oscModeBox.setLookAndFeel(nullptr); filterTypeBox.setLookAndFeel(nullptr);
     importWavetableButton.setLookAndFeel(nullptr); clearWavetableButton.setLookAndFeel(nullptr);
@@ -872,22 +878,22 @@ void AuroraEditor::paint(juce::Graphics& g) {
     };
 
     if (currentPage == 0) {
-        panel(32, 128, 250, 262, "OSCILLATOR 1", "PRIMARY WAVEFORM");
-        panel(294, 128, 250, 262, "OSCILLATOR 2", "SECONDARY / MODULATOR");
-        panel(556, 128, 280, 262, "VOICE MIX", "BLEND / DETUNE / SUB");
-        panel(848, 128, 320, 262, "FILTER", "TONE SHAPING");
+        panel(32, 128, 250, 276, "OSCILLATOR 1", "PRIMARY WAVEFORM");
+        panel(294, 128, 250, 276, "OSCILLATOR 2", "SECONDARY / MODULATOR");
+        panel(556, 128, 280, 276, "VOICE MIX", "BLEND / DETUNE / SUB");
+        panel(848, 128, 320, 276, "FILTER", "TONE SHAPING");
         panel(32, 410, 700, 316, "AMPLIFIER ENVELOPE", "ATTACK / DECAY / SUSTAIN / RELEASE");
         panel(744, 410, 424, 316, "OUTPUT", "LEVEL / DRIVE / STEREO WIDTH");
 
         const int w1 = (int)proc.params.getRawParameterValue("wave1")->load();
         const int w2 = (int)proc.params.getRawParameterValue("wave2")->load();
-        waveform(52, 238, 210, 104, w1, "OSC 1 WAVE");
-        waveform(314, 238, 210, 104, w2, "OSC 2 WAVE");
+        waveform(52, 238, 210, 80, w1, "OSC 1 WAVE");
+        waveform(314, 238, 210, 80, w2, "OSC 2 WAVE");
         label(52, 190, 210, "WAVEFORM");
         label(314, 190, 210, "WAVEFORM");
         label(572, 190, 248, "ENGINE MODE");
-        label(314, 348, 210, "FM AMOUNT");
-        label(314, 373, 210, "HARD SYNC RATIO");
+        label(314, 320, 210, "FM AMOUNT");
+        label(314, 359, 210, "HARD SYNC RATIO");
         label(568, 230, 80, "OSC MIX");
         label(656, 230, 80, "DETUNE");
         label(744, 230, 80, "SUB LEVEL");
@@ -1128,8 +1134,8 @@ void AuroraEditor::resized() {
     place(wave1, {52, 205, 210, 30});
     place(wave2, {314, 205, 210, 30});
     place(oscModeBox, {572, 205, 248, 30});
-    place(fmAmount, {314, 354, 210, 27});
-    place(syncRatio, {314, 380, 210, 27});
+    place(fmAmount, {314, 337, 210, 22});
+    place(syncRatio, {314, 375, 210, 22});
     place(mix, {568, 248, 80, 126});
     place(detune, {656, 248, 80, 126});
     place(sub, {744, 248, 80, 126});
@@ -1146,9 +1152,9 @@ void AuroraEditor::resized() {
 
     // Wavetable page.
     place(wtTable, {54, 205, 226, 30});
-    place(wtPosition, {82, 244, 166, 126});
-    place(importWavetableButton, {54, 340, 106, 28});
-    place(clearWavetableButton, {174, 340, 106, 28});
+    place(wtPosition, {82, 238, 166, 96});
+    place(importWavetableButton, {54, 344, 106, 27});
+    place(clearWavetableButton, {174, 344, 106, 27});
     place(wavetableStatusLabel, {54, 374, 226, 18});
     place(unison, {174, 518, 140, 174});
     place(uniDetune, {510, 518, 140, 174});
