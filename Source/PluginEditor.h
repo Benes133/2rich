@@ -8,7 +8,7 @@ public:
  void paint(juce::Graphics&)override; void resized()override;
 private:
  AuroraProcessor& proc; juce::Label heading;
- juce::Slider mix,detune,sub,cutoff,res,attack,decay,sustain,release;
+ juce::Slider mix,detune,sub,cutoff,res,attack,decay,sustain,release,master,drive,width;
  juce::ComboBox wave1,wave2;
  using Attach=juce::AudioProcessorValueTreeState::SliderAttachment;
  using ChoiceAttach=juce::AudioProcessorValueTreeState::ComboBoxAttachment;
