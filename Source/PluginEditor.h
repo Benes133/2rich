@@ -27,6 +27,7 @@ private:
     juce::Label selectedStepLabel, patternStatusLabel;
     int selectedStep = 0;
     int lastActiveStep = -1;
+    std::array<float, 4> lastModRouteActivity{};
     juce::Slider lfo1Rate, lfo2Rate, lfo3Rate, filterAttack, filterDecay, filterSustain, filterRelease, filterEnvAmount;
     juce::ComboBox lfo1Shape, lfo2Shape, lfo3Shape;
     std::array<juce::ComboBox, 4> modSources, modTargets;

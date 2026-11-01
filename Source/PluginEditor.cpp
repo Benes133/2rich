@@ -413,11 +413,25 @@ void AuroraEditor::writeSelectedStepParameter(const juce::String& baseId, float 
 }
 
 void AuroraEditor::timerCallback() {
+    bool changed = false;
     const int activeStep = proc.getSequencerCurrentStep();
     if (activeStep != lastActiveStep) {
         lastActiveStep = activeStep;
-        repaint();
+        changed = true;
     }
+
+    if (currentPage == 3) {
+        for (int route = 0; route < 4; ++route) {
+            const float activity = proc.getModRouteActivity(route);
+            if (std::abs(activity - lastModRouteActivity[(size_t)route]) > 0.012f) {
+                lastModRouteActivity[(size_t)route] = activity;
+                changed = true;
+            }
+        }
+    }
+
+    if (changed)
+        repaint();
 }
 
 void AuroraEditor::setPage(int page) {
@@ -448,7 +462,7 @@ void AuroraEditor::setPage(int page) {
         button.setVisible(page == 4);
     if (page == 4)
         refreshSelectedStepControls();
-    if (page == 4)
+    if (page == 3 || page == 4)
         startTimerHz(30);
     else
         stopTimer();
