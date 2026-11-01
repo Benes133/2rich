@@ -265,7 +265,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         addAndMakeVisible(box);
         choiceAttachments.push_back(std::make_unique<ChoiceAttach>(ap, id, box));
     };
-    addChoice(oscModeBox, { "Classic", "FM", "Ring Mod", "Hard Sync" }, "oscMode");
+    addChoice(oscModeBox, { "Classic", "FM", "Ring Mod", "Hard Sync", "Super Saw" }, "oscMode");
     addChoice(filterTypeBox, { "Low Pass", "Band Pass", "High Pass" }, "filterType");
     const juce::StringArray fxTypeNames = { "Off", "Compressor", "Saturation", "Phaser",
         "Ping-Pong", "Reverb", "Chorus", "Multiband Dist.", "Limiter" };

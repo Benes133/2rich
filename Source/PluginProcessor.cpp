@@ -33,6 +33,7 @@ public:
         vel = velocity;
         for (auto& phase : phase1) phase = 0.0;
         for (auto& phase : phase2) phase = 0.0;
+        for (auto& voicePhases : superSawPhase) voicePhases.fill(0.0);
         env = 0.0f;
         filterEnv = 0.0f;
         stage = 1;
@@ -71,7 +72,7 @@ public:
         const int wave1 = (int)value("wave1");
         const int wave2 = (int)value("wave2");
         const int table = (int)value("wtTable");
-        const int oscillatorMode = juce::jlimit(0, 3, (int)value("oscMode"));
+        const int oscillatorMode = juce::jlimit(0, 4, (int)value("oscMode"));
         const float fmAmount = value("fmAmount");
         const float syncRatio = value("syncRatio");
         const int filterType = juce::jlimit(0, 2, (int)value("filterType"));
@@ -227,6 +228,20 @@ public:
                 } else if (oscillatorMode == 2) {
                     // Bipolar ring modulation creates sum and difference sidebands.
                     sample = oscA * oscB * 2.0f;
+                } else if (oscillatorMode == 4) {
+                    // Five slightly detuned saw voices create a wide, animated supersaw stack.
+                    constexpr double stackDetuneCents[5] = { -18.0, -9.0, 0.0, 9.0, 18.0 };
+                    float superSaw = 0.0f;
+                    for (int stack = 0; stack < 5; ++stack) {
+                        auto& stackPhase = superSawPhase[(size_t)voice][(size_t)stack];
+                        superSaw += wave((float)stackPhase, 0, table, position, importedTable.get());
+                        const double stackIncrement = juce::MathConstants<double>::twoPi * hz
+                            * std::pow(2.0, (cents + stackDetuneCents[stack]) / 1200.0) / sr;
+                        stackPhase = std::fmod(stackPhase + stackIncrement,
+                                               juce::MathConstants<double>::twoPi);
+                    }
+                    superSaw *= 0.2f;
+                    sample = (1.0f - currentMix) * superSaw + currentMix * oscB;
                 }
 
                 sample += sub * std::sin((float)phase1[(size_t)voice] * 0.5f);
@@ -340,6 +355,7 @@ private:
     int activeFilterType = 0;
     double hz = 440.0;
     std::array<double, 7> phase1{}, phase2{};
+    std::array<std::array<double, 5>, 7> superSawPhase{};
     float vel = 0.0f, env = 0.0f, filterEnv = 0.0f, modWheel = 0.0f;
     int stage = 0, filterStage = 0;
 };
@@ -375,7 +391,7 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("cutoff", "Cutoff", 40.0f, 18000.0f, 12000.0f, 0.35f);
     f("res", "Resonance", 0.1f, 1.0f, 0.2f);
     choice("filterType", "Filter Type", { "Low Pass", "Band Pass", "High Pass" }, 0);
-    choice("oscMode", "Oscillator Mode", { "Classic", "FM", "Ring Mod", "Hard Sync" }, 0);
+    choice("oscMode", "Oscillator Mode", { "Classic", "FM", "Ring Mod", "Hard Sync", "Super Saw" }, 0);
     f("fmAmount", "FM Amount", 0.0f, 12.0f, 2.5f);
     f("syncRatio", "Hard Sync Ratio", 1.0f, 8.0f, 2.0f);
 
