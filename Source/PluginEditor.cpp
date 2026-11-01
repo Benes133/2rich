@@ -545,8 +545,6 @@ void AuroraEditor::paint(juce::Graphics& g) {
         knobLabel(515,151,112,"RATE");
         g.setColour(muted);
         g.setFont(juce::Font(juce::FontOptions(8.5f)));
-        g.drawText("Cycles per second",55,259,140,12,juce::Justification::centredLeft);
-        g.drawText("Cycles per second",515,259,140,12,juce::Justification::centredLeft);
 
         g.setColour(muted);
         g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
