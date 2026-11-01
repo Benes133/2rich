@@ -890,14 +890,14 @@ void AuroraEditor::paint(juce::Graphics& g) {
         g.setColour(violet.withAlpha(0.22f));g.strokePath(scopePath,juce::PathStrokeType(7.0f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
         g.setColour(violetHi);g.strokePath(scopePath,juce::PathStrokeType(1.8f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
 
-        label(52,500,260,"FILTER TYPE");label(52,548,116,"CUTOFF");label(184,548,116,"RESONANCE");
+        label(52,514,260,"FILTER TYPE");label(52,566,116,"CUTOFF");label(184,566,116,"RESONANCE");
         label(368,520,100,"ATTACK");label(480,520,100,"DECAY");label(592,520,100,"SUSTAIN");label(704,520,100,"RELEASE");
-        label(858,510,92,"OSC MIX");label(958,510,92,"DETUNE");label(1058,510,92,"SUB");
-        label(858,578,92,"UNISON");label(958,578,92,"UNI DETUNE");label(1058,578,92,"SPREAD");
-        label(858,646,92,"MASTER");label(958,646,92,"DRIVE");label(1058,646,92,"WIDTH");
+        label(858,514,92,"OSC MIX");label(958,514,92,"DETUNE");label(1058,514,92,"SUB");
+        label(858,582,92,"UNISON");label(958,582,92,"UNI DETUNE");label(1058,582,92,"SPREAD");
+        label(858,650,92,"MASTER");label(958,650,92,"DRIVE");label(1058,650,92,"WIDTH");
     }else if(currentPage==1){
-        panel(32,128,272,178,"LFO 1","GLOBAL MODULATOR");panel(316,128,272,178,"LFO 2","GLOBAL MODULATOR");
-        panel(600,128,272,178,"LFO 3","GLOBAL MODULATOR");panel(884,128,284,178,"FILTER ENVELOPE","PER-VOICE CUTOFF SHAPING");
+        panel(32,128,272,190,"LFO 1","GLOBAL MODULATOR");panel(316,128,272,190,"LFO 2","GLOBAL MODULATOR");
+        panel(600,128,272,190,"LFO 3","GLOBAL MODULATOR");panel(884,128,284,190,"FILTER ENVELOPE","PER-VOICE CUTOFF SHAPING");
         label(50,200,90,"RATE");label(150,200,122,"WAVE SHAPE");label(334,200,90,"RATE");label(434,200,122,"WAVE SHAPE");
         label(618,200,90,"RATE");label(718,200,122,"WAVE SHAPE");label(900,200,116,"ATTACK");label(1024,200,116,"DECAY");
         label(900,235,116,"SUSTAIN");label(1024,235,116,"RELEASE");label(910,277,230,"FILTER ENV AMOUNT");
@@ -906,15 +906,14 @@ void AuroraEditor::paint(juce::Graphics& g) {
             int x=48+i*282;
             g.setColour(juce::Colour(0xff0d1017).withAlpha(0.7f));g.fillRoundedRectangle((float)x,390,268,62,5);
             g.setColour(juce::Colour(0xff808592).withAlpha(0.25f));g.drawRoundedRectangle(x+0.5f,390.5f,267,61,5,0.7f);
-            g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(7.3f,juce::Font::bold)));
-            g.drawText("ROUTE "+juce::String(i+1),x+8,376,100,11,juce::Justification::centredLeft);
             float activity=proc.getModRouteActivity(i);
             g.setColour(juce::Colour(0xff252a34));g.fillRoundedRectangle(x+9.0f,442,248,3,1.5f);
             g.setColour(violetHi);g.fillRoundedRectangle(x+9.0f,442,248*juce::jlimit(0.0f,1.0f,activity),3,1.5f);
         }
-        panel(32,484,1136,242,"PERFORMANCE SEQUENCER","ARPEGGIATOR / 32 STEP PATTERN  /  HOST SYNC");
-        label(52,536,140,"MODE");label(200,536,130,"ARP ORDER");label(338,536,100,"RATE");label(446,536,130,"DIRECTION");
-        label(584,536,110,"LENGTH");label(704,536,140,"OCTAVES");label(852,536,140,"GLOBAL GATE");label(1000,536,150,"SWING");
+        panel(32,472,1136,254,"PERFORMANCE SEQUENCER","ARPEGGIATOR / 32 STEP PATTERN  /  HOST SYNC");
+        label(52,538,140,"MODE");label(200,538,130,"ARP ORDER");label(338,538,100,"RATE");label(446,538,130,"DIRECTION");
+        label(584,538,110,"LENGTH");label(704,538,140,"OCTAVES");label(852,538,140,"GLOBAL GATE");label(1000,538,150,"SWING");
+        label(580,586,330,"PITCH");label(580,620,330,"VELOCITY");label(580,654,330,"STEP GATE");
         label(580,578,330,"PITCH");label(580,612,330,"VELOCITY");label(580,646,330,"STEP GATE");
         const int pageOffset=seqPageBox.getSelectedId()==2?16:0;
         if(lastActiveStep>=pageOffset&&lastActiveStep<pageOffset+16){
@@ -962,19 +961,19 @@ void AuroraEditor::resized() {
     place(fmAmount,{52,343,230,24});place(syncRatio,{310,343,240,24});
     place(wtTable,{628,207,240,28});place(importWavetableButton,{880,207,132,28});place(clearWavetableButton,{1022,207,126,28});
     place(wavetableStatusLabel,{628,232,520,15});place(wtPosition,{628,393,520,23});
-    place(filterTypeBox,{52,520,260,28});place(cutoff,{52,562,116,150});place(res,{184,562,116,150});
+    place(filterTypeBox,{52,532,260,26});place(cutoff,{52,580,116,132});place(res,{184,580,116,132});
     place(attack,{368,535,100,172});place(decay,{480,535,100,172});place(sustain,{592,535,100,172});place(release,{704,535,100,172});
-    const int vx[3]={858,958,1058},vy[3]={524,592,660};
+    const int vx[3]={858,958,1058},vy[3]={528,596,664};
     juce::Slider* voice[9]={&mix,&detune,&sub,&unison,&uniDetune,&uniSpread,&master,&drive,&width};
-    for(int i=0;i<9;++i)place(*voice[i],{vx[i%3],vy[i/3],92,60});
+    for(int i=0;i<9;++i)place(*voice[i],{vx[i%3],vy[i/3],92,58});
 
     // MOTION: LFOs and filter envelope.
     place(lfo1Rate,{50,216,90,82});place(lfo1Shape,{150,224,122,30});
     place(lfo2Rate,{334,216,90,82});place(lfo2Shape,{434,224,122,30});
     place(lfo3Rate,{618,216,90,82});place(lfo3Shape,{718,224,122,30});
-    place(filterAttack,{900,218,54,72});place(filterDecay,{954,218,54,72});
-    place(filterSustain,{1008,218,54,72});place(filterRelease,{1062,218,54,72});
-    place(filterEnvAmount,{910,276,230,22});
+    place(filterAttack,{900,213,116,24});place(filterDecay,{1024,213,116,24});
+    place(filterSustain,{900,249,116,24});place(filterRelease,{1024,249,116,24});
+    place(filterEnvAmount,{910,292,230,22});
     for(int i=0;i<4;++i){
         const int x=48+i*282;
         place(modSources[(size_t)i],{x+8,398,124,28});
@@ -987,10 +986,10 @@ void AuroraEditor::resized() {
     place(seqDirectionBox,{446,554,130,28});place(seqLengthBox,{584,554,110,28});
     place(seqOctaves,{704,554,140,28});place(seqGate,{852,554,140,28});place(seqSwing,{1000,554,150,28});
     for(int i=0;i<16;++i){const int x=52+(i%8)*61,y=610+(i/8)*34;place(stepButtons[(size_t)i],{x,y,56,28});}
-    place(stepPitch,{580,592,330,28});place(stepVelocity,{580,626,330,28});place(stepGate,{580,660,330,28});
-    place(selectedStepLabel,{930,578,100,24});place(stepAccentButton,{1040,578,110,28});
-    place(seqPageBox,{930,612,100,28});place(seqPatternSlotBox,{1040,612,110,28});
-    place(savePatternButton,{930,650,100,28});place(loadPatternButton,{1040,650,110,28});place(patternStatusLabel,{580,694,550,18});
+    place(stepPitch,{580,600,330,28});place(stepVelocity,{580,634,330,28});place(stepGate,{580,668,330,28});
+    place(selectedStepLabel,{930,586,100,24});place(stepAccentButton,{1040,586,110,28});
+    place(seqPageBox,{930,620,100,28});place(seqPatternSlotBox,{1040,620,110,28});
+    place(savePatternButton,{930,652,100,28});place(loadPatternButton,{1040,652,110,28});place(patternStatusLabel,{930,690,220,18});
 
     // FX.
     for(int i=0;i<6;++i)place(fxSlots[(size_t)i],{42+i*186,193,178,32});
