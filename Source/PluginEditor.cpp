@@ -777,37 +777,93 @@ void AuroraEditor::rebuildPresetList() {
     const bool favouritesOnly = rawQuery.startsWith("fav:");
     const auto query = favouritesOnly ? rawQuery.substring(4).trim() : rawQuery;
     const int previousId = presets.getSelectedId();
+    const int categoryId = presetCategoryFilter.getSelectedId();
+    const juce::String categoryFilter = categoryId > 1
+        ? presetCategoryFilter.getText().toUpperCase() : "ALL SOUNDS";
+
+    filteredPresetIds.clear();
     presets.clear();
+    for (int id = 1; id <= 500; ++id) {
+        const auto name = factoryPresetName(id);
+        const auto category = factoryPresetCategory(id).toUpperCase();
+        juce::String normalizedCategory = category;
+        if (category.startsWith("LEADS")) normalizedCategory = "LEADS";
+        else if (category.startsWith("PADS")) normalizedCategory = "PADS";
+        else if (category.startsWith("ATMOSPHERE")) normalizedCategory = "ATMOSPHERES";
+        else if (category.startsWith("KEYS")) normalizedCategory = "KEYS";
+        else if (category.startsWith("PLUCKS")) normalizedCategory = "PLUCKS";
+        else if (category.startsWith("BASS")) normalizedCategory = "BASS";
+        else if (category.startsWith("SYNTHS")) normalizedCategory = "SYNTHS";
+        else if (category.startsWith("SOUND FX")) normalizedCategory = "SOUND FX";
+        else if (category.startsWith("TEXTURES")) normalizedCategory = "TEXTURES";
+        else if (category.startsWith("FX &")) normalizedCategory = "FX & SYNTH";
 
-    struct Category { const char* name; int first; int last; };
-    static const Category categories[] = {
-        { "LEADS", 1, 3 }, { "PADS", 4, 6 }, { "KEYS", 7, 9 },
-        { "BASS", 10, 13 }, { "PLUCKS", 14, 16 },
-        { "ATMOSPHERE", 17, 20 }, { "FX & SYNTH", 21, 25 },
-        { "LEADS / VOL. 2", 26, 75 }, { "PADS / VOL. 2", 76, 125 },
-        { "ATMOSPHERES", 126, 175 }, { "KEYS", 176, 225 },
-        { "PIANOS", 226, 275 }, { "PLUCKS", 276, 325 },
-        { "BASS", 326, 375 }, { "SYNTHS", 376, 425 },
-        { "SOUND FX", 426, 475 }, { "TEXTURES", 476, 500 }
-    };
+        const bool categoryMatches = categoryFilter == "ALL SOUNDS"
+            || normalizedCategory == categoryFilter;
+        const bool nameMatches = query.isEmpty() || name.toLowerCase().contains(query);
+        const bool favouriteMatches = !favouritesOnly || proc.isPresetFavorite(id);
+        if (categoryMatches && nameMatches && favouriteMatches)
+            filteredPresetIds.push_back(id);
 
-    if (query.isEmpty() && !favouritesOnly) {
-        for (const auto& category : categories) {
-            presets.addSectionHeading(category.name);
-            for (int id = category.first; id <= category.last; ++id)
-                presets.addItem(factoryPresetName(id), id);
-        }
-    } else {
-        for (int id = 1; id <= 500; ++id) {
-            const auto name = factoryPresetName(id);
-            const bool matchesName = query.isEmpty() || name.toLowerCase().contains(query);
-            if (matchesName && (!favouritesOnly || proc.isPresetFavorite(id)))
-                presets.addItem(name, id);
-        }
+        presets.addItem(name, id);
     }
 
     if (previousId > 0 && presets.indexOfItemId(previousId) >= 0)
         presets.setSelectedId(previousId, juce::dontSendNotification);
+    presetBrowserList.updateContent();
+    int selectedRow = -1;
+    for (size_t i = 0; i < filteredPresetIds.size(); ++i)
+        if (filteredPresetIds[i] == presets.getSelectedId()) {
+            selectedRow = (int)i;
+            break;
+        }
+    presetBrowserList.selectRow(selectedRow, juce::dontSendNotification, true);
+    presetCountLabel.setText(juce::String(filteredPresetIds.size()) + " FACTORY PATCHES",
+                             juce::dontSendNotification);
+    presetSelectedLabel.setText(presets.getSelectedId() > 0
+        ? factoryPresetName(presets.getSelectedId()) : "SELECT A PATCH",
+        juce::dontSendNotification);
+    updateFavoriteButton();
+}
+
+int AuroraEditor::getNumRows() {
+    return (int)filteredPresetIds.size();
+}
+
+void AuroraEditor::paintListBoxItem(int rowNumber, juce::Graphics& g,
+                                    int width, int height, bool rowIsSelected) {
+    if (rowNumber < 0 || rowNumber >= (int)filteredPresetIds.size()) return;
+    const int presetId = filteredPresetIds[(size_t)rowNumber];
+    if (rowIsSelected) {
+        g.setColour(juce::Colour(0xff342747));
+        g.fillRoundedRectangle(3.0f, 1.0f, (float)width - 6.0f, (float)height - 2.0f, 5.0f);
+        g.setColour(violetHi.withAlpha(0.7f));
+        g.drawRoundedRectangle(3.5f, 1.5f, (float)width - 7.0f, (float)height - 3.0f, 5.0f, 1.0f);
+    } else if ((rowNumber & 1) != 0) {
+        g.setColour(juce::Colour(0xff121621));
+        g.fillRect(0, 0, width, height);
+    }
+
+    g.setColour(muted);
+    g.setFont(juce::Font(juce::FontOptions(8.5f, juce::Font::bold)));
+    g.drawText(juce::String(presetId).paddedLeft('0', 3), 12, 0, 38, height,
+               juce::Justification::centredLeft);
+    g.setColour(rowIsSelected ? white : juce::Colour(0xffd5d0df));
+    g.setFont(juce::Font(juce::FontOptions(10.0f, rowIsSelected ? juce::Font::bold : juce::Font::plain)));
+    g.drawText(factoryPresetName(presetId), 58, 0, width - 240, height,
+               juce::Justification::centredLeft, true);
+    g.setColour(rowIsSelected ? violetHi : muted);
+    g.setFont(juce::Font(juce::FontOptions(8.0f, juce::Font::bold)));
+    g.drawText(factoryPresetCategory(presetId), width - 176, 0, 160, height,
+               juce::Justification::centredRight, true);
+}
+
+void AuroraEditor::selectedRowsChanged(int lastRowSelected) {
+    if (lastRowSelected < 0 || lastRowSelected >= (int)filteredPresetIds.size()) return;
+    const int id = filteredPresetIds[(size_t)lastRowSelected];
+    presets.setSelectedId(id, juce::dontSendNotification);
+    applyPreset(id);
+    presetSelectedLabel.setText(factoryPresetName(id), juce::dontSendNotification);
     updateFavoriteButton();
 }
 
