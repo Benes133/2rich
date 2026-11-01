@@ -1190,6 +1190,9 @@ void AuroraEditor::timerCallback() {
         changed = true;
     }
 
+    if (currentPage == 3 || currentPage == 4)
+        updateSampleStatus();
+
     if (currentPage == 1) {
         for (int route = 0; route < 4; ++route) {
             const float activity = proc.getModRouteActivity(route);
@@ -1353,8 +1356,11 @@ void AuroraEditor::updateSampleStatus() {
     const auto sample = proc.getSampleAsset();
     if (!sample) {
         const juce::String empty = "NO AUDIO LOADED  /  IMPORT A WAV OR AIFF FILE";
-        sampleStatusLabel.setText(empty, juce::dontSendNotification);
-        granularStatusLabel.setText(empty, juce::dontSendNotification);
+        if (lastSampleStatusText != empty) {
+            sampleStatusLabel.setText(empty, juce::dontSendNotification);
+            granularStatusLabel.setText(empty, juce::dontSendNotification);
+            lastSampleStatusText = empty;
+        }
         return;
     }
     const int sliceCount = juce::jmax(0, (int)sample->sliceStarts.size() - 1);
@@ -1366,8 +1372,11 @@ void AuroraEditor::updateSampleStatus() {
         + "   /   SOURCE BPM: " + juce::String(sample->sourceBpm, 1)
         + "   /   PROJECT BPM: " + juce::String(proc.getHostTempoBpm(), 1)
         + "   /   " + juce::String(sliceCount) + " SLICES";
-    sampleStatusLabel.setText(info, juce::dontSendNotification);
-    granularStatusLabel.setText(info, juce::dontSendNotification);
+    if (lastSampleStatusText != info) {
+        sampleStatusLabel.setText(info, juce::dontSendNotification);
+        granularStatusLabel.setText(info, juce::dontSendNotification);
+        lastSampleStatusText = info;
+    }
 }
 
 void AuroraEditor::applyGranularPreset(int presetId) {
