@@ -528,6 +528,14 @@ void AuroraProcessor::prepareToPlay(double sr, int maximumBlockSize) {
     }
     limiterGain = 1.0f;
 
+    // The JUCE DSP reverb owns internal delay lines; prepare them before
+    // the audio thread can process an insert that selects Reverb.
+    juce::dsp::ProcessSpec reverbSpec;
+    reverbSpec.sampleRate = sr;
+    reverbSpec.maximumBlockSize = (juce::uint32)juce::jmax(1, maximumBlockSize);
+    reverbSpec.numChannels = 2;
+    reverb.prepare(reverbSpec);
+
     juce::dsp::Reverb::Parameters reverbParameters;
     reverbParameters.roomSize = 0.45f;
     reverbParameters.damping = 0.55f;
