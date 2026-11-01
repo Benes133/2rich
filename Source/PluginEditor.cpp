@@ -541,8 +541,8 @@ void AuroraEditor::paint(juce::Graphics& g) {
         panel(32,296,610,284,"MODULATION MATRIX","FOUR ROUTES / SOURCE TO TARGET");
         panel(660,296,268,284,"FILTER ENVELOPE","PER-VOICE CUTOFF SHAPING");
 
-        knobLabel(55,151,112,"RATE");
-        knobLabel(515,151,112,"RATE");
+        knobLabel(55,164,112,"RATE");
+        knobLabel(515,164,112,"RATE");
         g.setColour(muted);
         g.setFont(juce::Font(juce::FontOptions(8.5f)));
 
@@ -607,8 +607,8 @@ void AuroraEditor::resized() {
     place(seqTab,{668,31,56,30});
     place(presets,{735,34,188,30});
 
-    place(wave1,{50,160,226,30});
-    place(wave2,{322,160,226,30});
+    place(wave1,{50,164,226,29});
+    place(wave2,{322,164,226,29});
     place(mix,{595,176,98,132});
     place(detune,{703,176,98,132});
     place(sub,{811,176,98,132});
@@ -622,7 +622,7 @@ void AuroraEditor::resized() {
     place(drive,{782,412,68,145});
     place(width,{854,412,68,145});
 
-    place(wtTable,{54,160,216,31});
+    place(wtTable,{54,164,216,29});
     place(wtPosition,{66,211,184,112});
     place(unison,{88,430,160,136});
     place(uniDetune,{322,430,160,136});
@@ -638,9 +638,9 @@ void AuroraEditor::resized() {
     place(fxDelay,{660,409,104,132});
     place(fxReverb,{784,409,104,132});
 
-    place(lfo1Rate,{55,164,112,104});
+    place(lfo1Rate,{55,180,112,86});
     place(lfo1Shape,{195,188,245,34});
-    place(lfo2Rate,{515,164,112,104});
+    place(lfo2Rate,{515,180,112,86});
     place(lfo2Shape,{655,188,245,34});
     place(filterAttack,{666,398,53,90});
     place(filterDecay,{719,398,53,90});
