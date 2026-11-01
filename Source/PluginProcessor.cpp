@@ -937,7 +937,7 @@ bool AuroraProcessor::loadWavetableFromFile(const juce::File& file, juce::String
     const int sourceLength = (int)juce::jmin<int64_t>(4 * 1024 * 1024, reader->lengthInSamples);
     juce::AudioBuffer<float> source(1, sourceLength);
     source.clear();
-    if (!reader->read(&source, 0, 0, sourceLength, true, false)) {
+    if (!reader->read(&source, 0, sourceLength, 0, true, false)) {
         error = "Could not decode audio data";
         return false;
     }
