@@ -76,9 +76,10 @@ public:
             const int targetKey = (int)processor->params.getRawParameterValue(
                 sampleEngine == 2 ? "grainTargetKey" : "sampleTargetKey")->load();
 
+            int desiredKey = targetKey > 0 ? targetKey - 1 : processor->getProjectKeyClass();
             int keyShift = 0;
-            if (keySync && targetKey > 0) {
-                keyShift = (targetKey - 1) - (sampleAsset->rootMidiNote % 12);
+            if (keySync && desiredKey >= 0) {
+                keyShift = desiredKey - (sampleAsset->rootMidiNote % 12);
                 if (keyShift > 6) keyShift -= 12;
                 if (keyShift < -6) keyShift += 12;
             }
@@ -951,6 +952,36 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                                           std::memory_order_relaxed);
                 }
             }
+        }
+    }
+
+    // Estimate the tonal centre of incoming MIDI over time. This is a local
+    // track/part estimate (not a DAW-wide key-signature API).
+    for (const auto metadata : midi) {
+        const auto message = metadata.getMessage();
+        if (!message.isNoteOn()) continue;
+        for (auto& weight : midiPitchClassWeights) weight *= 0.9975;
+        const int pitchClass = message.getNoteNumber() % 12;
+        midiPitchClassWeights[(size_t)pitchClass] += (double)message.getFloatVelocity();
+        double totalWeight = 0.0;
+        for (const auto weight : midiPitchClassWeights) totalWeight += weight;
+        if (totalWeight > 3.0) {
+            static const double majorProfile[12] =
+                { 6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88 };
+            static const double minorProfile[12] =
+                { 6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17 };
+            double bestScore = -1.0e30;
+            int bestRoot = -1;
+            for (int root = 0; root < 12; ++root) {
+                for (int mode = 0; mode < 2; ++mode) {
+                    const auto* profile = mode == 0 ? majorProfile : minorProfile;
+                    double score = 0.0;
+                    for (int note = 0; note < 12; ++note)
+                        score += midiPitchClassWeights[(size_t)((root + note) % 12)] * profile[note];
+                    if (score > bestScore) { bestScore = score; bestRoot = root; }
+                }
+            }
+            projectKeyClass.store(bestRoot, std::memory_order_relaxed);
         }
     }
 
