@@ -129,7 +129,78 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     // Expansion categories are reserved for future user-created banks.
 
     presets.setTextWhenNothingSelected("SELECT PRESET");
-    presets.onChange = [this] { if (presets.getSelectedId() > 0) applyPreset(presets.getSelectedId()); };
+    presets.onChange = [this] {
+        if (presets.getSelectedId() > 0)
+            applyPreset(presets.getSelectedId());
+        updateFavoriteButton();
+    };
+
+    presetSearch.setTextToShowWhenEmpty("SEARCH PRESETS", muted);
+    presetSearch.setColour(juce::TextEditor::backgroundColourId, surface);
+    presetSearch.setColour(juce::TextEditor::textColourId, white);
+    presetSearch.setColour(juce::TextEditor::highlightColourId, violet);
+    presetSearch.setColour(juce::TextEditor::outlineColourId, border);
+    presetSearch.setColour(juce::TextEditor::focusedOutlineColourId, violetHi);
+    presetSearch.onTextChange = [this] { rebuildPresetList(); };
+    addAndMakeVisible(presetSearch);
+
+    for (auto* button : { &presetFavoriteButton, &savePresetButton, &loadPresetButton }) {
+        button->setLookAndFeel(&richLook);
+        button->setColour(juce::TextButton::textColourOffId, white);
+        button->setColour(juce::TextButton::textColourOnId, violetHi);
+        addAndMakeVisible(*button);
+    }
+    presetFavoriteButton.setClickingTogglesState(true);
+    presetFavoriteButton.setTooltip("Mark or unmark the selected factory preset as a favourite. Favourites are saved with the project.");
+    presetFavoriteButton.onClick = [this] {
+        const int id = presets.getSelectedId();
+        if (id > 0)
+            proc.setPresetFavorite(id, presetFavoriteButton.getToggleState());
+        updateFavoriteButton();
+    };
+
+    savePresetButton.setTooltip("Save the complete current sound, including imported wavetable, as a .2richpreset file.");
+    savePresetButton.onClick = [this] {
+        presetChooser = std::make_unique<juce::FileChooser>(
+            "Save 2rich Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                .getChildFile("My 2rich Preset.2richpreset"), "*.2richpreset");
+        presetChooser->launchAsync(juce::FileBrowserComponent::saveMode
+                                   | juce::FileBrowserComponent::canSelectFiles,
+            [this](const juce::FileChooser& chooser) {
+                auto file = chooser.getResult();
+                if (file == juce::File{})
+                    return;
+                if (file.getFileExtension().isEmpty())
+                    file = file.withFileExtension(".2richpreset");
+                juce::MemoryBlock state;
+                proc.getStateInformation(state);
+                if (auto output = file.createOutputStream()) {
+                    output->write(state.getData(), state.getSize());
+                    output->flush();
+                }
+            });
+    };
+
+    loadPresetButton.setTooltip("Load a previously saved .2richpreset file.");
+    loadPresetButton.onClick = [this] {
+        presetChooser = std::make_unique<juce::FileChooser>(
+            "Load 2rich Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+            "*.2richpreset");
+        presetChooser->launchAsync(juce::FileBrowserComponent::openMode
+                                   | juce::FileBrowserComponent::canSelectFiles,
+            [this](const juce::FileChooser& chooser) {
+                const auto file = chooser.getResult();
+                if (file == juce::File{})
+                    return;
+                if (auto input = file.createInputStream()) {
+                    juce::MemoryBlock state;
+                    if (input->readIntoMemoryBlock(state) && state.getSize() > 0)
+                        proc.setStateInformation(state.getData(), (int)state.getSize());
+                    updateFavoriteButton();
+                    repaint();
+                }
+            });
+    };
 
     wtTable.setLookAndFeel(&richLook); wtTable.setColour(juce::ComboBox::textColourId,white);
     wtTable.addItemList({"Basic","Harmonics","Triangle Morph","Digital","Octave","Fold","Imported WAV"},1);
@@ -391,6 +462,50 @@ AuroraEditor::~AuroraEditor() {
     synthTab.setLookAndFeel(nullptr);wtTab.setLookAndFeel(nullptr);fxTab.setLookAndFeel(nullptr);modTab.setLookAndFeel(nullptr);seqTab.setLookAndFeel(nullptr);
 }
 
+void AuroraEditor::rebuildPresetList() {
+    static const char* names[] = {
+        "Violet Lead", "Neon Saw", "Hollow Lead",
+        "Cloud Pad", "Glass Cathedral", "Slow Motion",
+        "Digital Keys", "Soft Piano-ish", "Pluck Keys",
+        "Sub Pressure", "Reese Machine", "Acid Bloom", "Neon Bass",
+        "Glass Pluck", "Cyber Mallet", "Crystal Keys",
+        "Aurora Drift", "Deep Space", "Ethereal Choir", "Frozen Sky",
+        "Laser Bloom", "Retro Pulse", "Wide Unison", "Dirty Motion", "Dream Sequence"
+    };
+    const auto query = presetSearch.getText().trim().toLowerCase();
+    const int previousId = presets.getSelectedId();
+    presets.clear();
+
+    const struct Category { const char* name; int first; int last; } categories[] = {
+        { "LEADS", 1, 3 }, { "PADS", 4, 6 }, { "KEYS", 7, 9 },
+        { "BASS", 10, 13 }, { "PLUCKS", 14, 16 },
+        { "ATMOSPHERE", 17, 20 }, { "FX & SYNTH", 21, 25 }
+    };
+
+    if (query.isEmpty()) {
+        for (const auto& category : categories) {
+            presets.addSectionHeading(category.name);
+            for (int id = category.first; id <= category.last; ++id)
+                presets.addItem(names[id - 1], id);
+        }
+    } else {
+        for (int id = 1; id <= 25; ++id)
+            if (juce::String(names[id - 1]).toLowerCase().contains(query))
+                presets.addItem(names[id - 1], id);
+    }
+
+    if (previousId > 0 && presets.indexOfItemId(previousId) >= 0)
+        presets.setSelectedId(previousId, juce::dontSendNotification);
+    updateFavoriteButton();
+}
+
+void AuroraEditor::updateFavoriteButton() {
+    const int id = presets.getSelectedId();
+    const bool favourite = id > 0 && proc.isPresetFavorite(id);
+    presetFavoriteButton.setToggleState(favourite, juce::dontSendNotification);
+    presetFavoriteButton.setButtonText(favourite ? "★ FAV" : "FAV");
+}
+
 void AuroraEditor::addKnob(juce::Slider& s, const juce::String&, const juce::String&) {
     s.setLookAndFeel(&richLook);
     s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -453,6 +568,12 @@ void AuroraEditor::applyPreset(int id) {
     set("fxEq",p.eq); set("fxLow",p.low); set("fxMid",p.mid); set("fxHigh",p.high);
     set("fxDist",p.fxDist); set("fxChorus",p.chorus); set("fxFlange",p.flange);
     set("fxDelay",p.delay); set("fxReverb",p.reverb);
+    set("fxSlot1", (p.drive > 0.01f || p.fxDist > 0.01f) ? 2.0f : 0.0f);
+    set("fxSlot2", 1.0f);
+    set("fxSlot3", p.flange > 0.01f ? 3.0f : 0.0f);
+    set("fxSlot4", p.delay > 0.01f ? 4.0f : 0.0f);
+    set("fxSlot5", p.reverb > 0.01f ? 5.0f : 0.0f);
+    set("fxSlot6", p.chorus > 0.01f ? 6.0f : 0.0f);
 
     // Keep factory patches predictable: modulation is opt-in unless a patch explicitly defines it.
     set("filterEnvAmount", 0.0f);
@@ -949,7 +1070,11 @@ void AuroraEditor::resized() {
     place(fxTab,{518,31,58,30});
     place(modTab,{582,31,80,30});
     place(seqTab,{668,31,56,30});
-    place(presets,{735,34,188,30});
+    place(presets,{735,34,188,27});
+    place(presetSearch,{145,35,152,25});
+    place(presetFavoriteButton,{735,63,52,18});
+    place(savePresetButton,{790,63,62,18});
+    place(loadPresetButton,{857,63,66,18});
 
     place(wave1,{50,164,226,29});
     place(wave2,{322,164,226,29});

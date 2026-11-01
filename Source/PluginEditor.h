@@ -18,6 +18,9 @@ private:
     juce::Label heading;
     juce::Slider mix, detune, sub, cutoff, res, attack, decay, sustain, release, master, drive, width;
     juce::ComboBox wave1, wave2, presets, wtTable, oscModeBox, filterTypeBox;
+    juce::TextEditor presetSearch;
+    juce::TextButton presetFavoriteButton{"FAV"}, savePresetButton{"SAVE"}, loadPresetButton{"LOAD"};
+    std::unique_ptr<juce::FileChooser> presetChooser;
     juce::Slider wtPosition, unison, uniDetune, uniSpread, fmAmount, syncRatio;
     juce::TextButton importWavetableButton{"IMPORT WAV"}, clearWavetableButton{"CLEAR"};
     juce::Label wavetableStatusLabel;
@@ -58,6 +61,8 @@ private:
 
     void addKnob(juce::Slider&, const juce::String&, const juce::String&);
     void applyPreset(int presetId);
+    void rebuildPresetList();
+    void updateFavoriteButton();
     void setPage(int page);
     void refreshSelectedStepControls();
     void writeSelectedStepParameter(const juce::String& baseId, float value);

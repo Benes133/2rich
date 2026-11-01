@@ -30,6 +30,8 @@ public:
  static APVTS::ParameterLayout createLayout();
  void saveUserPattern(int slot);
  bool loadUserPattern(int slot);
+ void setPresetFavorite(int presetId, bool favorite) noexcept;
+ bool isPresetFavorite(int presetId) const noexcept;
  bool loadWavetableFromFile(const juce::File& file, juce::String& error);
  void clearImportedWavetable();
  void editImportedWavetableRange(int frame, int firstSample, int lastSample,
@@ -55,6 +57,7 @@ private:
  };
  std::array<UserPattern, 8> userPatterns{};
  std::array<bool, 8> userPatternValid{};
+ std::array<std::atomic<bool>, 25> presetFavorites{};
  std::shared_ptr<const std::vector<float>> importedWavetable;
  juce::String importedWavetableName;
  class Voice;

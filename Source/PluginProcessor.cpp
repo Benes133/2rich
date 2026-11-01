@@ -1239,6 +1239,13 @@ void AuroraProcessor::getStateInformation(juce::MemoryBlock& destination) {
             element->setAttribute("accent", data.accent ? 1 : 0);
         }
     }
+    auto* favourites = xml->createNewChildElement("PRESET_FAVOURITES");
+    for (int presetId = 1; presetId <= 25; ++presetId) {
+        if (isPresetFavorite(presetId)) {
+            auto* favourite = favourites->createNewChildElement("FAVOURITE");
+            favourite->setAttribute("id", presetId);
+        }
+    }
     if (const auto imported = getImportedWavetable(); imported && !imported->empty()) {
         auto* wavetable = xml->createNewChildElement("IMPORTED_WAVETABLE");
         wavetable->setAttribute("name", importedWavetableName);
@@ -1252,7 +1259,20 @@ void AuroraProcessor::setStateInformation(const void* data, int size) {
     std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, size));
     if (xml && xml->hasTagName(params.state.getType())) {
         userPatternValid.fill(false);
+        for (auto& favourite : presetFavorites)
+            favourite.store(false, std::memory_order_relaxed);
         clearImportedWavetable();
+        if (auto* favourites = xml->getChildByName("PRESET_FAVOURITES")) {
+            for (auto* favourite = favourites->getFirstChildElement(); favourite != nullptr;
+                 favourite = favourite->getNextElement()) {
+                if (!favourite->hasTagName("FAVOURITE"))
+                    continue;
+                const int presetId = favourite->getIntAttribute("id", 0);
+                if (presetId >= 1 && presetId <= 25)
+                    presetFavorites[(size_t)(presetId - 1)].store(true, std::memory_order_relaxed);
+            }
+            xml->removeChildElement(favourites, true);
+        }
         if (auto* wavetable = xml->getChildByName("IMPORTED_WAVETABLE")) {
             juce::MemoryOutputStream decoded(0, true);
             if (juce::Base64::convertFromBase64(decoded, wavetable->getAllSubText())
@@ -1298,6 +1318,17 @@ void AuroraProcessor::setStateInformation(const void* data, int size) {
         }
         params.replaceState(juce::ValueTree::fromXml(*xml));
     }
+}
+
+void AuroraProcessor::setPresetFavorite(int presetId, bool favorite) noexcept {
+    if (presetId >= 1 && presetId <= 25)
+        presetFavorites[(size_t)(presetId - 1)].store(favorite, std::memory_order_relaxed);
+}
+
+bool AuroraProcessor::isPresetFavorite(int presetId) const noexcept {
+    return presetId >= 1 && presetId <= 25
+        ? presetFavorites[(size_t)(presetId - 1)].load(std::memory_order_relaxed)
+        : false;
 }
 
 juce::AudioProcessorEditor* AuroraProcessor::createEditor() {
