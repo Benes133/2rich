@@ -668,15 +668,39 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("fxChorusDepth", "Chorus Depth", 0.0f, 1.0f, 0.5f);
     f("fxChorusWidth", "Chorus Width", 0.0f, 1.0f, 0.5f);
 
+    // SAMPLER: all IDs are appended to preserve existing project compatibility.
     choice("sampleMode", "Sample Engine", { "Oscillator", "Sampler", "Granular" }, 0);
     layout.add(std::make_unique<juce::AudioParameterBool>("sampleSliceMode", "Auto Slice Mapping", true));
+    layout.add(std::make_unique<juce::AudioParameterBool>("sampleTempoSync", "Sampler Tempo Sync", true));
+    layout.add(std::make_unique<juce::AudioParameterBool>("sampleKeySync", "Sampler Key Sync", true));
+    layout.add(std::make_unique<juce::AudioParameterBool>("sampleLoop", "Sampler Loop", false));
+    layout.add(std::make_unique<juce::AudioParameterBool>("sampleReverse", "Sampler Reverse", false));
+    choice("sampleSyncBars", "Sampler Sync Length", { "Auto", "1 Bar", "2 Bars", "4 Bars", "8 Bars", "16 Bars" }, 0);
+    choice("sampleTargetKey", "Sampler Target Key", { "Auto", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0);
     f("sampleRootNote", "Sample Root MIDI Note", 0.0f, 127.0f, 60.0f);
     f("sampleMix", "Sample Level", 0.0f, 1.0f, 0.85f);
+    f("sampleTranspose", "Sampler Transpose", -48.0f, 48.0f, 0.0f);
+    f("sampleFineTune", "Sampler Fine Tune", -100.0f, 100.0f, 0.0f);
+    f("sampleStart", "Sampler Start", 0.0f, 1.0f, 0.0f);
+    f("sampleEnd", "Sampler End", 0.0f, 1.0f, 1.0f);
+    f("sampleSliceSensitivity", "Slice Sensitivity", 0.01f, 0.8f, 0.12f);
+    f("sampleSliceMinGap", "Slice Minimum Gap", 20.0f, 500.0f, 80.0f);
+    f("sampleMaxSlices", "Maximum Slices", 1.0f, 32.0f, 32.0f);
+    // GRANULAR: dedicated tempo/key controls and independent performance settings.
+    layout.add(std::make_unique<juce::AudioParameterBool>("grainTempoSync", "Granular Tempo Sync", true));
+    layout.add(std::make_unique<juce::AudioParameterBool>("grainKeySync", "Granular Key Sync", true));
+    choice("grainSyncDivision", "Grain Sync Division", { "1/16", "1/8", "1/4", "1/2", "1 Bar", "2 Bars" }, 2);
     f("grainSize", "Grain Size", 20.0f, 500.0f, 120.0f, 0.5f);
     f("grainDensity", "Grain Density", 2.0f, 60.0f, 18.0f, 0.5f);
     f("grainPosition", "Grain Position", 0.0f, 1.0f, 0.5f);
     f("grainSpray", "Grain Spray", 0.0f, 1.0f, 0.15f);
     f("grainPitch", "Grain Pitch", -24.0f, 24.0f, 0.0f);
+    f("grainTranspose", "Granular Transpose", -48.0f, 48.0f, 0.0f);
+    f("grainFineTune", "Granular Fine Tune", -100.0f, 100.0f, 0.0f);
+    f("grainJitter", "Grain Timing Jitter", 0.0f, 1.0f, 0.0f);
+    f("grainWindow", "Grain Window", 0.0f, 1.0f, 0.0f);
+    f("grainStereo", "Grain Stereo Spread", 0.0f, 1.0f, 0.35f);
+    f("grainFeedback", "Granular Feedback", 0.0f, 0.85f, 0.0f);
 
     return layout;
 }
@@ -745,6 +769,15 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     if (samples <= 0 || buffer.getNumChannels() != 2
         || !std::isfinite(sampleRate) || sampleRate < 1000.0)
         return;
+
+    // JUCE exposes host tempo and meter here. Key signature is not part of
+    // PositionInfo, so target key remains an explicit musical setting in the UI.
+    if (auto* playHead = getPlayHead()) {
+        if (const auto position = playHead->getPosition()) {
+            if (const auto bpm = position->getBpm(); bpm && std::isfinite(*bpm))
+                hostTempoBpm.store(juce::jlimit(20.0, 400.0, *bpm), std::memory_order_relaxed);
+        }
+    }
 
     auto value = [this](const char* id) {
         if (const auto* parameter = params.getRawParameterValue(id))
