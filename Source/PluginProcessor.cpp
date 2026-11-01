@@ -1861,7 +1861,7 @@ void AuroraProcessor::setPresetFavorite(int presetId, bool favorite) noexcept {
 }
 
 bool AuroraProcessor::isPresetFavorite(int presetId) const noexcept {
-    return presetId >= 1 && presetId <= 25
+    return presetId >= 1 && presetId <= 500
         ? presetFavorites[(size_t)(presetId - 1)].load(std::memory_order_relaxed)
         : false;
 }
