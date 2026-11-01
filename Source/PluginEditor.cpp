@@ -126,17 +126,24 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     presets.addItem("Aurora Drift",17); presets.addItem("Deep Space",18); presets.addItem("Ethereal Choir",19); presets.addItem("Frozen Sky",20);
     presets.addSectionHeading("FX & SYNTH");
     presets.addItem("Laser Bloom",21); presets.addItem("Retro Pulse",22); presets.addItem("Wide Unison",23); presets.addItem("Dirty Motion",24); presets.addItem("Dream Sequence",25);
-    presets.addSectionHeading("EXPANSION - MOTION & COLOR");
+    presets.addSectionHeading("EXPANSION - LEADS");
     presets.addItem("Prism Lead",26); presets.addItem("Analog Edge",27);
     presets.addItem("Vocal Formant",28); presets.addItem("Pulse Driver",29);
+    presets.addSectionHeading("EXPANSION - PADS");
     presets.addItem("Velvet Orbit",30); presets.addItem("Amber Motion",31);
     presets.addItem("Northern Lights",32); presets.addItem("Lunar Glass",33);
+    presets.addSectionHeading("EXPANSION - KEYS");
     presets.addItem("FM Bell",34); presets.addItem("Rhodes Circuit",35);
-    presets.addItem("Lo-Fi Keys",36); presets.addItem("Deep Mono",37);
-    presets.addItem("Rubber Sub",38); presets.addItem("Acid Reactor",39);
+    presets.addItem("Lo-Fi Keys",36);
+    presets.addSectionHeading("EXPANSION - BASS");
+    presets.addItem("Deep Mono",37); presets.addItem("Rubber Sub",38);
+    presets.addItem("Acid Reactor",39);
+    presets.addSectionHeading("EXPANSION - PLUCKS");
     presets.addItem("Neon Droplet",40); presets.addItem("Carbon Pluck",41);
-    presets.addItem("Marble Mallet",42); presets.addItem("Polar Bloom",43);
-    presets.addItem("Static Rain",44); presets.addItem("Hyperdrive",45);
+    presets.addItem("Marble Mallet",42);
+    presets.addSectionHeading("EXPANSION - ATMOSPHERE / FX");
+    presets.addItem("Polar Bloom",43); presets.addItem("Static Rain",44);
+    presets.addItem("Hyperdrive",45);
     presets.setTextWhenNothingSelected("SELECT PRESET");
     presets.onChange = [this] { if (presets.getSelectedId() > 0) applyPreset(presets.getSelectedId()); };
 
@@ -285,7 +292,6 @@ void AuroraEditor::paint(juce::Graphics& g) {
 
     g.setColour(white);
     g.setFont(juce::Font(juce::FontOptions(29.0f, juce::Font::bold)));
-    g.drawText("2rich", 32, 23, 98, 37, juce::Justification::centredLeft);
     g.setColour(neon);
     g.fillRoundedRectangle(33, 62, 34, 3, 1.5f);
     g.setColour(muted);
@@ -381,8 +387,6 @@ void AuroraEditor::paint(juce::Graphics& g) {
         g.setColour(muted);
         g.setFont(juce::Font(juce::FontOptions(8.5f)));
         g.drawText("Choose a waveform to update the live preview.",49,289,230,15,juce::Justification::centredLeft);
-        g.drawText("Four-stage envelope",306,552,210,13,juce::Justification::centredLeft);
-        g.drawText("Clean gain staging",720,552,170,13,juce::Justification::centredLeft);
     }
     else if (currentPage == 1) {
         panel(32,106,260,218,"TABLE BANK","SOURCE / MORPH POSITION");
