@@ -126,24 +126,8 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     presets.addItem("Aurora Drift",17); presets.addItem("Deep Space",18); presets.addItem("Ethereal Choir",19); presets.addItem("Frozen Sky",20);
     presets.addSectionHeading("FX & SYNTH");
     presets.addItem("Laser Bloom",21); presets.addItem("Retro Pulse",22); presets.addItem("Wide Unison",23); presets.addItem("Dirty Motion",24); presets.addItem("Dream Sequence",25);
-    presets.addSectionHeading("EXPANSION - LEADS");
-    presets.addItem("Prism Lead",26); presets.addItem("Analog Edge",27);
-    presets.addItem("Vocal Formant",28); presets.addItem("Pulse Driver",29);
-    presets.addSectionHeading("EXPANSION - PADS");
-    presets.addItem("Velvet Orbit",30); presets.addItem("Amber Motion",31);
-    presets.addItem("Northern Lights",32); presets.addItem("Lunar Glass",33);
-    presets.addSectionHeading("EXPANSION - KEYS");
-    presets.addItem("FM Bell",34); presets.addItem("Rhodes Circuit",35);
-    presets.addItem("Lo-Fi Keys",36);
-    presets.addSectionHeading("EXPANSION - BASS");
-    presets.addItem("Deep Mono",37); presets.addItem("Rubber Sub",38);
-    presets.addItem("Acid Reactor",39);
-    presets.addSectionHeading("EXPANSION - PLUCKS");
-    presets.addItem("Neon Droplet",40); presets.addItem("Carbon Pluck",41);
-    presets.addItem("Marble Mallet",42);
-    presets.addSectionHeading("EXPANSION - ATMOSPHERE / FX");
-    presets.addItem("Polar Bloom",43); presets.addItem("Static Rain",44);
-    presets.addItem("Hyperdrive",45);
+    // Expansion categories are reserved for future user-created banks.
+
     presets.setTextWhenNothingSelected("SELECT PRESET");
     presets.onChange = [this] { if (presets.getSelectedId() > 0) applyPreset(presets.getSelectedId()); };
 
@@ -169,6 +153,10 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         addChoice(this->modSources[(size_t)i], modSources, "mod" + suffix + "Source");
         addChoice(this->modTargets[(size_t)i], modTargets, "mod" + suffix + "Target");
     }
+
+    addChoice(seqModeBox, { "Off", "Arpeggiator", "Step Sequencer" }, "seqMode");
+    addChoice(arpStyleBox, { "Up", "Down", "Up / Down", "Random" }, "arpStyle");
+    addChoice(seqRateBox, { "1/4", "1/8", "1/16", "1/32", "1/8T" }, "seqRate");
     auto addExtra=[&](juce::Slider& s,const juce::String& id,const juce::String& label){addKnob(s,label,id);attachments.push_back(std::make_unique<Attach>(ap,id,s));};
     addExtra(wtPosition,"wtPosition","POSITION"); addExtra(unison,"unison","VOICES"); addExtra(uniDetune,"uniDetune","DETUNE"); addExtra(uniSpread,"uniSpread","SPREAD");
     addExtra(fxEq,"fxEq","EQ MIX"); addExtra(fxLow,"fxLow","LOW"); addExtra(fxMid,"fxMid","MID"); addExtra(fxHigh,"fxHigh","HIGH");
@@ -177,13 +165,39 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addExtra(filterAttack,"filterAttack","ATTACK"); addExtra(filterDecay,"filterDecay","DECAY");
     addExtra(filterSustain,"filterSustain","SUSTAIN"); addExtra(filterRelease,"filterRelease","RELEASE");
     addExtra(filterEnvAmount,"filterEnvAmount","AMOUNT");
+    addExtra(seqOctaves,"seqOctaves","OCTAVES");
+    addExtra(seqGate,"seqGate","GATE");
+    addExtra(seqSwing,"seqSwing","SWING");
+    for (auto* slider : { &seqOctaves, &seqGate, &seqSwing }) {
+        slider->setSliderStyle(juce::Slider::LinearHorizontal);
+        slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 42, 18);
+    }
+    seqOctaves.setNumDecimalPlacesToDisplay(0);
+    for (int i = 0; i < 16; ++i) {
+        const auto suffix = juce::String(i);
+        auto& button = stepButtons[(size_t)i];
+        button.setButtonText(juce::String(i + 1).paddedLeft('0', 2));
+        button.setLookAndFeel(&richLook);
+        button.setClickingTogglesState(true);
+        button.setColour(juce::TextButton::textColourOffId, white);
+        button.setColour(juce::TextButton::textColourOnId, violetHi);
+        addAndMakeVisible(button);
+        stepButtonAttachments[(size_t)i] = std::make_unique<ButtonAttach>(ap, "stepOn" + suffix, button);
+
+        auto& pitch = stepPitchSliders[(size_t)i];
+        addExtra(pitch, "stepPitch" + suffix, "PITCH");
+        pitch.setRange(-12, 12, 1);
+        pitch.setSliderStyle(juce::Slider::LinearVertical);
+        pitch.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 42, 18);
+        pitch.setNumDecimalPlacesToDisplay(0);
+    }
     for (int i = 0; i < 4; ++i) {
         addExtra(modAmounts[(size_t)i], "mod" + juce::String(i + 1) + "Amount", "AMOUNT");
         modAmounts[(size_t)i].setSliderStyle(juce::Slider::LinearHorizontal);
         modAmounts[(size_t)i].setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
     }
-    for(auto* tab:{&synthTab,&wtTab,&fxTab,&modTab}){tab->setLookAndFeel(&richLook);tab->setColour(juce::TextButton::textColourOffId,white);tab->setColour(juce::TextButton::textColourOnId,violetHi);tab->setClickingTogglesState(false);addAndMakeVisible(*tab);}
-    synthTab.onClick=[this]{setPage(0);};wtTab.onClick=[this]{setPage(1);};fxTab.onClick=[this]{setPage(2);};modTab.onClick=[this]{setPage(3);};
+    for(auto* tab:{&synthTab,&wtTab,&fxTab,&modTab,&seqTab}){tab->setLookAndFeel(&richLook);tab->setColour(juce::TextButton::textColourOffId,white);tab->setColour(juce::TextButton::textColourOnId,violetHi);tab->setClickingTogglesState(false);addAndMakeVisible(*tab);}
+    synthTab.onClick=[this]{setPage(0);};wtTab.onClick=[this]{setPage(1);};fxTab.onClick=[this]{setPage(2);};modTab.onClick=[this]{setPage(3);};seqTab.onClick=[this]{setPage(4);};
     unison.setRange(1,7,1); unison.setNumDecimalPlacesToDisplay(0);
     add(mix, "mix", "MIX"); add(detune, "detune", "DETUNE"); add(sub, "sub", "SUB");
     add(cutoff, "cutoff", "CUTOFF"); add(res, "res", "RES");
@@ -201,12 +215,19 @@ AuroraEditor::~AuroraEditor() {
                           &uniSpread, &fxEq, &fxLow, &fxMid, &fxHigh, &fxDist, &fxChorus,
                           &fxFlange, &fxDelay, &fxReverb, &lfo1Rate, &lfo2Rate, &filterAttack,
                           &filterDecay, &filterSustain, &filterRelease, &filterEnvAmount,
-                          &modAmounts[0], &modAmounts[1], &modAmounts[2], &modAmounts[3] }) slider->setLookAndFeel(nullptr);
+                          &modAmounts[0], &modAmounts[1], &modAmounts[2], &modAmounts[3],
+                          &seqOctaves, &seqGate, &seqSwing,
+                          &stepPitchSliders[0], &stepPitchSliders[1], &stepPitchSliders[2], &stepPitchSliders[3],
+                          &stepPitchSliders[4], &stepPitchSliders[5], &stepPitchSliders[6], &stepPitchSliders[7],
+                          &stepPitchSliders[8], &stepPitchSliders[9], &stepPitchSliders[10], &stepPitchSliders[11],
+                          &stepPitchSliders[12], &stepPitchSliders[13], &stepPitchSliders[14], &stepPitchSliders[15] }) slider->setLookAndFeel(nullptr);
     wave1.setLookAndFeel(nullptr); wave2.setLookAndFeel(nullptr); presets.setLookAndFeel(nullptr); wtTable.setLookAndFeel(nullptr);
     lfo1Shape.setLookAndFeel(nullptr); lfo2Shape.setLookAndFeel(nullptr);
     for (auto& box : modSources) box.setLookAndFeel(nullptr);
     for (auto& box : modTargets) box.setLookAndFeel(nullptr);
-    synthTab.setLookAndFeel(nullptr);wtTab.setLookAndFeel(nullptr);fxTab.setLookAndFeel(nullptr);modTab.setLookAndFeel(nullptr);
+    for (auto& button : stepButtons) button.setLookAndFeel(nullptr);
+    seqModeBox.setLookAndFeel(nullptr); arpStyleBox.setLookAndFeel(nullptr); seqRateBox.setLookAndFeel(nullptr);
+    synthTab.setLookAndFeel(nullptr);wtTab.setLookAndFeel(nullptr);fxTab.setLookAndFeel(nullptr);modTab.setLookAndFeel(nullptr);seqTab.setLookAndFeel(nullptr);
 }
 
 void AuroraEditor::addKnob(juce::Slider& s, const juce::String&, const juce::String&) {
@@ -253,27 +274,7 @@ void AuroraEditor::applyPreset(int id) {
         {1,3,1,.40f,15,.10f,7200,.40f,.001f,.24f,.16f,.55f,.80f,.30f,.80f,4,26,.92f,.34f,.24f,2,2,.30f,.18f,.45f,.28f,.18f,0.0f},
         {0,2,4,.50f,8,.12f,6100,.22f,.006f,.45f,.72f,2.8f,.78f,.10f,.96f,7,28,1.0f,.72f,.30f,1,3,.10f,.62f,.0f,.35f,.62f,0.0f},
         {0,1,5,.58f,38,.28f,1700,.68f,.003f,.38f,.48f,.72f,.76f,.72f,.86f,7,42,1.0f,.48f,.42f,3,4,.72f,.25f,.48f,.30f,.24f,0.0f},
-        {3,0,4,.46f,13,.16f,4600,.26f,.45f,2.6f,.86f,4.6f,.76f,.14f,.94f,6,30,1.0f,.70f,.30f,2,3,.14f,.58f,.30f,.48f,.70f,0.0f},
-        {0,1,1,.55f,12.0f,.05f,9600.0f,.24f,.003f,.22f,.55f,.18f,.82f,.12f,.86f,3.0f,16.0f,.78f,.82f,.22f,.10f,-.4f,.2f,.10f,.22f,.06f,.10f,.10f},
-        {1,0,0,.35f,24.0f,.12f,6800.0f,.50f,.002f,.18f,.40f,.26f,.78f,.32f,.70f,2.0f,25.0f,.64f,.35f,.14f,.45f,.5f,-.2f,.32f,.08f,.12f,.06f,.08f},
-        {2,3,2,.42f,6.0f,.04f,5200.0f,.31f,.08f,.50f,.68f,.45f,.80f,.08f,.95f,4.0f,12.0f,.90f,.62f,.42f,-.6f,.8f,1.1f,.08f,.28f,.12f,.24f,.42f},
-        {1,0,3,.30f,18.0f,.02f,7500.0f,.40f,.001f,.22f,.32f,.20f,.84f,.20f,.68f,2.0f,22.0f,.72f,.32f,.20f,.6f,-.4f,.8f,.25f,.08f,.18f,.08f,.12f},
-        {3,2,4,.58f,4.0f,.14f,4100.0f,.26f,2.4f,3.6f,.80f,4.2f,.78f,.04f,.96f,5.0f,18.0f,.92f,1.0f,.68f,-.5f,.4f,.9f,.05f,.12f,.08f,.38f,.72f},
-        {2,3,2,.48f,9.0f,.10f,3700.0f,.33f,1.2f,2.8f,.75f,3.8f,.78f,.10f,.92f,4.0f,15.0f,.85f,.86f,.55f,.2f,.0f,.8f,.10f,.18f,.20f,.30f,.55f},
-        {3,2,4,.62f,5.0f,.12f,4600.0f,.30f,1.8f,3.4f,.86f,4.8f,.75f,.02f,1.0f,6.0f,20.0f,1.0f,.95f,.75f,.5f,.3f,1.1f,.02f,.12f,.08f,.56f,.82f},
-        {3,2,2,.54f,2.0f,.06f,6900.0f,.18f,1.4f,2.2f,.70f,4.4f,.80f,.02f,.95f,4.0f,10.0f,.92f,.72f,.70f,.0f,.3f,.6f,.02f,.06f,.0f,.45f,.65f},
-        {3,2,4,.66f,3.0f,.02f,11200.0f,.20f,.001f,.9f,.08f,1.4f,.82f,.03f,.72f,2.0f,8.0f,.72f,.40f,.22f,.3f,.2f,.5f,.02f,.12f,.0f,.22f,.38f},
-        {2,3,4,.42f,5.0f,.03f,5800.0f,.40f,.003f,.8f,.45f,1.3f,.80f,.10f,.82f,2.0f,9.0f,.78f,.66f,.32f,.5f,.2f,.2f,.06f,.15f,.08f,.12f,.32f},
-        {0,2,5,.36f,12.0f,.12f,3900.0f,.58f,.002f,.65f,.34f,1.0f,.75f,.34f,.64f,1.0f,4.0f,.35f,.55f,.45f,.2f,.1f,-.2f,.30f,.10f,.18f,.10f,.30f},
-        {0,1,5,.45f,28.0f,.42f,950.0f,.82f,.003f,.55f,.46f,.32f,.83f,.52f,.42f,1.0f,0.0f,.0f,.76f,.12f,1.2f,-.4f,.0f,.46f,.0f,.0f,.10f,.08f},
-        {2,0,0,.62f,14.0f,.62f,520.0f,.66f,.006f,.32f,.58f,.35f,.86f,.22f,.45f,1.0f,5.0f,.15f,.20f,.06f,.2f,.0f,.0f,.18f,.02f,.0f,.04f,.06f},
-        {0,1,3,.30f,22.0f,.02f,2700.0f,.88f,.001f,.28f,.40f,.18f,.82f,.76f,.55f,1.0f,3.0f,.15f,.48f,.34f,.8f,-.2f,.7f,.72f,.04f,.12f,.06f,.12f},
-        {2,3,2,.48f,8.0f,.04f,7600.0f,.20f,.001f,.34f,.12f,.55f,.81f,.18f,.88f,3.0f,12.0f,.86f,.76f,.25f,.2f,.0f,.3f,.10f,.30f,.18f,.16f,.24f},
-        {1,3,5,.40f,11.0f,.08f,3400.0f,.52f,.001f,.24f,.12f,.42f,.79f,.55f,.76f,2.0f,14.0f,.78f,.72f,.30f,.5f,.3f,.0f,.46f,.08f,.22f,.12f,.14f},
-        {3,2,4,.58f,4.0f,.02f,8800.0f,.17f,.001f,.55f,.16f,.85f,.82f,.02f,.92f,3.0f,6.0f,.86f,.58f,.42f,.1f,.0f,.7f,.02f,.12f,.10f,.30f,.50f},
-        {3,2,4,.62f,6.0f,.08f,4400.0f,.24f,2.4f,3.8f,.85f,4.8f,.76f,.02f,1.0f,7.0f,18.0f,1.0f,.98f,.74f,.4f,.4f,.9f,.02f,.24f,.12f,.56f,.80f},
-        {1,0,5,.45f,17.0f,.18f,7200.0f,.34f,.7f,2.3f,.45f,3.7f,.75f,.50f,.84f,5.0f,28.0f,.92f,.82f,.42f,.1f,1.0f,-.5f,.50f,.25f,.42f,.38f,.50f},
-        {0,1,3,.58f,35.0f,.14f,3900.0f,.92f,.002f,.28f,.52f,.30f,.78f,.86f,.92f,7.0f,42.0f,1.0f,.92f,.48f,1.5f,-.5f,.8f,.86f,.42f,.35f,.42f,.40f}
+        {3,0,4,.46f,13,.16f,4600,.26f,.45f,2.6f,.86f,4.6f,.76f,.14f,.94f,6,30,1.0f,.70f,.30f,2,3,.14f,.58f,.30f,.48f,.70f,0.0f}
     };
     if (id < 1 || id > (int)std::size(patches)) return;
     const auto& p = patches[id - 1];
@@ -309,6 +310,7 @@ void AuroraEditor::setPage(int page) {
     wtTab.setToggleState(page == 1, juce::dontSendNotification);
     fxTab.setToggleState(page == 2, juce::dontSendNotification);
     modTab.setToggleState(page == 3, juce::dontSendNotification);
+    seqTab.setToggleState(page == 4, juce::dontSendNotification);
     auto show = [page](std::initializer_list<juce::Component*> list, bool visible) {
         for (auto* component : list) component->setVisible(visible);
     };
@@ -320,6 +322,11 @@ void AuroraEditor::setPage(int page) {
         modSources[(size_t)i].setVisible(page == 3);
         modTargets[(size_t)i].setVisible(page == 3);
         modAmounts[(size_t)i].setVisible(page == 3);
+    }
+    show({ &seqModeBox, &arpStyleBox, &seqRateBox, &seqOctaves, &seqGate, &seqSwing }, page == 4);
+    for (int i = 0; i < 16; ++i) {
+        stepButtons[(size_t)i].setVisible(page == 4);
+        stepPitchSliders[(size_t)i].setVisible(page == 4);
     }
     repaint();
     resized();
@@ -352,7 +359,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
     g.drawText("SYNTH ENGINE", 145, 28, 150, 15, juce::Justification::centredLeft);
     g.setFont(juce::Font(juce::FontOptions(9.0f)));
     g.drawText("NORTHSTAR AUDIO", 145, 45, 180, 13, juce::Justification::centredLeft);
-    g.drawText("PRESET", 700, 20, 170, 12, juce::Justification::centredLeft);
+    g.drawText("PRESET", 735, 20, 170, 12, juce::Justification::centredLeft);
     g.setColour(violet);
     g.fillRoundedRectangle(32, 84, 896, 1, 0.5f);
 
@@ -528,7 +535,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
         g.setColour(neon.withAlpha(0.8f));
         g.fillRoundedRectangle(357,532,246,2,1.0f);
     }
-    else {
+    else if (currentPage == 3) {
         panel(32,106,438,174,"LFO 1","GLOBAL MODULATOR / RATE AND SHAPE");
         panel(490,106,438,174,"LFO 2","GLOBAL MODULATOR / RATE AND SHAPE");
         panel(32,296,610,284,"MODULATION MATRIX","FOUR ROUTES / SOURCE TO TARGET");
@@ -543,16 +550,16 @@ void AuroraEditor::paint(juce::Graphics& g) {
 
         g.setColour(muted);
         g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
-        g.drawText("SOURCE",52,350,140,12,juce::Justification::centredLeft);
-        g.drawText("TARGET",214,350,140,12,juce::Justification::centredLeft);
-        g.drawText("DEPTH",394,350,100,12,juce::Justification::centredLeft);
+        g.drawText("SOURCE",52,356,140,14,juce::Justification::centredLeft);
+        g.drawText("TARGET",214,356,140,14,juce::Justification::centredLeft);
+        g.drawText("DEPTH",394,356,100,14,juce::Justification::centredLeft);
         for (int i = 0; i < 4; ++i) {
             const int rowY = 365 + i * 48;
             g.setColour(border.withAlpha(0.7f));
             g.drawLine(50.0f,(float)(rowY+40),622.0f,(float)(rowY+40),0.8f);
             g.setColour(muted);
             g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
-            g.drawText("ROUTE " + juce::String(i+1),52,rowY-11,100,10,juce::Justification::centredLeft);
+
         }
 
         knobLabel(668,382,52,"ATK");
@@ -560,7 +567,23 @@ void AuroraEditor::paint(juce::Graphics& g) {
         knobLabel(772,382,52,"SUS");
         knobLabel(824,382,52,"REL");
         knobLabel(744,478,100,"FILTER ENV AMOUNT");
+    }
+    else {
+        panel(32,106,896,132,"PERFORMANCE","TEMPO-SYNCED ARPEGGIATOR AND STEP SEQUENCER");
+        panel(32,254,896,326,"16 STEP PATTERN","ENABLE STEPS AND SET EACH STEP'S PITCH OFFSET");
 
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(8.5f,juce::Font::bold)));
+        g.drawText("MODE",52,168,150,14,juce::Justification::centredLeft);
+        g.drawText("ARP ORDER",222,168,150,14,juce::Justification::centredLeft);
+        g.drawText("RATE",392,168,150,14,juce::Justification::centredLeft);
+        g.drawText("OCTAVES",566,168,90,14,juce::Justification::centredLeft);
+        g.drawText("GATE",680,168,90,14,juce::Justification::centredLeft);
+        g.drawText("SWING",794,168,90,14,juce::Justification::centredLeft);
+        g.setFont(juce::Font(juce::FontOptions(8.5f)));
+        g.drawText("Host tempo sync",52,222,160,12,juce::Justification::centredLeft);
+        g.drawText("Pitch range: -12 to +12 semitones",52,558,300,12,juce::Justification::centredLeft);
+        g.drawText("Disabled steps are skipped",650,558,250,12,juce::Justification::centredRight);
     }
 
     g.setColour(border);
@@ -568,7 +591,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
     g.setColour(muted);
     g.setFont(juce::Font(juce::FontOptions(8.5f)));
     g.drawText("2RICH  /  NORTHSTAR AUDIO",34,609,280,12,juce::Justification::centredLeft);
-    g.drawText("SYNTH  /  WAVETABLE  /  FX",700,609,226,12,juce::Justification::centredRight);
+    g.drawText("SYNTH  /  WAVETABLE  /  FX  /  MOD  /  SEQ",620,609,306,12,juce::Justification::centredRight);
 }
 
 void AuroraEditor::resized() {
@@ -579,11 +602,12 @@ void AuroraEditor::resized() {
         component.setBounds(scaledBounds(bounds,scale,ox,oy));
     };
     place(heading,{32,23,100,42});
-    place(synthTab,{310,31,82,30});
-    place(wtTab,{398,31,124,30});
-    place(fxTab,{528,31,60,30});
-    place(modTab,{594,31,92,30});
-    place(presets,{700,34,223,30});
+    place(synthTab,{310,31,78,30});
+    place(wtTab,{394,31,118,30});
+    place(fxTab,{518,31,58,30});
+    place(modTab,{582,31,80,30});
+    place(seqTab,{668,31,56,30});
+    place(presets,{735,34,188,30});
 
     place(wave1,{50,160,226,30});
     place(wave2,{322,160,226,30});
@@ -626,7 +650,7 @@ void AuroraEditor::resized() {
     place(filterRelease,{825,398,53,90});
     place(filterEnvAmount,{739,494,104,76});
     for (int i = 0; i < 4; ++i) {
-        const int rowY = 367 + i * 48;
+        const int rowY = 376 + i * 48;
         place(modSources[(size_t)i],{52,rowY,150,29});
         place(modTargets[(size_t)i],{214,rowY,150,29});
         place(modAmounts[(size_t)i],{394,rowY+2,205,25});
@@ -653,6 +677,14 @@ void AuroraEditor::resized() {
             modSources[(size_t)i].setVisible(false);
             modTargets[(size_t)i].setVisible(false);
             modAmounts[(size_t)i].setVisible(false);
+        }
+    }
+    if(currentPage!=4) {
+        juce::Component* controls[]={&seqModeBox,&arpStyleBox,&seqRateBox,&seqOctaves,&seqGate,&seqSwing};
+        for(auto* control:controls) control->setVisible(false);
+        for(int i=0;i<16;++i) {
+            stepButtons[(size_t)i].setVisible(false);
+            stepPitchSliders[(size_t)i].setVisible(false);
         }
     }
 }
