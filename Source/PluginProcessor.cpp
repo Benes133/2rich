@@ -303,7 +303,7 @@ private:
             const int sampleA = ((int)samplePosition) % frameSize;
             const int sampleB = (sampleA + 1) % frameSize;
             const float sampleBlend = samplePosition - std::floor(samplePosition);
-            const auto at = [importedTable](int frame, int index) {
+            const auto at = [importedTable, frameSize](int frame, int index) {
                 return (*importedTable)[(size_t)(frame * frameSize + index)];
             };
             const float a = juce::jmap(sampleBlend, at(frameA, sampleA), at(frameA, sampleB));
@@ -937,7 +937,7 @@ bool AuroraProcessor::loadWavetableFromFile(const juce::File& file, juce::String
     const int sourceLength = (int)juce::jmin<int64_t>(4 * 1024 * 1024, reader->lengthInSamples);
     juce::AudioBuffer<float> source(1, sourceLength);
     source.clear();
-    if (!reader->read(&source, 0, 1, 0, sourceLength, true, false)) {
+    if (!reader->read(&source, 0, 0, sourceLength, true, false)) {
         error = "Could not decode audio data";
         return false;
     }
@@ -998,7 +998,7 @@ float AuroraProcessor::getImportedWavetableSample(float phase, float position) c
     const int sampleA = ((int)samplePosition) % frameSize;
     const int sampleB = (sampleA + 1) % frameSize;
     const float sampleBlend = samplePosition - std::floor(samplePosition);
-    const auto at = [&table](int frame, int index) {
+    const auto at = [&table, frameSize](int frame, int index) {
         return (*table)[(size_t)(frame * frameSize + index)];
     };
     const float a = juce::jmap(sampleBlend, at(frameA, sampleA), at(frameA, sampleB));
@@ -1035,7 +1035,7 @@ void AuroraProcessor::getStateInformation(juce::MemoryBlock& destination) {
         auto* wavetable = xml->createNewChildElement("IMPORTED_WAVETABLE");
         wavetable->setAttribute("name", importedWavetableName);
         const auto encoded = juce::Base64::toBase64(imported->data(), imported->size() * sizeof(float));
-        wavetable->addText(encoded);
+        wavetable->addTextElement(encoded);
     }
     copyXmlToBinary(*xml, destination);
 }
@@ -1049,9 +1049,9 @@ void AuroraProcessor::setStateInformation(const void* data, int size) {
             juce::MemoryOutputStream decoded(0, true);
             if (juce::Base64::convertFromBase64(decoded, wavetable->getAllSubText())
                 && decoded.getDataSize() == (size_t)(64 * 2048 * (int)sizeof(float))) {
-                std::vector<float> data(64u * 2048u);
-                std::memcpy(data.data(), decoded.getData(), decoded.getDataSize());
-                auto imported = std::make_shared<const std::vector<float>>(std::move(data));
+                std::vector<float> importedSamples(64u * 2048u);
+                std::memcpy(importedSamples.data(), decoded.getData(), decoded.getDataSize());
+                auto imported = std::make_shared<const std::vector<float>>(std::move(importedSamples));
                 std::atomic_store_explicit(&importedWavetable, imported, std::memory_order_release);
                 importedWavetableName = wavetable->getStringAttribute("name", "Imported WAV");
             }
