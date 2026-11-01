@@ -1,5 +1,11 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+
+class AuroraSound final : public juce::SynthesiserSound {
+public:
+ bool appliesToNote(int) override { return true; }
+ bool appliesToChannel(int) override { return true; }
+};
 class AuroraProcessor::Voice final : public juce::SynthesiserVoice {
 public:
  bool canPlaySound(juce::SynthesiserSound* s) override { return dynamic_cast<juce::SynthesiserSound*>(s)!=nullptr; }
@@ -42,7 +48,7 @@ private:
 };
 AuroraProcessor::AuroraProcessor():AudioProcessor(BusesProperties().withOutput("Output",juce::AudioChannelSet::stereo(),true)),params(*this,nullptr,"PARAMS",createLayout()){
  for(int i=0;i<16;++i){auto* v=new Voice();v->setProcessor(this);synth.addVoice(v);}
- synth.addSound(new juce::SynthesiserSound());
+ synth.addSound(new AuroraSound());
 }
 AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout(){
  APVTS::ParameterLayout p;
