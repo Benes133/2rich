@@ -32,13 +32,14 @@ public:
     const float pan=norm*spread*.85f;
     left+=sample*std::sqrt(.5f*(1.0f-pan))*vel*env;
     right+=sample*std::sqrt(.5f*(1.0f+pan))*vel*env;
-    phase1[u]+=juce::MathConstants<double>::twoPi*freq1/sr;\n    phase2[u]+=juce::MathConstants<double>::twoPi*freq2/sr;\n    phase1[u]=std::fmod(phase1[u],juce::MathConstants<double>::twoPi);\n    phase2[u]=std::fmod(phase2[u],juce::MathConstants<double>::twoPi);
+    phase1[u]+=juce::MathConstants<double>::twoPi*hz*ratio/sr;
+     phase2[u]+=juce::MathConstants<double>::twoPi*hz*ratio2/sr;
+     phase1[u]=std::fmod(phase1[u],juce::MathConstants<double>::twoPi);
+     phase2[u]=std::fmod(phase2[u],juce::MathConstants<double>::twoPi);
    }
    const float gain=.22f/std::sqrt((float)voices);
    b.addSample(0,start+i,left*gain);if(b.getNumChannels()>1)b.addSample(1,start+i,right*gain);
-   phase1+=juce::MathConstants<double>::twoPi*hz*std::pow(2.0,det/1200.0)/sr;
-   phase2+=juce::MathConstants<double>::twoPi*hz*std::pow(2.0,(det+7.0)/1200.0)/sr;
-   phase1=std::fmod(phase1,juce::MathConstants<double>::twoPi);phase2=std::fmod(phase2,juce::MathConstants<double>::twoPi);
+   
   }
  }
  void setProcessor(AuroraProcessor* p){processor=p;}
@@ -107,7 +108,9 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBuffer&
   b.setSample(0,i,l);b.setSample(1,i,r);delayWrite=(delayWrite+1)%size;
   fxLfoPhase+=juce::MathConstants<float>::twoPi*0.23f/(float)sampleRate;if(fxLfoPhase>juce::MathConstants<float>::twoPi)fxLfoPhase-=juce::MathConstants<float>::twoPi;
  }
- juce::dsp::Reverb::Parameters rp;rp.roomSize=.55f;rp.damping=.48f;rp.wetLevel=v("fxReverb")*.35f;rp.dryLevel=1.0f;rp.width=1.0f;reverb.setParameters(rp);reverb.processStereo(b.getWritePointer(0),b.getWritePointer(1),b.getNumSamples());
+ juce::dsp::Reverb::Parameters rp;rp.roomSize=.55f;rp.damping=.48f;rp.wetLevel=v("fxReverb")*.35f;rp.dryLevel=1.0f;rp.width=1.0f;reverb.setParameters(rp);
+  juce::dsp::AudioBlock<float> reverbBlock(b);
+  reverb.process(juce::dsp::ProcessContextReplacing<float>(reverbBlock));
  const float master=v("master");b.applyGain(master);
  const float width=v("width");for(int i=0;i<b.getNumSamples();++i){const float mm=(b.getSample(0,i)+b.getSample(1,i))*.5f,ss=(b.getSample(0,i)-b.getSample(1,i))*.5f*width*2;b.setSample(0,i,mm+ss);b.setSample(1,i,mm-ss);}
 }
