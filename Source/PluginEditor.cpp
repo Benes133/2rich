@@ -656,6 +656,21 @@ void AuroraEditor::resized() {
         place(modAmounts[(size_t)i],{394,rowY+2,205,25});
     }
 
+    // Sequencer page: controls were created and shown, but had never been
+    // assigned bounds. Keep the performance row and all 16 steps inside
+    // their panels at the editor's 960x640 reference size.
+    place(seqModeBox,{52,188,150,30});
+    place(arpStyleBox,{222,188,150,30});
+    place(seqRateBox,{392,188,150,30});
+    place(seqOctaves,{566,188,96,30});
+    place(seqGate,{680,188,96,30});
+    place(seqSwing,{794,188,96,30});
+    for (int i = 0; i < 16; ++i) {
+        const int x = 50 + i * 54;
+        place(stepButtons[(size_t)i],{x,320,50,28});
+        place(stepPitchSliders[(size_t)i],{x + 4,354,42,174});
+    }
+
     if(currentPage!=0) {
         juce::Component* controls[]={&mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,
             &release,&master,&drive,&width,&wave1,&wave2};
