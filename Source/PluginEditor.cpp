@@ -433,7 +433,8 @@ void AuroraEditor::setPage(int page) {
     show({ &mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,&wave1,&wave2 }, page == 0);
     show({ &wtTable,&wtPosition,&unison,&uniDetune,&uniSpread }, page == 1);
     show({ &fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb }, page == 2);
-    show({ &lfo1Rate,&lfo2Rate,&filterAttack,&filterDecay,&filterSustain,&filterRelease,&filterEnvAmount,&lfo1Shape,&lfo2Shape }, page == 3);
+    show({ &lfo1Rate,&lfo2Rate,&lfo3Rate,&filterAttack,&filterDecay,&filterSustain,&filterRelease,&filterEnvAmount,
+           &lfo1Shape,&lfo2Shape,&lfo3Shape }, page == 3);
     for (int i = 0; i < 4; ++i) {
         modSources[(size_t)i].setVisible(page == 3);
         modTargets[(size_t)i].setVisible(page == 3);
