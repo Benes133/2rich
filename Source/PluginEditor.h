@@ -94,6 +94,7 @@ private:
     int previousDrawIndex = 0;
     float previousDrawValue = 0.0f;
     float lastOutputPeak = 0.0f;
+    juce::String lastSampleStatusText;
 
     using Attach = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ChoiceAttach = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
