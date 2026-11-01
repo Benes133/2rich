@@ -108,6 +108,32 @@ public:
         const float filtSustain = value("filterSustain");
         const float filtRelease = juce::jmax(0.01f, value("filterRelease"));
         const float filtEnvAmount = value("filterEnvAmount");
+        const float ampAttackStep = 1.0f / (float)(sr * ampAttack);
+        const float ampDecayStep = (1.0f - ampSustain) / (float)(sr * ampDecay);
+        const float ampReleaseStep = 1.0f / (float)(sr * ampRelease);
+        const float filterAttackStep = 1.0f / (float)(sr * filtAttack);
+        const float filterDecayStep = (1.0f - filtSustain) / (float)(sr * filtDecay);
+        const float filterReleaseStep = 1.0f / (float)(sr * filtRelease);
+        const float maxCutoff = juce::jmin(19000.0f, (float)sr * 0.45f);
+        const double twoPi = juce::MathConstants<double>::twoPi;
+        const double baseFrequencyIncrement = twoPi * hz / sr;
+        const float unisonGain = 0.22f / std::sqrt((float)unisonVoices);
+        std::array<float, 7> normalizedVoices{};
+        std::array<double, 7> unisonRatioA{}, unisonRatioB{};
+        std::array<float, 7> staticPanLeft{}, staticPanRight{};
+        for (int voice = 0; voice < unisonVoices; ++voice) {
+            const float normalized = unisonVoices == 1 ? 0.0f
+                : ((float)voice / (float)(unisonVoices - 1) - 0.5f) * 2.0f;
+            normalizedVoices[(size_t)voice] = normalized;
+            const double cents = (double)detune + (double)normalized * (double)unisonDetune;
+            unisonRatioA[(size_t)voice] = std::exp2(cents / 1200.0);
+            unisonRatioB[(size_t)voice] = std::exp2((cents + (double)normalized * 4.0) / 1200.0);
+            const float pan = juce::jlimit(-0.95f, 0.95f, normalized * unisonSpread * 0.85f);
+            staticPanLeft[(size_t)voice] = std::sqrt(0.5f * (1.0f - pan));
+            staticPanRight[(size_t)voice] = std::sqrt(0.5f * (1.0f + pan));
+        }
+        float* leftData = buffer.getWritePointer(0);
+        float* rightData = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 
         const int sourceIds[4] = {
             (int)value("mod1Source"), (int)value("mod2Source"),
@@ -122,6 +148,16 @@ public:
             value("mod3Amount"), value("mod4Amount")
         };
         std::array<float, 4> routePeaks{};
+        struct ActiveRoute { int source, target, originalIndex; float amount; };
+        std::array<ActiveRoute, 4> activeRoutes{};
+        int activeRouteCount = 0;
+        for (int route = 0; route < 4; ++route) {
+            if (sourceIds[route] > 0 && sourceIds[route] < 10
+                && targetIds[route] > 0 && targetIds[route] < 11
+                && routeAmounts[route] != 0.0f)
+                activeRoutes[(size_t)activeRouteCount++] =
+                    { sourceIds[route], targetIds[route], route, routeAmounts[route] };
+        }
 
         for (int i = 0; i < count; ++i) {
             const int blockIndex = start + i;
@@ -137,13 +173,13 @@ public:
                 ? processor->aftertouchBlock[(size_t)blockIndex] : 0.0f;
 
             if (stage == 1) {
-                env += 1.0f / (float)(sr * ampAttack);
+                env += ampAttackStep;
                 if (env >= 1.0f) { env = 1.0f; stage = 2; }
             } else if (stage == 2) {
-                env -= (1.0f - ampSustain) / (float)(sr * ampDecay);
+                env -= ampDecayStep;
                 if (env <= ampSustain) { env = ampSustain; stage = 3; }
             } else if (stage == 4) {
-                env -= 1.0f / (float)(sr * ampRelease);
+                env -= ampReleaseStep;
                 if (env <= 0.0f) {
                     env = 0.0f;
                     filterEnv = 0.0f;
@@ -153,13 +189,13 @@ public:
             }
 
             if (filterStage == 1) {
-                filterEnv += 1.0f / (float)(sr * filtAttack);
+                filterEnv += filterAttackStep;
                 if (filterEnv >= 1.0f) { filterEnv = 1.0f; filterStage = 2; }
             } else if (filterStage == 2) {
-                filterEnv -= (1.0f - filtSustain) / (float)(sr * filtDecay);
+                filterEnv -= filterDecayStep;
                 if (filterEnv <= filtSustain) { filterEnv = filtSustain; filterStage = 3; }
             } else if (filterStage == 4) {
-                filterEnv -= 1.0f / (float)(sr * filtRelease);
+                filterEnv -= filterReleaseStep;
                 if (filterEnv <= 0.0f) { filterEnv = 0.0f; filterStage = 0; }
             }
 
@@ -176,14 +212,12 @@ public:
             float fxChorusMod = 0.0f, fxDelayMod = 0.0f, fxReverbMod = 0.0f;
             bool hasFxModulation = false;
 
-            for (int route = 0; route < 4; ++route) {
-                const int source = sourceIds[route];
-                const int target = targetIds[route];
-                if (source <= 0 || source >= 10 || target <= 0 || target >= 11)
-                    continue;
-
-                const float mod = sources[source] * routeAmounts[route];
-                routePeaks[(size_t)route] = juce::jmax(routePeaks[(size_t)route], std::abs(mod));
+            for (int route = 0; route < activeRouteCount; ++route) {
+                const auto& active = activeRoutes[(size_t)route];
+                const int source = active.source;
+                const int target = active.target;
+                const float mod = sources[source] * active.amount;
+                routePeaks[(size_t)active.originalIndex] = juce::jmax(routePeaks[(size_t)active.originalIndex], std::abs(mod));
                 switch (target) {
                     case 1: cutoffOctaves += mod * 4.0f; break;
                     case 2: mixMod += mod; break;
@@ -201,21 +235,14 @@ public:
 
             const float currentMix = juce::jlimit(0.0f, 1.0f, baseMix + mixMod);
             const float position = juce::jlimit(0.0f, 1.0f, baseWTPosition + positionMod);
-            const float maxCutoff = juce::jmin(19000.0f, (float)sr * 0.45f);
-            const float cutoffHz = juce::jlimit(25.0f, maxCutoff,
-                baseCutoff * std::pow(2.0f, juce::jlimit(-7.0f, 7.0f, cutoffOctaves)));
-            const float resonance = juce::jlimit(0.1f, 1.0f,
-                baseResonance + resonanceMod);
-
             float left = 0.0f;
             float right = 0.0f;
+            const double pitchRatio = std::exp2((double)pitchCents / 1200.0);
 
             for (int voice = 0; voice < unisonVoices; ++voice) {
-                const float normalized = unisonVoices == 1 ? 0.0f
-                    : ((float)voice / (float)(unisonVoices - 1) - 0.5f) * 2.0f;
-                const double cents = detune + pitchCents + normalized * unisonDetune;
-                const double ratio1 = std::pow(2.0, cents / 1200.0);
-                const double ratio2 = std::pow(2.0, (cents + normalized * 4.0f) / 1200.0);
+                const float normalized = normalizedVoices[(size_t)voice];
+                const double ratio1 = unisonRatioA[(size_t)voice] * pitchRatio;
+                const double ratio2 = unisonRatioB[(size_t)voice] * pitchRatio;
                 const float phaseA = (float)(phase1[(size_t)voice] + normalized * 0.13f);
                 const float phaseB = (float)(phase2[(size_t)voice] + normalized * 0.19f);
                 const float oscA = wave(phaseA, wave1, table, position, importedTable.get());
@@ -232,44 +259,60 @@ public:
                     sample = oscA * oscB * 2.0f;
                 } else if (oscillatorMode == 4) {
                     // Five slightly detuned saw voices create a wide, animated supersaw stack.
-                    constexpr double stackDetuneCents[5] = { -18.0, -9.0, 0.0, 9.0, 18.0 };
+                    constexpr double stackRatios[5] = { 0.9896566564152069, 0.9948148855014217, 1.000000000000000, 1.005212140041476, 1.010451446486764 };
                     float superSaw = 0.0f;
                     for (int stack = 0; stack < 5; ++stack) {
                         auto& stackPhase = superSawPhase[(size_t)voice][(size_t)stack];
                         superSaw += wave((float)stackPhase, 0, table, position, importedTable.get());
-                        const double stackIncrement = juce::MathConstants<double>::twoPi * hz
-                            * std::pow(2.0, (cents + stackDetuneCents[stack]) / 1200.0) / sr;
-                        stackPhase = std::fmod(stackPhase + stackIncrement,
-                                               juce::MathConstants<double>::twoPi);
+                        const double stackIncrement = baseFrequencyIncrement * ratio1 * stackRatios[stack];
+                        double nextStackPhase = stackPhase + stackIncrement;
+                        if (nextStackPhase >= twoPi) {
+                            if (stackIncrement < twoPi) nextStackPhase -= twoPi;
+                            else nextStackPhase = std::fmod(nextStackPhase, twoPi);
+                        }
+                        stackPhase = nextStackPhase;
                     }
                     superSaw *= 0.2f;
                     sample = (1.0f - currentMix) * superSaw + currentMix * oscB;
                 }
 
                 sample += sub * std::sin((float)phase1[(size_t)voice] * 0.5f);
-                const float pan = juce::jlimit(-0.95f, 0.95f,
-                    normalized * unisonSpread * 0.85f + panMod * 0.85f);
+                const float envelopeGain = vel * env;
+                if (panMod == 0.0f) {
+                    left += sample * staticPanLeft[(size_t)voice] * envelopeGain;
+                    right += sample * staticPanRight[(size_t)voice] * envelopeGain;
+                } else {
+                    const float pan = juce::jlimit(-0.95f, 0.95f,
+                        normalized * unisonSpread * 0.85f + panMod * 0.85f);
+                    left += sample * std::sqrt(0.5f * (1.0f - pan)) * envelopeGain;
+                    right += sample * std::sqrt(0.5f * (1.0f + pan)) * envelopeGain;
+                }
 
-                left += sample * std::sqrt(0.5f * (1.0f - pan)) * vel * env;
-                right += sample * std::sqrt(0.5f * (1.0f + pan)) * vel * env;
-
-                const double incrementA = juce::MathConstants<double>::twoPi * hz * ratio1 / sr;
+                const double incrementA = baseFrequencyIncrement * ratio1;
                 const double slaveRatio = oscillatorMode == 3 ? syncRatio : 1.0f;
-                const double incrementB = juce::MathConstants<double>::twoPi * hz * ratio2 * slaveRatio / sr;
-                const double nextPhaseA = phase1[(size_t)voice] + incrementA;
-                const bool masterWrapped = nextPhaseA >= juce::MathConstants<double>::twoPi;
-                phase1[(size_t)voice] = std::fmod(nextPhaseA, juce::MathConstants<double>::twoPi);
-                if (oscillatorMode == 3 && masterWrapped)
+                const double incrementB = baseFrequencyIncrement * ratio2 * slaveRatio;
+                double nextPhaseA = phase1[(size_t)voice] + incrementA;
+                const bool masterWrapped = nextPhaseA >= twoPi;
+                if (masterWrapped) {
+                    if (incrementA < twoPi) nextPhaseA -= twoPi;
+                    else nextPhaseA = std::fmod(nextPhaseA, twoPi);
+                }
+                phase1[(size_t)voice] = nextPhaseA;
+                if (oscillatorMode == 3 && masterWrapped) {
                     phase2[(size_t)voice] = 0.0;
-                else
-                    phase2[(size_t)voice] += incrementB;
-                phase2[(size_t)voice] = std::fmod(phase2[(size_t)voice], juce::MathConstants<double>::twoPi);
+                } else {
+                    double nextPhaseB = phase2[(size_t)voice] + incrementB;
+                    if (nextPhaseB >= twoPi) {
+                        if (incrementB < twoPi) nextPhaseB -= twoPi;
+                        else nextPhaseB = std::fmod(nextPhaseB, twoPi);
+                    }
+                    phase2[(size_t)voice] = nextPhaseB;
+                }
             }
 
-            const float gain = 0.22f / std::sqrt((float)unisonVoices);
             const float modulationGain = juce::jlimit(0.0f, 2.0f, 1.0f + volumeMod);
-            left *= gain * modulationGain;
-            right *= gain * modulationGain;
+            left *= unisonGain * modulationGain;
+            right *= unisonGain * modulationGain;
 
             if (hasFxModulation && blockIndex < (int)processor->fxModWeightBlock.size()) {
                 const float weight = juce::jmax(0.001f, env);
@@ -281,15 +324,18 @@ public:
 
             // Recalculate filter coefficients every four samples to reduce per-voice DSP cost.
             if ((i & 3) == 0) {
+                const float cutoffHz = juce::jlimit(25.0f, maxCutoff,
+                    baseCutoff * std::exp2(juce::jlimit(-7.0f, 7.0f, cutoffOctaves)));
+                const float resonance = juce::jlimit(0.1f, 1.0f,
+                    baseResonance + resonanceMod);
                 voiceFilter.setCutoffFrequency(cutoffHz);
                 voiceFilter.setResonance(resonance);
             }
             left = voiceFilter.processSample(0, left);
             right = voiceFilter.processSample(1, right);
 
-            buffer.addSample(0, blockIndex, left);
-            if (buffer.getNumChannels() > 1)
-                buffer.addSample(1, blockIndex, right);
+            leftData[blockIndex] += left;
+            if (rightData != nullptr) rightData[blockIndex] += right;
         }
 
         for (int route = 0; route < 4; ++route) {
@@ -555,7 +601,9 @@ void AuroraProcessor::prepareToPlay(double sr, int maximumBlockSize) {
         if (auto* voice = dynamic_cast<Voice*>(synth.getVoice(i)))
             voice->prepare(sr);
 
-    const auto storageSize = (size_t)juce::jmax(8192, maximumBlockSize + 1);
+    const auto storageSize = (size_t)juce::jmax(16384, maximumBlockSize + 1);
+    preparedBlockCapacity = (int)storageSize;
+    sequencedMidiBuffer.ensureSize(16384);
     lfo1Block.resize(storageSize);
     lfo2Block.resize(storageSize);
     lfo3Block.resize(storageSize);
@@ -565,9 +613,6 @@ void AuroraProcessor::prepareToPlay(double sr, int maximumBlockSize) {
     fxDelayModBlock.resize(storageSize);
     fxReverbModBlock.resize(storageSize);
     fxModWeightBlock.resize(storageSize);
-    for (auto& channel : delayBuffer)
-        channel.assign((size_t)juce::jmax(1, (int)sr * 2), 0.0f);
-    delayWrite = 0;
     compressorEnvelope = 0.0f;
     for (size_t slot = 0; slot < fxDelayBuffers.size(); ++slot) {
         for (auto& channel : fxDelayBuffers[slot])
@@ -608,7 +653,7 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     // Some hosts may briefly call the processor while reconfiguring I/O.
     // Never run stateful DSP with an invalid rate, empty block, or non-stereo bus.
     const int samples = buffer.getNumSamples();
-    if (samples <= 0 || buffer.getNumChannels() != 2
+    if (samples <= 0 || samples > preparedBlockCapacity || buffer.getNumChannels() != 2
         || !std::isfinite(sampleRate) || sampleRate < 1000.0)
         return;
 
@@ -619,15 +664,7 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         return 0.0f;
     };
 
-    if ((int)lfo1Block.size() < samples) lfo1Block.resize((size_t)samples);
-    if ((int)lfo2Block.size() < samples) lfo2Block.resize((size_t)samples);
-    if ((int)lfo3Block.size() < samples) lfo3Block.resize((size_t)samples);
-    if ((int)pitchBendBlock.size() < samples) pitchBendBlock.resize((size_t)samples);
-    if ((int)aftertouchBlock.size() < samples) aftertouchBlock.resize((size_t)samples);
-    if ((int)fxChorusModBlock.size() < samples) fxChorusModBlock.resize((size_t)samples);
-    if ((int)fxDelayModBlock.size() < samples) fxDelayModBlock.resize((size_t)samples);
-    if ((int)fxReverbModBlock.size() < samples) fxReverbModBlock.resize((size_t)samples);
-    if ((int)fxModWeightBlock.size() < samples) fxModWeightBlock.resize((size_t)samples);
+    // Scratch vectors are sized in prepareToPlay; no allocation occurs in processBlock.
 
     const float rate1 = value("lfo1Rate");
     const float rate2 = value("lfo2Rate");
@@ -713,12 +750,14 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         sequenceCurrentNote = -1;
         sequenceCurrentStep.store(-1, std::memory_order_relaxed);
         heldNoteVelocities.fill(0.0f);
+        heldNoteCount = 0;
         synth.renderNextBlock(buffer, midi, 0, samples);
     } else {
         sequencerWasRunning = true;
         if (sequencerMode != 2)
             sequenceCurrentStep.store(-1, std::memory_order_relaxed);
-        juce::MidiBuffer sequencedMidi;
+        auto& sequencedMidi = sequencedMidiBuffer;
+        sequencedMidi.clear();
         auto inputIterator = midi.begin();
         const auto inputEnd = midi.end();
         juce::MidiMessage inputMessage;
@@ -765,27 +804,30 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 
         for (int sample = 0; sample < samples; ++sample) {
             while (hasInput && nextInputPosition <= sample) {
-                const bool hadHeldNotes = std::any_of(heldNoteVelocities.begin(), heldNoteVelocities.end(),
-                                                       [](float velocity) { return velocity > 0.0f; });
+                const bool hadHeldNotes = heldNoteCount > 0;
                 if (inputMessage.isNoteOn()) {
-                    heldNoteVelocities[(size_t)inputMessage.getNoteNumber()] = inputMessage.getFloatVelocity();
+                    auto& heldVelocity = heldNoteVelocities[(size_t)inputMessage.getNoteNumber()];
+                    if (heldVelocity <= 0.0f) ++heldNoteCount;
+                    heldVelocity = inputMessage.getFloatVelocity();
                     if (!hadHeldNotes) {
                         sequenceStepIndex = 0;
                         sequenceSamplesUntilStep = 0.0;
                         arpDirection = 1;
                     }
                 } else if (inputMessage.isNoteOff()) {
-                    heldNoteVelocities[(size_t)inputMessage.getNoteNumber()] = 0.0f;
+                    auto& heldVelocity = heldNoteVelocities[(size_t)inputMessage.getNoteNumber()];
+                    if (heldVelocity > 0.0f) heldNoteCount = juce::jmax(0, heldNoteCount - 1);
+                    heldVelocity = 0.0f;
                 } else if (inputMessage.isAllNotesOff() || inputMessage.isAllSoundOff()) {
                     heldNoteVelocities.fill(0.0f);
+                    heldNoteCount = 0;
                 } else {
                     sequencedMidi.addEvent(inputMessage, sample);
                 }
                 hasInput = loadNextInput();
             }
 
-            const int heldCount = (int)std::count_if(heldNoteVelocities.begin(), heldNoteVelocities.end(),
-                                                     [](float velocity) { return velocity > 0.0f; });
+            const int heldCount = heldNoteCount;
             if (heldCount == 0) {
                 stopSequencedNote(sample);
                 sequenceSamplesUntilStep = 0.0;
@@ -894,6 +936,9 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         synth.renderNextBlock(buffer, sequencedMidi, 0, samples);
     }
 
+    float* leftChannel = buffer.getWritePointer(0);
+    float* rightChannel = buffer.getWritePointer(1);
+
     // Six ordered effect slots. Modules are processed in the displayed order.
     const int fxSlots[6] = {
         (int)value("fxSlot1"), (int)value("fxSlot2"),
@@ -907,6 +952,7 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const bool compressorEnabled = value("fxCompEnabled") > 0.5f;
     const float compThresholdLinear = std::pow(10.0f, value("fxCompThreshold") / 20.0f);
     const float compRatio = juce::jmax(1.0f, value("fxCompRatio"));
+    const float compReductionExponent = 1.0f - 1.0f / compRatio;
     const float compMakeupLinear = std::pow(10.0f, value("fxCompMakeup") / 20.0f);
     const float compMix = juce::jlimit(0.0f, 1.0f, value("fxCompMix"));
     const float compAttackCoeff = (float)std::exp(-1.0 / (sampleRate * value("fxCompAttack") * 0.001));
@@ -938,8 +984,12 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const float mbMidDrive = value("fxMbMid");
     const float mbHighDrive = value("fxMbHigh");
     const float mbMix = value("fxMbMix");
+    const float mbDriveLow = 1.0f + saturation * mbLowDrive;
+    const float mbDriveMid = 1.0f + saturation * mbMidDrive;
+    const float mbDriveHigh = 1.0f + saturation * mbHighDrive;
     const float bitDepth = value("fxBitDepth");
     const int bitRate = juce::jlimit(1, 32, (int)std::round(value("fxBitRate")));
+    const float bitCrusherLevels = std::exp2(juce::jlimit(2.0f, 16.0f, bitDepth) - 1.0f);
     const float bitMix = value("fxBitMix");
     const float stereoWidth = value("fxStereoWidth");
     const float stereoPan = value("fxStereoPan");
@@ -1013,9 +1063,10 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         if (slotSize <= 1 || slotBuffer[1].size() != slotBuffer[0].size())
             continue;
         write = juce::jlimit(0, slotSize - 1, write);
+        const int pingTap = juce::jlimit(1, slotSize - 1, (int)pingTimeSamples);
         for (int i = 0; i < samples; ++i) {
-            const float dryLeft = buffer.getSample(0, i);
-            const float dryRight = buffer.getSample(1, i);
+            const float dryLeft = leftChannel[i];
+            const float dryRight = rightChannel[i];
             float left = dryLeft;
             float right = dryRight;
             switch (effect) {
@@ -1024,11 +1075,11 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                         const float detector = juce::jmax(std::abs(left), std::abs(right));
                         const float coeff = detector > compressorEnvelope ? compAttackCoeff : compReleaseCoeff;
                         compressorEnvelope = coeff * compressorEnvelope + (1.0f - coeff) * detector;
-                        const float overDb = juce::jmax(0.0f, 20.0f * std::log10(
-                            juce::jmax(compressorEnvelope, 1.0e-8f) /
-                            juce::jmax(compThresholdLinear, 1.0e-8f)));
-                        const float reductionDb = overDb * (1.0f - 1.0f / compRatio);
-                        const float compressedGain = compMakeupLinear * std::pow(10.0f, -reductionDb / 20.0f);
+                        const float envelopeRatio = juce::jmax(compressorEnvelope, 1.0e-8f)
+                            / juce::jmax(compThresholdLinear, 1.0e-8f);
+                        const float compressedGain = envelopeRatio > 1.0f
+                            ? compMakeupLinear * std::pow(envelopeRatio, -compReductionExponent)
+                            : compMakeupLinear;
                         left = juce::jmap(compMix, left, left * compressedGain);
                         right = juce::jmap(compMix, right, right * compressedGain);
                     }
@@ -1063,8 +1114,8 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                     break;
                 }
                 case 4: { // Tone-shaped ping-pong delay.
-                    const int tap = juce::jlimit(1, slotSize - 1, (int)pingTimeSamples);
-                    const int read = (write - tap + slotSize) % slotSize;
+                    int read = write - pingTap;
+                    if (read < 0) read += slotSize;
                     const float rawLeft = slotBuffer[0][(size_t)read];
                     const float rawRight = slotBuffer[1][(size_t)read];
                     auto& toneLeft = pingToneStates[(size_t)slot][0];
@@ -1075,7 +1126,7 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                     slotBuffer[1][(size_t)write] = dryRight + toneLeft * pingFeedback;
                     left = juce::jmap(activePingMix, dryLeft, toneRight);
                     right = juce::jmap(activePingMix, dryRight, toneLeft);
-                    write = (write + 1) % slotSize;
+                    if (++write >= slotSize) write = 0;
                     break;
                 }
                 case 6: { // Stereo chorus with independent rate, depth and width.
@@ -1086,13 +1137,17 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                     const int tapL = juce::jlimit(1, slotSize - 1, (int)(base + swing));
                     const int tapR = juce::jlimit(1, slotSize - 1,
                         (int)(base + swing * (0.5f + 0.5f * std::sin(phase + 0.6f + chorusWidth * 2.0f))));
-                    const float delayedL = slotBuffer[0][(size_t)((write - tapL + slotSize) % slotSize)];
-                    const float delayedR = slotBuffer[1][(size_t)((write - tapR + slotSize) % slotSize)];
+                    int readL = write - tapL;
+                    int readR = write - tapR;
+                    if (readL < 0) readL += slotSize;
+                    if (readR < 0) readR += slotSize;
+                    const float delayedL = slotBuffer[0][(size_t)readL];
+                    const float delayedR = slotBuffer[1][(size_t)readR];
                     slotBuffer[0][(size_t)write] = dryLeft + delayedL * 0.12f;
                     slotBuffer[1][(size_t)write] = dryRight + delayedR * 0.12f;
                     left = juce::jmap(activeChorusMix, dryLeft, dryLeft * 0.55f + delayedL * 0.45f);
                     right = juce::jmap(activeChorusMix, dryRight, dryRight * 0.55f + delayedR * 0.45f);
-                    write = (write + 1) % slotSize;
+                    if (++write >= slotSize) write = 0;
                     fxPhases[(size_t)slot] += juce::MathConstants<float>::twoPi * chorusRate / (float)sampleRate;
                     if (fxPhases[(size_t)slot] >= juce::MathConstants<float>::twoPi)
                         fxPhases[(size_t)slot] -= juce::MathConstants<float>::twoPi;
@@ -1111,9 +1166,9 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                         const float driveLow = 1.0f + saturation * mbLowDrive;
                         const float driveMid = 1.0f + saturation * mbMidDrive;
                         const float driveHigh = 1.0f + saturation * mbHighDrive;
-                        const float shaped = std::tanh(lowBand * driveLow) * 0.45f
-                            + std::tanh(midBand * driveMid) * 0.35f
-                            + std::tanh(highBand * driveHigh) * 0.30f;
+                        const float shaped = std::tanh(lowBand * mbDriveLow) * 0.45f
+                            + std::tanh(midBand * mbDriveMid) * 0.35f
+                            + std::tanh(highBand * mbDriveHigh) * 0.30f;
                         const float output = juce::jmap(mbMix, input, shaped);
                         if (ch == 0) left = output;
                         else right = output;
@@ -1136,7 +1191,7 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                 }
                 case 9: { // Bit depth and sample-rate reduction.
                     if (bitCrusherCounter[(size_t)slot] <= 0) {
-                        const float levels = std::pow(2.0f, juce::jlimit(2.0f, 16.0f, bitDepth) - 1.0f);
+                        const float levels = bitCrusherLevels;
                         bitCrusherHeld[(size_t)slot][0] = std::round(juce::jlimit(-1.0f, 1.0f, dryLeft) * levels) / levels;
                         bitCrusherHeld[(size_t)slot][1] = std::round(juce::jlimit(-1.0f, 1.0f, dryRight) * levels) / levels;
                         bitCrusherCounter[(size_t)slot] = bitRate;
@@ -1200,13 +1255,17 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                     const int tapL = juce::jlimit(1, slotSize - 1, (int)(flangerBaseSamples + modulation));
                     const int tapR = juce::jlimit(1, slotSize - 1,
                         (int)(flangerBaseSamples + modulation * (0.5f + 0.5f * std::sin(phase + 1.1f))));
-                    const float delayedL = slotBuffer[0][(size_t)((write - tapL + slotSize) % slotSize)];
-                    const float delayedR = slotBuffer[1][(size_t)((write - tapR + slotSize) % slotSize)];
+                    int readL = write - tapL;
+                    int readR = write - tapR;
+                    if (readL < 0) readL += slotSize;
+                    if (readR < 0) readR += slotSize;
+                    const float delayedL = slotBuffer[0][(size_t)readL];
+                    const float delayedR = slotBuffer[1][(size_t)readR];
                     slotBuffer[0][(size_t)write] = dryLeft + delayedL * flangerFeedback;
                     slotBuffer[1][(size_t)write] = dryRight + delayedR * flangerFeedback;
                     left = juce::jmap(flangerMix, dryLeft, 0.5f * (dryLeft + delayedL));
                     right = juce::jmap(flangerMix, dryRight, 0.5f * (dryRight + delayedR));
-                    write = (write + 1) % slotSize;
+                    if (++write >= slotSize) write = 0;
                     fxPhases[(size_t)slot] += juce::MathConstants<float>::twoPi * flangerRate / (float)sampleRate;
                     if (fxPhases[(size_t)slot] >= juce::MathConstants<float>::twoPi)
                         fxPhases[(size_t)slot] -= juce::MathConstants<float>::twoPi;
@@ -1214,8 +1273,8 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                 }
                 default: break;
             }
-            buffer.setSample(0, i, left);
-            buffer.setSample(1, i, right);
+            leftChannel[i] = left;
+            rightChannel[i] = right;
         }
     }
 
@@ -1225,36 +1284,36 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const float eq = value("fxEq");
     float lowLeft = 0.0f, lowRight = 0.0f;
     const float coeff = std::exp(-juce::MathConstants<float>::twoPi * 220.0f / (float)sampleRate);
+    const float lowGain = std::pow(10.0f, low / 20.0f) - 1.0f;
+    const float highGain = std::pow(10.0f, high / 20.0f) - 1.0f;
+    const float midGain = std::pow(10.0f, mid / 20.0f) - 1.0f;
 
     for (int i = 0; i < samples; ++i) {
-        float left = buffer.getSample(0, i);
-        float right = buffer.getSample(1, i);
+        float left = leftChannel[i];
+        float right = rightChannel[i];
         lowLeft = (1.0f - coeff) * left + coeff * lowLeft;
         lowRight = (1.0f - coeff) * right + coeff * lowRight;
         const float highLeft = left - lowLeft;
         const float highRight = right - lowRight;
-        left += eq * (lowLeft * (std::pow(10.0f, low / 20.0f) - 1.0f)
-                    + highLeft * (std::pow(10.0f, high / 20.0f) - 1.0f));
-        right += eq * (lowRight * (std::pow(10.0f, low / 20.0f) - 1.0f)
-                     + highRight * (std::pow(10.0f, high / 20.0f) - 1.0f));
-        const float midGain = std::pow(10.0f, mid / 20.0f);
-        left += (left - (lowLeft + highLeft)) * (midGain - 1.0f) * eq;
-        right += (right - (lowRight + highRight)) * (midGain - 1.0f) * eq;
+        left += eq * (lowLeft * lowGain + highLeft * highGain);
+        right += eq * (lowRight * lowGain + highRight * highGain);
+        left += (left - (lowLeft + highLeft)) * midGain * eq;
+        right += (right - (lowRight + highRight)) * midGain * eq;
 
-        buffer.setSample(0, i, left);
-        buffer.setSample(1, i, right);
+        leftChannel[i] = left;
+        rightChannel[i] = right;
     }
 
     buffer.applyGain(value("master"));
     const float width = value("width");
     float blockPeak = 0.0f;
     for (int i = 0; i < samples; ++i) {
-        const float midSample = (buffer.getSample(0, i) + buffer.getSample(1, i)) * 0.5f;
-        const float sideSample = (buffer.getSample(0, i) - buffer.getSample(1, i)) * 0.5f * width * 2.0f;
+        const float midSample = (leftChannel[i] + rightChannel[i]) * 0.5f;
+        const float sideSample = (leftChannel[i] - rightChannel[i]) * 0.5f * width * 2.0f;
         const float left = midSample + sideSample;
         const float right = midSample - sideSample;
-        buffer.setSample(0, i, left);
-        buffer.setSample(1, i, right);
+        leftChannel[i] = left;
+        rightChannel[i] = right;
         blockPeak = juce::jmax(blockPeak, juce::jmax(std::abs(left), std::abs(right)));
     }
     const float previousPeak = outputPeak.load(std::memory_order_relaxed);

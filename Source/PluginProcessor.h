@@ -66,6 +66,9 @@ private:
  std::vector<float> lfo1Block, lfo2Block, lfo3Block;
  std::vector<float> pitchBendBlock, aftertouchBlock;
  std::vector<float> fxChorusModBlock, fxDelayModBlock, fxReverbModBlock, fxModWeightBlock;
+ juce::MidiBuffer sequencedMidiBuffer;
+ int preparedBlockCapacity = 16384;
+ int heldNoteCount = 0;
  double lfo1Phase=0.0, lfo2Phase=0.0, lfo3Phase=0.0;
  float lfo1Hold=0.0f, lfo2Hold=0.0f, lfo3Hold=0.0f;
  float pitchBendValue=0.0f, aftertouchValue=0.0f;
@@ -77,10 +80,7 @@ private:
  bool sequenceNoteActive=false, sequencerWasRunning=false;
  std::atomic<int> sequenceCurrentStep{-1};
  juce::dsp::Reverb reverb;
- std::array<std::vector<float>,2> delayBuffer;
- int delayWrite=0;
  double sampleRate=44100.0;
- float fxLfoPhase=0.0f;
  float compressorEnvelope=0.0f;
  std::array<std::array<std::vector<float>, 2>, 6> fxDelayBuffers;
  std::array<int, 6> fxDelayWrites{};
