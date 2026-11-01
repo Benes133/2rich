@@ -29,6 +29,8 @@ private:
     juce::Slider fxCompThreshold, fxCompRatio, fxCompAttack, fxCompRelease, fxCompMakeup, fxCompMix;
     juce::Slider fxPhaserRate, fxPingTime, fxPingFeedback, fxReverbRoom, fxReverbDamping, fxLimiterCeiling;
     std::array<juce::ComboBox, 6> fxSlots;
+    std::array<juce::TextButton, 6> fxSlotSelectButtons, fxMoveUpButtons, fxMoveDownButtons;
+    int selectedFxSlot = 0;
     juce::ToggleButton fxCompEnabledButton { "COMPRESSOR" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aFxCompEnabled;
     juce::TextButton synthTab{"VOICE"}, wtTab{"MOTION"}, fxTab{"FX"}, modTab{"MOD"}, seqTab{"SEQ"};
@@ -65,6 +67,7 @@ private:
     void rebuildPresetList();
     void updateFavoriteButton();
     void setPage(int page);
+    void updateFxEditor();
     void refreshSelectedStepControls();
     void writeSelectedStepParameter(const juce::String& baseId, float value);
     void editWavetableFromMouse(const juce::MouseEvent&);
