@@ -264,9 +264,31 @@ void AuroraEditor::paint(juce::Graphics& g) {
         juce::Path wave;for(int i=0;i<=256;++i){float t=i/256.0f;float v=std::sin(t*juce::MathConstants<float>::twoPi)+.35f*std::sin(t*juce::MathConstants<float>::twoPi*3);float x=55+t*840,y=300-v*75;if(i==0)wave.startNewSubPath(x,y);else wave.lineTo(x,y);}g.setColour(juce::Colour(0x338b5cf6));g.strokePath(wave,juce::PathStrokeType(10));g.setColour(violetHi);g.strokePath(wave,juce::PathStrokeType(2.2f));
         g.setColour(muted);g.setFont(10);g.drawText("OSCILLATOR UNISON • UP TO 7 VOICES",55,420,400,18,juce::Justification::centredLeft);
     } else {
-        g.setColour(muted);g.setFont(12);g.drawText("EFFECTS ARE PROCESSED IN REAL TIME",55,160,800,20,juce::Justification::centredLeft);
-        g.setColour(violet);g.drawRoundedRectangle(55,198,840,320,12,1.5f);
-        g.setColour(juce::Colour(0x338b5cf6));g.drawRoundedRectangle(58,201,834,314,10,5);
+        auto fxPanel = [&](int x, const juce::String& name, const juce::String& detail) {
+            g.setColour(card); g.fillRoundedRectangle((float)x,190.0f,265.0f,365.0f,12.0f);
+            g.setColour(border); g.drawRoundedRectangle((float)x+.5f,190.5f,264.0f,364.0f,12.0f,1.0f);
+            g.setColour(violetHi); g.setFont(12.5f);
+            g.drawText(name,x+16,207,230,20,juce::Justification::centredLeft);
+            g.setColour(muted); g.setFont(9.5f);
+            g.drawText(detail,x+16,230,230,16,juce::Justification::centredLeft);
+            g.setColour(juce::Colour(0xff352b4b)); g.drawLine((float)x+16,254.0f,(float)x+249,254.0f,1.0f);
+        };
+        fxPanel(48,"01  •  TONE / EQ","3-BAND EQUALIZER");
+        fxPanel(347,"02  •  SATURATION","HARMONICS / DRIVE");
+        fxPanel(646,"03  •  MODULATION & SPACE","CHORUS / FLANGER / DELAY / REVERB");
+        g.setColour(muted);g.setFont(10.5f);
+        g.drawText("Blend",88,365,105,15,juce::Justification::centred);
+        g.drawText("Low",205,365,105,15,juce::Justification::centred);
+        g.drawText("Mid",88,510,105,15,juce::Justification::centred);
+        g.drawText("High",205,510,105,15,juce::Justification::centred);
+        g.drawText("Amount",425,455,112,15,juce::Justification::centred);
+        g.drawText("Chorus",674,365,105,15,juce::Justification::centred);
+        g.drawText("Flanger",791,365,105,15,juce::Justification::centred);
+        g.drawText("Delay",674,510,105,15,juce::Justification::centred);
+        g.drawText("Reverb",791,510,105,15,juce::Justification::centred);
+        g.setColour(violet);g.fillRoundedRectangle(70,535,220,3,1.5f);
+        g.fillRoundedRectangle(369,535,220,3,1.5f);
+        g.fillRoundedRectangle(668,535,220,3,1.5f);
     }
     const juce::String footer = "2RICH  •  SOUND WITHOUT LIMITS";
     g.setColour(juce::Colour(0xff393149)); g.drawLine(31,611,929,611,1);
@@ -280,6 +302,7 @@ void AuroraEditor::resized() {
     auto place = [&](juce::Component& c, juce::Rectangle<int> r) { c.setBounds(scaledBounds(r,scale,ox,oy)); };
 
     place(heading,{34,24,100,45});
+    place(synthTab,{145,78,105,30}); place(wtTab,{258,78,135,30}); place(fxTab,{401,78,78,30});
     place(presets,{610,33,205,29});
     place(wave1,{49,170,132,27}); place(wave2,{220,170,132,27});
     place(mix,{385,151,82,145}); place(detune,{477,151,82,145});
@@ -290,8 +313,12 @@ void AuroraEditor::resized() {
     place(sustain,{43+(knobW+gap)*2,411,knobW,155}); place(release,{43+(knobW+gap)*3,411,knobW,155});
     place(master,{676,405,78,154}); place(drive,{756,405,78,154}); place(width,{836,405,78,154});
     place(wtTable,{65,230,220,34});place(wtPosition,{70,340,160,155});place(unison,{300,340,145,155});place(uniDetune,{485,340,145,155});place(uniSpread,{670,340,145,155});
-    juce::Slider* fx[]={&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb};
-    for(int i=0;i<9;++i)place(*fx[i],{55+(i%5)*165,220+(i/5)*175,145,150});
+    // FX page: three clearly separated modules, each with its own controls.
+    place(fxEq,{88,245,105,132}); place(fxLow,{205,245,105,132});
+    place(fxMid,{88,390,105,132}); place(fxHigh,{205,390,105,132});
+    place(fxDist,{425,300,112,145});
+    place(fxChorus,{674,245,105,132}); place(fxFlange,{791,245,105,132});
+    place(fxDelay,{674,390,105,132}); place(fxReverb,{791,390,105,132});
     if(currentPage!=0){
         juce::Component* synthControls[] = {&mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,&wave1,&wave2};
         for(auto* c : synthControls) c->setVisible(false);
