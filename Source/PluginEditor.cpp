@@ -340,26 +340,41 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         repaint();
     };
 
-    for (auto* button : { &sampleLoadButton, &sampleClearButton }) {
+    for (auto* button : { &sampleLoadButton, &sampleClearButton, &sampleResliceButton }) {
         button->setLookAndFeel(&richLook);
         button->setColour(juce::TextButton::textColourOffId, white);
         button->setColour(juce::TextButton::textColourOnId, violetHi);
         addAndMakeVisible(*button);
     }
-    sampleSliceButton.setColour(juce::ToggleButton::textColourId, white);
-    sampleSliceButton.setTooltip("Map detected audio slices to consecutive MIDI notes starting at C2.");
-    addAndMakeVisible(sampleSliceButton);
-    aSampleSlice = std::make_unique<ButtonAttach>(ap, "sampleSliceMode", sampleSliceButton);
+
+    auto attachToggle = [&](juce::ToggleButton& button, const char* parameterId) {
+        button.setColour(juce::ToggleButton::textColourId, white);
+        button.setTooltip(parameterId);
+        addAndMakeVisible(button);
+        buttonAttachments.push_back(std::make_unique<ButtonAttach>(ap, parameterId, button));
+    };
+    attachToggle(sampleSliceButton, "sampleSliceMode");
+    attachToggle(sampleTempoButton, "sampleTempoSync");
+    attachToggle(sampleKeyButton, "sampleKeySync");
+    attachToggle(samplePreservePitchButton, "samplePreservePitch");
+    attachToggle(sampleLoopButton, "sampleLoop");
+    attachToggle(sampleReverseButton, "sampleReverse");
+    attachToggle(grainTempoButton, "grainTempoSync");
+    attachToggle(grainKeyButton, "grainKeySync");
+
     sampleStatusLabel.setColour(juce::Label::textColourId, muted);
     sampleStatusLabel.setFont(juce::Font(juce::FontOptions(9.0f)));
     sampleStatusLabel.setText("NO AUDIO LOADED  /  IMPORT A WAV OR AIFF LOOP OR SONG",
                                juce::dontSendNotification);
     addAndMakeVisible(sampleStatusLabel);
+    granularStatusLabel.setColour(juce::Label::textColourId, muted);
+    granularStatusLabel.setFont(juce::Font(juce::FontOptions(9.0f)));
+    addAndMakeVisible(granularStatusLabel);
 
-    sampleLoadButton.setTooltip("Load a WAV or AIFF file for sample playback, slice mapping and granular synthesis.");
+    sampleLoadButton.setTooltip("Load WAV or AIFF audio for the sampler and granular engine.");
     sampleLoadButton.onClick = [this] {
         sampleChooser = std::make_unique<juce::FileChooser>(
-            "Load Audio into 2rich Sample Lab",
+            "Load Audio into 2rich",
             juce::File::getSpecialLocation(juce::File::userHomeDirectory),
             "*.wav;*.aif;*.aiff");
         sampleChooser->launchAsync(juce::FileBrowserComponent::openMode
@@ -370,20 +385,34 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
                 juce::String error;
                 if (!proc.loadSampleFromFile(file, error)) {
                     sampleStatusLabel.setText("LOAD FAILED: " + error, juce::dontSendNotification);
+                    granularStatusLabel.setText("LOAD FAILED: " + error, juce::dontSendNotification);
                 } else {
+                    if (auto* parameter = proc.params.getParameter("sampleMode")) {
+                        const float mode = currentPage == 4 ? 2.0f : 1.0f;
+                        parameter->setValueNotifyingHost(parameter->convertTo0to1(mode));
+                    }
                     updateSampleStatus();
-                    sampleModeBox.setSelectedId(2, juce::sendNotification);
                 }
                 repaint();
             });
     };
-    sampleClearButton.setTooltip("Unload the current sample.");
+    sampleClearButton.setTooltip("Unload the current source audio.");
     sampleClearButton.onClick = [this] {
         proc.clearSample();
-        if (auto* parameter = proc.params.getParameter("sampleMode"))
-            parameter->setValueNotifyingHost(parameter->convertTo0to1(0.0f));
-        sampleModeBox.setSelectedId(1, juce::dontSendNotification);
         updateSampleStatus();
+        repaint();
+    };
+    sampleResliceButton.setTooltip("Re-run key, tempo and transient analysis using the current sensitivity settings.");
+    sampleResliceButton.onClick = [this] {
+        const auto sample = proc.getSampleAsset();
+        if (!sample) return;
+        juce::String error;
+        if (!proc.loadSampleFromFile(juce::File(sample->fullPath), error)) {
+            sampleStatusLabel.setText("ANALYSIS FAILED: " + error, juce::dontSendNotification);
+            granularStatusLabel.setText("ANALYSIS FAILED: " + error, juce::dontSendNotification);
+        } else {
+            updateSampleStatus();
+        }
         repaint();
     };
 
@@ -397,7 +426,14 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     };
     addChoice(oscModeBox, { "Classic", "FM", "Ring Mod", "Hard Sync", "Super Saw" }, "oscMode");
     addChoice(filterTypeBox, { "Low Pass", "Band Pass", "High Pass" }, "filterType");
-    addChoice(sampleModeBox, { "OSCILLATOR", "SAMPLE", "GRANULAR" }, "sampleMode");
+    addChoice(sampleSyncBarsBox, { "AUTO LENGTH", "1 BAR", "2 BARS", "4 BARS", "8 BARS", "16 BARS" }, "sampleSyncBars");
+    addChoice(sampleTargetKeyBox, { "AUTO / SOURCE KEY", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, "sampleTargetKey");
+    addChoice(grainTargetKeyBox, { "AUTO / SOURCE KEY", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, "grainTargetKey");
+    addChoice(grainSyncDivisionBox, { "1/16", "1/8", "1/4", "1/2", "1 BAR", "2 BARS" }, "grainSyncDivision");
+    addChoice(granularPresetBox, { "Init Grain", "Glass Dust", "Cloud Choir", "Molecular Strings",
+        "Time Stretch", "Frozen Bells", "Granular Rain", "Reverse Nebula", "Ambient Grainfield",
+        "Pitch Fracture", "Microphonic", "Tape Memory", "Shimmer Motion", "Broken Texture",
+        "Digital Sand", "Harmonic Drift", "Cinematic Cloud" }, "grainPresetNotAParam");
     const juce::StringArray fxTypeNames = { "Off", "Compressor", "Saturation", "Phaser",
         "Ping-Pong", "Reverb", "Chorus", "Multiband Dist.", "Limiter",
         "Bitcrusher", "Stereo Width", "Tremolo", "Ring Mod", "Filter", "Flanger" };
@@ -491,16 +527,31 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     auto addExtra=[&](juce::Slider& s,const juce::String& id,const juce::String& label){addKnob(s,label,id);attachments.push_back(std::make_unique<Attach>(ap,id,s));};
     addExtra(sampleRootNote, "sampleRootNote", "ROOT NOTE");
     addExtra(sampleMix, "sampleMix", "SAMPLE LEVEL");
+    addExtra(sampleTranspose, "sampleTranspose", "TRANSPOSE");
+    addExtra(sampleFineTune, "sampleFineTune", "FINE TUNE");
+    addExtra(sampleStart, "sampleStart", "START");
+    addExtra(sampleEnd, "sampleEnd", "END");
+    addExtra(sampleSliceSensitivity, "sampleSliceSensitivity", "SLICE SENS");
+    addExtra(sampleSliceMinGap, "sampleSliceMinGap", "MIN GAP MS");
+    addExtra(sampleMaxSlices, "sampleMaxSlices", "MAX SLICES");
+    addExtra(sampleStretchGrainMs, "sampleStretchGrainMs", "STRETCH WINDOW");
     addExtra(grainSize, "grainSize", "GRAIN SIZE");
     addExtra(grainDensity, "grainDensity", "DENSITY");
     addExtra(grainPosition, "grainPosition", "POSITION");
     addExtra(grainSpray, "grainSpray", "SPRAY");
     addExtra(grainPitch, "grainPitch", "PITCH");
-    sampleRootNote.setSliderStyle(juce::Slider::LinearHorizontal);
-    sampleRootNote.setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
-    sampleMix.setSliderStyle(juce::Slider::LinearHorizontal);
-    sampleMix.setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
+    addExtra(grainTranspose, "grainTranspose", "TRANSPOSE");
+    addExtra(grainFineTune, "grainFineTune", "FINE TUNE");
+    addExtra(grainJitter, "grainJitter", "TIMING JITTER");
+    addExtra(grainStereo, "grainStereo", "STEREO SPREAD");
+    for (auto* slider : { &sampleRootNote, &sampleMix, &sampleTranspose, &sampleFineTune,
+                          &sampleStart, &sampleEnd, &sampleSliceSensitivity, &sampleSliceMinGap,
+                          &sampleMaxSlices, &sampleStretchGrainMs }) {
+        slider->setSliderStyle(juce::Slider::LinearHorizontal);
+        slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 46, 18);
+    }
     sampleRootNote.setNumDecimalPlacesToDisplay(0);
+    sampleMaxSlices.setNumDecimalPlacesToDisplay(0);
     addExtra(wtPosition,"wtPosition","POSITION"); wtPosition.setSliderStyle(juce::Slider::LinearHorizontal); wtPosition.setTextBoxStyle(juce::Slider::TextBoxRight,false,42,18); addExtra(unison,"unison","VOICES"); addExtra(uniDetune,"uniDetune","DETUNE"); addExtra(uniSpread,"uniSpread","SPREAD");
     addExtra(fmAmount,"fmAmount","FM AMOUNT"); addExtra(syncRatio,"syncRatio","SYNC RATIO");
     for (auto* slider : { &fmAmount, &syncRatio }) {
@@ -545,6 +596,14 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     for (size_t i = 0; i < fxExtraKnobs.size(); ++i)
         addExtra(fxExtraKnobs[i], fxExtraDefinitions[i][0], fxExtraDefinitions[i][1]);
     addChoice(fxFilterTypeBox, { "Low Pass", "High Pass", "Band Pass" }, "fxFilterType");
+    // Granular window shapes and factory grain patches.
+    grainWindow.setRange(0.0, 3.0, 1.0);
+    grainWindow.setNumDecimalPlacesToDisplay(0);
+    addExtra(grainWindow, "grainWindow", "WINDOW");
+    granularPresetBox.onChange = [this] {
+        if (granularPresetBox.getSelectedId() > 0)
+            applyGranularPreset(granularPresetBox.getSelectedId());
+    };
 
     addExtra(lfo1Rate,"lfo1Rate","RATE"); addExtra(lfo2Rate,"lfo2Rate","RATE");
     addExtra(lfo3Rate,"lfo3Rate","RATE");
