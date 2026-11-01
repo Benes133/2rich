@@ -21,7 +21,7 @@ public:
         const float cx = x + w * 0.5f, cy = y + h * 0.43f;
         const float radius = size * 0.5f, thickness = 5.0f;
         const float angle = startAngle + sliderPos * (endAngle - startAngle);
-        g.setColour(juce::Colour(0xff302b3d));
+        g.setColour(border);
         g.drawEllipse(cx - radius, cy - radius, size, size, thickness);
         juce::Path arc;
         arc.addCentredArc(cx, cy, radius, radius, 0.0f, startAngle, angle, true);
@@ -293,7 +293,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
     g.drawText("POLYPHONIC SYNTHESIZER", 145, 28, 250, 15, juce::Justification::centredLeft);
     g.setFont(juce::Font(juce::FontOptions(9.0f)));
     g.drawText("NORTHSTAR AUDIO", 145, 45, 180, 13, juce::Justification::centredLeft);
-    g.drawText("PRESET", 645, 20, 170, 12, juce::Justification::centredLeft);
+    g.drawText("PRESET", 690, 20, 170, 12, juce::Justification::centredLeft);
     g.setColour(violet);
     g.fillRoundedRectangle(32, 84, 896, 1, 0.5f);
 
@@ -488,10 +488,10 @@ void AuroraEditor::resized() {
         component.setBounds(scaledBounds(bounds,scale,ox,oy));
     };
     place(heading,{32,23,100,42});
-    place(synthTab,{395,31,88,30});
-    place(wtTab,{491,31,126,30});
-    place(fxTab,{625,31,72,30});
-    place(presets,{645,34,278,30});
+    place(synthTab,{352,31,92,30});
+    place(wtTab,{450,31,128,30});
+    place(fxTab,{584,31,70,30});
+    place(presets,{690,34,233,30});
 
     place(wave1,{50,160,226,30});
     place(wave2,{322,160,226,30});

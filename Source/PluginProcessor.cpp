@@ -68,7 +68,7 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout(){
  f("master","Master",0,1,.8f);f("drive","Drive",0,1,0);f("width","Stereo Width",0,1,.5f);
  choice("wtTable","Wavetable",{"Basic","Harmonics","Triangle Morph","Digital","Octave","Fold"},0);
  f("wtPosition","WT Position",0,1,0);
- f("unison","Unison Voices",1,7,1);f("uniDetune","Unison Detune",0,50,12);f("uniSpread","Unison Spread",0,1,.65f);
+ p.add(std::make_unique<juce::AudioParameterInt>("unison","Unison Voices",1,7,1));f("uniDetune","Unison Detune",0,50,12);f("uniSpread","Unison Spread",0,1,.65f);
  f("fxEq","EQ Amount",0,1,0);f("fxDist","FX Distortion",0,1,0);f("fxChorus","Chorus",0,1,0);f("fxFlange","Flanger",0,1,0);
  f("fxDelay","Delay",0,1,0);f("fxReverb","Reverb",0,1,0);f("fxLow","EQ Low", -12,12,0);f("fxMid","EQ Mid",-12,12,0);f("fxHigh","EQ High",-12,12,0);
  return p;
