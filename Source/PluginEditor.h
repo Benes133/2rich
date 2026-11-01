@@ -26,7 +26,7 @@ private:
     juce::Slider fxCompThreshold, fxCompRatio, fxCompAttack, fxCompRelease, fxCompMakeup, fxCompMix;
     std::array<juce::ComboBox, 4> fxSlots;
     juce::ToggleButton fxCompEnabledButton { "COMPRESSOR" };
-    std::unique_ptr<ButtonAttach> aFxCompEnabled;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aFxCompEnabled;
     juce::TextButton synthTab{"SYNTH"}, wtTab{"WAVETABLE"}, fxTab{"FX"}, modTab{"MOD"}, seqTab{"SEQ"};
     juce::ComboBox seqModeBox, arpStyleBox, seqRateBox, seqDirectionBox, seqLengthBox;
     juce::ComboBox seqPageBox, seqPatternSlotBox;
