@@ -42,8 +42,11 @@ public:
 
         sampleAsset = processor != nullptr ? processor->getSampleAsset() : nullptr;
         samplePlaying = false;
-        samplePosition = 0.0;
-        grainCountdown = 0;
+        sampleStretchDone = false;
+        samplePosition = sampleStretchPosition = 0.0;
+        grainCountdown = sampleStretchCountdown = 0;
+        sampleReverse = false;
+        sampleLoop = false;
         for (auto& grain : grains) grain = {};
         if (sampleAsset && !sampleAsset->left.empty() && srForNote() > 0.0) {
             sampleStart = 0;
@@ -56,12 +59,44 @@ public:
                 sampleStart = sampleAsset->sliceStarts[(size_t)sliceIndex];
                 sampleEnd = sampleAsset->sliceStarts[(size_t)sliceIndex + 1];
             }
-            const float rootNote = processor->params.getRawParameterValue("sampleRootNote")->load();
-            // Slice keys select regions; they do not transpose each region by the keyboard's C2-based index.
-            const double semitoneOffset = mappedSlice ? 0.0 : (double)note - (double)rootNote;
+
+            const float trimStart = processor->params.getRawParameterValue("sampleStart")->load();
+            const float trimEnd = processor->params.getRawParameterValue("sampleEnd")->load();
+            const int untrimmedStart = sampleStart;
+            const int untrimmedLength = juce::jmax(1, sampleEnd - sampleStart);
+            sampleStart = untrimmedStart + juce::roundToInt((float)untrimmedLength * trimStart);
+            sampleEnd = untrimmedStart + juce::roundToInt((float)untrimmedLength * trimEnd);
+            if (sampleEnd <= sampleStart + 1) sampleEnd = juce::jmin((int)sampleAsset->left.size(), sampleStart + 2);
+
+            const int sampleEngine = (int)processor->params.getRawParameterValue("sampleMode")->load();
+            sampleReverse = processor->params.getRawParameterValue("sampleReverse")->load() > 0.5f;
+            sampleLoop = processor->params.getRawParameterValue("sampleLoop")->load() > 0.5f;
+            const bool keySync = processor->params.getRawParameterValue(
+                sampleEngine == 2 ? "grainKeySync" : "sampleKeySync")->load() > 0.5f;
+            const int targetKey = (int)processor->params.getRawParameterValue(
+                sampleEngine == 2 ? "grainTargetKey" : "sampleTargetKey")->load();
+
+            int keyShift = 0;
+            if (keySync && targetKey > 0) {
+                keyShift = (targetKey - 1) - (sampleAsset->rootMidiNote % 12);
+                if (keyShift > 6) keyShift -= 12;
+                if (keyShift < -6) keyShift += 12;
+            }
+
+            const float transpose = processor->params.getRawParameterValue(
+                sampleEngine == 2 ? "grainTranspose" : "sampleTranspose")->load();
+            const float fineTune = processor->params.getRawParameterValue(
+                sampleEngine == 2 ? "grainFineTune" : "sampleFineTune")->load();
+            // In slice mapping, MIDI selects a region. Key sync/transpose still
+            // applies, while the slice index itself does not create extra pitch steps.
+            const double keyboardOffset = mappedSlice ? 0.0 : (double)note
+                - (double)processor->params.getRawParameterValue("sampleRootNote")->load();
+            const double semitoneOffset = keyboardOffset + (double)keyShift
+                + (double)transpose + (double)fineTune / 100.0;
             sampleIncrement = sampleAsset->sampleRate / srForNote()
                 * std::pow(2.0, semitoneOffset / 12.0);
-            samplePosition = (double)sampleStart;
+            const double firstPosition = sampleReverse ? (double)(sampleEnd - 1) : (double)sampleStart;
+            samplePosition = sampleStretchPosition = firstPosition;
             samplePlaying = sampleEnd > sampleStart + 1;
         }
     }
@@ -77,6 +112,7 @@ public:
             env = 0.0f;
             filterEnv = 0.0f;
             samplePlaying = false;
+            sampleStretchDone = true;
             for (auto& grain : grains) grain.active = false;
             voiceFilter.reset();
         }
@@ -115,6 +151,45 @@ public:
         const float grainPosition = value("grainPosition");
         const float grainSpray = value("grainSpray");
         const float grainPitch = value("grainPitch");
+        const float grainJitter = value("grainJitter");
+        const float grainWindow = value("grainWindow");
+        const float grainStereo = value("grainStereo");
+        const bool sampleTempoSync = value("sampleTempoSync") > 0.5f;
+        const bool samplePreservePitch = value("samplePreservePitch") > 0.5f;
+        const bool grainTempoSync = value("grainTempoSync") > 0.5f;
+        const bool sampleReverseNow = value("sampleReverse") > 0.5f;
+        const bool sampleLoopNow = value("sampleLoop") > 0.5f;
+        const double hostBpm = processor->getHostTempoBpm();
+        const double beatsPerBar = processor->getHostBeatsPerBar();
+        double sampleTempoRatio = 1.0;
+        if (sampleTempoSync && sampleAsset && sampleAsset->sampleRate > 0.0) {
+            const int barsChoice = juce::jlimit(0, 5, (int)value("sampleSyncBars"));
+            const double duration = (double)sampleAsset->left.size() / sampleAsset->sampleRate;
+            double bars = duration * sampleAsset->sourceBpm / 240.0;
+            if (barsChoice > 0) bars = std::pow(2.0, (double)(barsChoice - 1));
+            else {
+                static const double choices[5] = { 1.0, 2.0, 4.0, 8.0, 16.0 };
+                double bestDistance = 1.0e30;
+                for (const double candidate : choices) {
+                    const double distance = std::abs(std::log2(juce::jmax(0.01, bars) / candidate));
+                    if (distance < bestDistance) { bestDistance = distance; bars = candidate; }
+                }
+            }
+            const double targetDuration = bars * beatsPerBar * 60.0 / juce::jlimit(20.0, 400.0, hostBpm);
+            if (duration > 0.01 && targetDuration > 0.01)
+                sampleTempoRatio = juce::jlimit(0.25, 4.0, duration / targetDuration);
+        }
+        double liveSampleIncrement = sampleIncrement;
+        if (sampleMode == 1 && !samplePreservePitch)
+            liveSampleIncrement *= sampleTempoSync ? sampleTempoRatio : 1.0;
+        const double direction = sampleReverseNow ? -1.0 : 1.0;
+        const int syncedGrainDivision = juce::jlimit(0, 5, (int)value("grainSyncDivision"));
+        static const double grainBeatDivisions[6] = { 0.25, 0.5, 1.0, 2.0, 4.0, 8.0 };
+        const int grainLength = grainTempoSync
+            ? juce::jlimit(64, (int)(sr * 1.5),
+                (int)(sr * 60.0 / juce::jlimit(20.0,400.0,hostBpm)
+                    * grainBeatDivisions[syncedGrainDivision]))
+            : juce::jlimit(64, (int)(sr * 1.5), (int)(sr * grainSizeMs * 0.001f));
 
         if (filterType != activeFilterType) {
             const auto type = filterType == 1
@@ -315,9 +390,9 @@ public:
                 processor->fxModWeightBlock[(size_t)blockIndex] += weight;
             }
 
-            // Sample playback and granular synthesis share the imported audio asset.
-            if (sampleMode > 0 && sampleAsset && !sampleAsset->left.empty()) {
-                const int assetLength = (int)sampleAsset->left.size();
+            // SAMPLER: optionally use overlapping grains to match the host tempo
+            // without changing pitch. Disabling Preserve Pitch selects classic varispeed.
+            if (sampleMode == 1 && sampleAsset && !sampleAsset->left.empty()) {
                 auto readInterpolated = [&](const std::vector<float>& channel, double position) {
                     if (channel.empty()) return 0.0f;
                     const int indexA = juce::jlimit(0, (int)channel.size() - 1, (int)position);
@@ -326,70 +401,159 @@ public:
                                       channel[(size_t)indexA], channel[(size_t)indexB]);
                 };
 
-                if (sampleMode == 1) {
-                    float sampleL = 0.0f, sampleR = 0.0f;
-                    if (samplePlaying && samplePosition < (double)sampleEnd) {
-                        sampleL = readInterpolated(sampleAsset->left, samplePosition);
-                        sampleR = readInterpolated(sampleAsset->right, samplePosition);
-                        samplePosition += sampleIncrement;
-                        if (samplePosition >= (double)sampleEnd)
-                            samplePlaying = false;
-                    }
-                    left = sampleL * sampleGain * vel * env;
-                    right = sampleR * sampleGain * vel * env;
-                } else {
-                    const int regionLength = juce::jmax(1, sampleEnd - sampleStart);
-                    const int grainLength = juce::jlimit(64, (int)(sr * 0.5),
-                        (int)(sr * grainSizeMs * 0.001f));
-                    const int spawnInterval = juce::jmax(1, (int)(sr / grainDensity));
-                    if (grainCountdown <= 0) {
+                if (sampleTempoSync && samplePreservePitch) {
+                    const int stretchLength = juce::jlimit(128, (int)(sr * 0.35),
+                        (int)(sr * value("sampleStretchGrainMs") * 0.001f));
+                    const int stretchInterval = juce::jmax(32, stretchLength / 2);
+                    if (samplePlaying && sampleStretchCountdown <= 0 && !sampleStretchDone) {
                         Grain* target = nullptr;
-                        for (auto& grain : grains) {
-                            if (!grain.active) { target = &grain; break; }
+                        for (auto& grain : grains) if (!grain.active) { target = &grain; break; }
+                        if (target == nullptr) {
+                            target = &*std::min_element(grains.begin(), grains.end(),
+                                [](const Grain& a, const Grain& b) { return a.age > b.age; });
                         }
-                        if (target == nullptr)
-                            target = &grains[0];
-
-                        grainSeed ^= grainSeed << 13;
-                        grainSeed ^= grainSeed >> 17;
-                        grainSeed ^= grainSeed << 5;
-                        const float random = (float)(grainSeed & 0x00ffffffu) / 8388607.5f - 1.0f;
-                        const double jitter = (double)random * (double)grainSpray
-                            * (double)regionLength * 0.5;
-                        const double center = (double)sampleStart
-                            + (double)grainPosition * (double)regionLength;
-                        const double maxStart = juce::jmax((double)sampleStart,
-                            (double)sampleEnd - (double)grainLength * sampleIncrement);
-                        target->position = juce::jlimit((double)sampleStart, maxStart, center + jitter);
-                        target->increment = sampleIncrement * std::pow(2.0, (double)grainPitch / 12.0);
+                        target->position = sampleStretchPosition;
+                        target->increment = sampleIncrement * direction;
                         target->age = 0;
-                        target->length = grainLength;
+                        target->length = stretchLength;
                         target->active = true;
-                        grainCountdown = spawnInterval;
+                        const double sourceAdvance = (double)stretchInterval
+                            * sampleAsset->sampleRate / sr * sampleTempoRatio;
+                        sampleStretchPosition += direction * sourceAdvance;
+                        if (sampleReverseNow ? sampleStretchPosition < (double)sampleStart
+                                             : sampleStretchPosition >= (double)sampleEnd) {
+                            if (sampleLoopNow) {
+                                const double length = (double)juce::jmax(1, sampleEnd - sampleStart);
+                                sampleStretchPosition = sampleReverseNow
+                                    ? (double)sampleEnd - 1.0 - std::fmod((double)sampleStart - sampleStretchPosition, length)
+                                    : (double)sampleStart + std::fmod(sampleStretchPosition - (double)sampleStart, length);
+                            } else {
+                                sampleStretchDone = true;
+                            }
+                        }
+                        sampleStretchCountdown = stretchInterval;
                     }
-                    --grainCountdown;
-
-                    float grainL = 0.0f, grainR = 0.0f;
-                    int activeGrains = 0;
+                    --sampleStretchCountdown;
+                    float sumL = 0.0f, sumR = 0.0f;
+                    int active = 0;
                     for (auto& grain : grains) {
                         if (!grain.active) continue;
-                        if (grain.age >= grain.length || grain.position >= (double)sampleEnd) {
+                        if (grain.age >= grain.length
+                            || (sampleReverseNow ? grain.position < (double)sampleStart
+                                                 : grain.position >= (double)sampleEnd)) {
                             grain.active = false;
                             continue;
                         }
                         const float phase = (float)grain.age / (float)juce::jmax(1, grain.length - 1);
                         const float window = 0.5f - 0.5f * std::cos(juce::MathConstants<float>::twoPi * phase);
-                        grainL += readInterpolated(sampleAsset->left, grain.position) * window;
-                        grainR += readInterpolated(sampleAsset->right, grain.position) * window;
+                        sumL += readInterpolated(sampleAsset->left, grain.position) * window;
+                        sumR += readInterpolated(sampleAsset->right, grain.position) * window;
                         grain.position += grain.increment;
                         ++grain.age;
-                        ++activeGrains;
+                        ++active;
                     }
-                    const float normaliser = 1.0f / std::sqrt((float)juce::jmax(1, activeGrains));
-                    left = grainL * normaliser * sampleGain * vel * env * 1.65f;
-                    right = grainR * normaliser * sampleGain * vel * env * 1.65f;
+                    const float normaliser = 1.0f / juce::jmax(1.0f, (float)active * 0.72f);
+                    left = sumL * normaliser * sampleGain * vel * env;
+                    right = sumR * normaliser * sampleGain * vel * env;
+                    if (sampleStretchDone && active == 0) samplePlaying = false;
+                } else {
+                    float sampleL = 0.0f, sampleR = 0.0f;
+                    if (samplePlaying) {
+                        const bool outside = sampleReverseNow
+                            ? samplePosition < (double)sampleStart
+                            : samplePosition >= (double)sampleEnd;
+                        if (outside) {
+                            if (sampleLoopNow) {
+                                samplePosition = sampleReverseNow ? (double)(sampleEnd - 1)
+                                                                  : (double)sampleStart;
+                            } else {
+                                samplePlaying = false;
+                            }
+                        }
+                        if (samplePlaying) {
+                            sampleL = readInterpolated(sampleAsset->left, samplePosition);
+                            sampleR = readInterpolated(sampleAsset->right, samplePosition);
+                            samplePosition += direction * liveSampleIncrement;
+                        }
+                    }
+                    left = sampleL * sampleGain * vel * env;
+                    right = sampleR * sampleGain * vel * env;
                 }
-                juce::ignoreUnused(assetLength);
+            }
+            // GRANULAR: grain duration can be locked to the host's beat grid.
+            else if (sampleMode == 2 && sampleAsset && !sampleAsset->left.empty()) {
+                auto readInterpolated = [&](const std::vector<float>& channel, double position) {
+                    if (channel.empty()) return 0.0f;
+                    const int indexA = juce::jlimit(0, (int)channel.size() - 1, (int)position);
+                    const int indexB = juce::jmin((int)channel.size() - 1, indexA + 1);
+                    return juce::jmap((float)(position - std::floor(position)),
+                                      channel[(size_t)indexA], channel[(size_t)indexB]);
+                };
+                const int regionLength = juce::jmax(1, sampleEnd - sampleStart);
+                const int spawnInterval = juce::jmax(1, (int)(sr / grainDensity));
+                if (grainCountdown <= 0) {
+                    Grain* target = nullptr;
+                    for (auto& grain : grains) if (!grain.active) { target = &grain; break; }
+                    if (target == nullptr) target = &grains[0];
+
+                    grainSeed ^= grainSeed << 13;
+                    grainSeed ^= grainSeed >> 17;
+                    grainSeed ^= grainSeed << 5;
+                    const float random = (float)(grainSeed & 0x00ffffffu) / 8388607.5f - 1.0f;
+                    const double jitter = (double)random * (double)grainSpray
+                        * (double)regionLength * 0.5;
+                    const double centre = (double)sampleStart
+                        + (double)grainPosition * (double)regionLength;
+                    const double position = juce::jlimit((double)sampleStart,
+                        (double)(sampleEnd - 1), centre + jitter);
+                    target->position = position;
+                    target->increment = sampleIncrement
+                        * std::pow(2.0, (double)grainPitch / 12.0) * direction;
+                    target->age = 0;
+                    target->length = grainLength;
+                    target->active = true;
+                    grainCountdown = spawnInterval;
+                }
+                --grainCountdown;
+
+                float grainL = 0.0f, grainR = 0.0f;
+                int activeGrains = 0;
+                float leftPan = 0.0f, rightPan = 0.0f;
+                for (size_t grainIndex = 0; grainIndex < grains.size(); ++grainIndex) {
+                    auto& grain = grains[grainIndex];
+                    if (!grain.active) continue;
+                    const bool outside = sampleReverseNow ? grain.position < (double)sampleStart
+                                                           : grain.position >= (double)sampleEnd;
+                    if (grain.age >= grain.length || outside) {
+                        if (sampleLoopNow) {
+                            const double length = (double)regionLength;
+                            grain.position = sampleReverseNow
+                                ? (double)sampleEnd - 1.0 - std::fmod((double)sampleStart - grain.position, length)
+                                : (double)sampleStart + std::fmod(grain.position - (double)sampleStart, length);
+                        } else {
+                            grain.active = false;
+                            continue;
+                        }
+                    }
+                    const float phase = (float)grain.age / (float)juce::jmax(1, grain.length - 1);
+                    const int windowType = juce::jlimit(0, 3, (int)grainWindow);
+                    float window = 1.0f;
+                    if (windowType == 0) window = 0.5f - 0.5f * std::cos(juce::MathConstants<float>::twoPi * phase);
+                    else if (windowType == 1) window = 1.0f - std::abs(2.0f * phase - 1.0f);
+                    else if (windowType == 2) window = 0.54f - 0.46f * std::cos(juce::MathConstants<float>::twoPi * phase);
+                    const float l = readInterpolated(sampleAsset->left, grain.position) * window;
+                    const float r = readInterpolated(sampleAsset->right, grain.position) * window;
+                    const float pan = (float)((int)grainIndex - 5) / 5.0f * grainStereo;
+                    grainL += l * std::sqrt(0.5f * (1.0f - pan));
+                    grainR += r * std::sqrt(0.5f * (1.0f + pan));
+                    grain.position += grain.increment;
+                    ++grain.age;
+                    ++activeGrains;
+                }
+                const float normaliser = 1.0f / std::sqrt((float)juce::jmax(1, activeGrains));
+                const float jitterGain = 1.0f - grainJitter * 0.08f;
+                left = grainL * normaliser * sampleGain * vel * env * 1.45f * jitterGain;
+                right = grainR * normaliser * sampleGain * vel * env * 1.45f * jitterGain;
             }
 
             // Recalculate filter coefficients every four samples to reduce per-voice DSP cost.
@@ -473,10 +637,10 @@ private:
     AuroraProcessor* processor = nullptr;
     std::shared_ptr<const AuroraProcessor::SampleAsset> sampleAsset;
     std::array<Grain, 12> grains{};
-    double samplePosition = 0.0, sampleIncrement = 1.0;
-    int sampleStart = 0, sampleEnd = 0, grainCountdown = 0;
+    double samplePosition = 0.0, sampleIncrement = 1.0, sampleStretchPosition = 0.0;
+    int sampleStart = 0, sampleEnd = 0, grainCountdown = 0, sampleStretchCountdown = 0;
     uint32_t grainSeed = 0x13579bdu;
-    bool samplePlaying = false;
+    bool samplePlaying = false, sampleReverse = false, sampleLoop = false, sampleStretchDone = false;
     juce::dsp::StateVariableTPTFilter<float> voiceFilter;
     int activeFilterType = 0;
     double hz = 440.0;
