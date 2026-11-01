@@ -1823,16 +1823,50 @@ void AuroraEditor::resized() {
     place(fxEq,{420,660,150,28});place(fxLow,{600,660,150,28});
     place(fxMid,{780,660,150,28});place(fxHigh,{960,660,150,28});
 
-    // Sample Lab: source controls, waveform display, detected key and granular rack.
+    // Dedicated Sampler workspace.
     place(sampleLoadButton,{52,204,132,30});
-    place(sampleClearButton,{194,204,96,30});
-    place(sampleStatusLabel,{306,204,842,30});
-    place(sampleModeBox,{52,280,220,30});
-    place(sampleRootNote,{310,280,210,30});
-    place(sampleMix,{550,280,200,30});
-    place(sampleSliceButton,{800,280,210,30});
-    const int grainX[5]={52,178,304,430,556};
-    juce::Slider* grainControls[5]={&grainSize,&grainDensity,&grainPosition,&grainSpray,&grainPitch};
-    for(int i=0;i<5;++i)place(*grainControls[i],{grainX[i],526,110,178});
+    place(sampleClearButton,{194,204,88,30});
+    place(sampleResliceButton,{292,204,100,30});
+    place(sampleStatusLabel,{404,204,744,30});
+    juce::ToggleButton* sampleOptions[6]={&sampleSliceButton,&sampleTempoButton,&sampleKeyButton,
+        &samplePreservePitchButton,&sampleLoopButton,&sampleReverseButton};
+    for(int i=0;i<6;++i)place(*sampleOptions[i],{52+i*183,252,174,30});
+    place(sampleSyncBarsBox,{52,292,220,28});
+    place(sampleTargetKeyBox,{286,292,220,28});
+    const int sampleX[5]={52,270,488,706,924};
+    juce::Slider* samplerRow1[5]={&sampleRootNote,&sampleMix,&sampleTranspose,&sampleFineTune,&sampleStart};
+    juce::Slider* samplerRow2[5]={&sampleEnd,&sampleSliceSensitivity,&sampleSliceMinGap,&sampleMaxSlices,&sampleStretchGrainMs};
+    for(int i=0;i<5;++i){
+        place(*samplerRow1[i],{sampleX[i],520,190,42});
+        place(*samplerRow2[i],{sampleX[i],650,190,42});
+    }
+
+    // Dedicated Granular workspace with its own preset bank and beat/key controls.
+    place(sampleLoadButton,{52,204,132,30});
+    place(sampleClearButton,{194,204,88,30});
+    place(granularStatusLabel,{300,204,848,30});
+    juce::ToggleButton* grainOptions[5]={&sampleSliceButton,&grainTempoButton,&grainKeyButton,
+        &sampleLoopButton,&sampleReverseButton};
+    for(int i=0;i<5;++i)place(*grainOptions[i],{52+i*218,252,208,30});
+    place(granularPresetBox,{52,292,260,28});
+    place(grainTargetKeyBox,{326,292,220,28});
+    place(grainSyncDivisionBox,{560,292,220,28});
+    const int grainX[5]={52,270,488,706,924};
+    juce::Slider* grainRow1[5]={&grainSize,&grainDensity,&grainPosition,&grainSpray,&grainPitch};
+    juce::Slider* grainRow2[5]={&grainTranspose,&grainFineTune,&grainJitter,&grainWindow,&grainStereo};
+    for(int i=0;i<5;++i){
+        place(*grainRow1[i],{grainX[i],520,190,112});
+        place(*grainRow2[i],{grainX[i],645,190,112});
+    }
+
+    // Full Preset Browser: filters and a large list on the left, patch actions on the right.
+    place(presetSearch,{52,194,360,30});
+    place(presetCategoryFilter,{426,194,270,30});
+    place(presetCountLabel,{710,194,440,26});
+    place(presetBrowserList,{52,240,710,466});
+    place(presetSelectedLabel,{836,386,300,46});
+    place(presetFavoriteButton,{836,430,92,30});
+    place(savePresetButton,{938,430,92,30});
+    place(loadPresetButton,{1040,430,92,30});
 }
 
