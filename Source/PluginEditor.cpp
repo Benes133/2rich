@@ -893,8 +893,8 @@ void AuroraEditor::paint(juce::Graphics& g) {
         label(52,514,260,"FILTER TYPE");label(52,566,116,"CUTOFF");label(184,566,116,"RESONANCE");
         label(368,520,100,"ATTACK");label(480,520,100,"DECAY");label(592,520,100,"SUSTAIN");label(704,520,100,"RELEASE");
         label(858,514,92,"OSC MIX");label(958,514,92,"DETUNE");label(1058,514,92,"SUB");
-        label(858,582,92,"UNISON");label(958,582,92,"UNI DETUNE");label(1058,582,92,"SPREAD");
-        label(858,650,92,"MASTER");label(958,650,92,"DRIVE");label(1058,650,92,"WIDTH");
+        label(858,584,92,"UNISON");label(958,584,92,"UNI DETUNE");label(1058,584,92,"SPREAD");
+        label(858,654,92,"MASTER");label(958,654,92,"DRIVE");label(1058,654,92,"WIDTH");
     }else if(currentPage==1){
         panel(32,128,272,190,"LFO 1","GLOBAL MODULATOR");panel(316,128,272,190,"LFO 2","GLOBAL MODULATOR");
         panel(600,128,272,190,"LFO 3","GLOBAL MODULATOR");panel(884,128,284,190,"FILTER ENVELOPE","PER-VOICE CUTOFF SHAPING");
@@ -913,7 +913,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
         panel(32,472,1136,254,"PERFORMANCE SEQUENCER","ARPEGGIATOR / 32 STEP PATTERN  /  HOST SYNC");
         label(52,538,140,"MODE");label(200,538,130,"ARP ORDER");label(338,538,100,"RATE");label(446,538,130,"DIRECTION");
         label(584,538,110,"LENGTH");label(704,538,140,"OCTAVES");label(852,538,140,"GLOBAL GATE");label(1000,538,150,"SWING");
-        label(580,586,330,"PITCH");label(580,620,330,"VELOCITY");label(580,654,330,"STEP GATE");
+        label(580,586,330,"PITCH");label(580,628,330,"VELOCITY");label(580,670,330,"STEP GATE");
         label(580,578,330,"PITCH");label(580,612,330,"VELOCITY");label(580,646,330,"STEP GATE");
         const int pageOffset=seqPageBox.getSelectedId()==2?16:0;
         if(lastActiveStep>=pageOffset&&lastActiveStep<pageOffset+16){
@@ -963,9 +963,9 @@ void AuroraEditor::resized() {
     place(wavetableStatusLabel,{628,232,520,15});place(wtPosition,{628,393,520,23});
     place(filterTypeBox,{52,532,260,26});place(cutoff,{52,580,116,132});place(res,{184,580,116,132});
     place(attack,{368,535,100,172});place(decay,{480,535,100,172});place(sustain,{592,535,100,172});place(release,{704,535,100,172});
-    const int vx[3]={858,958,1058},vy[3]={528,596,664};
+    const int vx[3]={858,958,1058},vy[3]={528,598,668};
     juce::Slider* voice[9]={&mix,&detune,&sub,&unison,&uniDetune,&uniSpread,&master,&drive,&width};
-    for(int i=0;i<9;++i)place(*voice[i],{vx[i%3],vy[i/3],92,58});
+    for(int i=0;i<9;++i)place(*voice[i],{vx[i%3],vy[i/3],92,54});
 
     // MOTION: LFOs and filter envelope.
     place(lfo1Rate,{50,216,90,82});place(lfo1Shape,{150,224,122,30});
@@ -986,7 +986,7 @@ void AuroraEditor::resized() {
     place(seqDirectionBox,{446,554,130,28});place(seqLengthBox,{584,554,110,28});
     place(seqOctaves,{704,554,140,28});place(seqGate,{852,554,140,28});place(seqSwing,{1000,554,150,28});
     for(int i=0;i<16;++i){const int x=52+(i%8)*61,y=610+(i/8)*34;place(stepButtons[(size_t)i],{x,y,56,28});}
-    place(stepPitch,{580,600,330,28});place(stepVelocity,{580,634,330,28});place(stepGate,{580,668,330,28});
+    place(stepPitch,{580,600,330,24});place(stepVelocity,{580,642,330,24});place(stepGate,{580,684,330,24});
     place(selectedStepLabel,{930,586,100,24});place(stepAccentButton,{1040,586,110,28});
     place(seqPageBox,{930,620,100,28});place(seqPatternSlotBox,{1040,620,110,28});
     place(savePatternButton,{930,652,100,28});place(loadPatternButton,{1040,652,110,28});place(patternStatusLabel,{930,690,220,18});
