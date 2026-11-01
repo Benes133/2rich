@@ -25,6 +25,13 @@ private:
     juce::TextButton importWavetableButton{"IMPORT WAV"}, clearWavetableButton{"CLEAR"};
     juce::Label wavetableStatusLabel;
     std::unique_ptr<juce::FileChooser> wavetableChooser;
+    juce::TextButton sampleTab{"SAMPLE"}, sampleLoadButton{"LOAD AUDIO"}, sampleClearButton{"CLEAR"};
+    juce::ToggleButton sampleSliceButton{"AUTO SLICE MAP"};
+    juce::ComboBox sampleModeBox;
+    juce::Slider sampleRootNote, sampleMix, grainSize, grainDensity, grainPosition, grainSpray, grainPitch;
+    juce::Label sampleStatusLabel;
+    std::unique_ptr<juce::FileChooser> sampleChooser;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aSampleSlice;
     juce::Slider fxEq, fxLow, fxMid, fxHigh, fxDist, fxChorus, fxFlange, fxDelay, fxReverb;
     juce::Slider fxCompThreshold, fxCompRatio, fxCompAttack, fxCompRelease, fxCompMakeup, fxCompMix;
     juce::Slider fxPhaserRate, fxPingTime, fxPingFeedback, fxReverbRoom, fxReverbDamping, fxLimiterCeiling;
@@ -48,7 +55,7 @@ private:
     int selectedFxSlot = 0;
     juce::ToggleButton fxCompEnabledButton { "COMPRESSOR" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aFxCompEnabled;
-    juce::TextButton synthTab{"VOICE"}, wtTab{"MOTION"}, fxTab{"FX"}, modTab{"MOD"}, seqTab{"SEQ"};
+    juce::TextButton synthTab{"VOICE"}, wtTab{"MOTION"}, fxTab{"FX"}, sampleTabButton{"SAMPLE"}, modTab{"MOD"}, seqTab{"SEQ"};
     juce::ComboBox seqModeBox, arpStyleBox, seqRateBox, seqDirectionBox, seqLengthBox;
     juce::ComboBox seqPageBox, seqPatternSlotBox;
     juce::Slider seqOctaves, seqGate, seqSwing;
@@ -65,6 +72,7 @@ private:
     std::array<juce::Slider, 4> modAmounts;
     int currentPage = 0;
     bool drawingWavetable = false;
+    bool sampleScrubbing = false;
     int drawingFrame = 0;
     int previousDrawIndex = 0;
     float previousDrawValue = 0.0f;
@@ -83,6 +91,8 @@ private:
     void updateFavoriteButton();
     void setPage(int page);
     void updateFxEditor();
+    void updateSampleEditor();
+    void updateSampleStatus();
     void refreshSelectedStepControls();
     void writeSelectedStepParameter(const juce::String& baseId, float value);
     void editWavetableFromMouse(const juce::MouseEvent&);
