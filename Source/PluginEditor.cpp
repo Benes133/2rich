@@ -643,8 +643,9 @@ AuroraEditor::~AuroraEditor() {
     for (auto& slider : fxExtraKnobs)
         slider.setLookAndFeel(nullptr);
     for (auto* slider : { &mix, &detune, &sub, &cutoff, &res, &attack, &decay, &sustain,
-                          &release, &master, &drive, &width, &wtPosition, &unison, &uniDetune,
-                          &uniSpread, &fmAmount, &syncRatio, &fxEq, &fxLow, &fxMid, &fxHigh, &fxDist, &fxChorus,
+                          &release, &master, &drive, &width, &wtPosition, &sampleRootNote, &sampleMix,
+                          &grainSize, &grainDensity, &grainPosition, &grainSpray, &grainPitch,
+                          &unison, &uniDetune, &uniSpread, &fmAmount, &syncRatio, &fxEq, &fxLow, &fxMid, &fxHigh, &fxDist, &fxChorus,
                           &fxFlange, &fxDelay, &fxReverb, &fxCompThreshold, &fxCompRatio, &fxCompAttack,
                           &fxCompRelease, &fxCompMakeup, &fxCompMix, &fxPhaserRate, &fxPingTime,
                           &fxPingFeedback, &fxReverbRoom, &fxReverbDamping, &fxLimiterCeiling,
@@ -664,6 +665,7 @@ AuroraEditor::~AuroraEditor() {
     lfo1Shape.setLookAndFeel(nullptr); lfo2Shape.setLookAndFeel(nullptr); lfo3Shape.setLookAndFeel(nullptr);
     fxFilterTypeBox.setLookAndFeel(nullptr);
     oscModeBox.setLookAndFeel(nullptr); filterTypeBox.setLookAndFeel(nullptr);
+    sampleModeBox.setLookAndFeel(nullptr);
     importWavetableButton.setLookAndFeel(nullptr); clearWavetableButton.setLookAndFeel(nullptr);
     sampleLoadButton.setLookAndFeel(nullptr); sampleClearButton.setLookAndFeel(nullptr);
     wavetableChooser.reset();
