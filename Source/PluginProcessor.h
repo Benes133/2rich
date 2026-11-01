@@ -7,15 +7,6 @@
 class AuroraProcessor : public juce::AudioProcessor {
 public:
  using APVTS=juce::AudioProcessorValueTreeState;
- struct SampleAsset {
-  std::vector<float> left, right, thumbnail;
-  std::vector<int> sliceStarts; // Includes the terminal sample position.
-  double sampleRate = 44100.0;
-  double sourceBpm = 120.0;
-  int rootMidiNote = 60;
-  juce::String keyName = "C";
-  juce::String fileName, fullPath;
- };
  AuroraProcessor();
  void prepareToPlay(double,int) override;
  void releaseResources() override {}
@@ -41,11 +32,6 @@ public:
  bool loadUserPattern(int slot);
  void setPresetFavorite(int presetId, bool favorite) noexcept;
  bool isPresetFavorite(int presetId) const noexcept;
- bool loadSampleFromFile(const juce::File& file, juce::String& error);
- void clearSample() noexcept;
- std::shared_ptr<const SampleAsset> getSampleAsset() const noexcept {
-  return std::atomic_load_explicit(&sampleAsset, std::memory_order_acquire);
- }
  bool loadWavetableFromFile(const juce::File& file, juce::String& error);
  void clearImportedWavetable();
  void editImportedWavetableRange(int frame, int firstSample, int lastSample,
@@ -63,9 +49,6 @@ public:
   return route >= 0 && route < 4 ? modRouteActivity[(size_t)route].load(std::memory_order_relaxed) : 0.0f;
  }
  float getOutputPeak() const noexcept { return outputPeak.load(std::memory_order_relaxed); }
- double getHostTempoBpm() const noexcept { return hostTempoBpm.load(std::memory_order_relaxed); }
- double getHostBeatsPerBar() const noexcept { return hostBeatsPerBar.load(std::memory_order_relaxed); }
- int getProjectKeyClass() const noexcept { return projectKeyClass.load(std::memory_order_relaxed); }
 private:
  struct StepData { bool enabled = true; int pitch = 0; float velocity = 127.0f; float gate = 100.0f; bool accent = false; };
  struct UserPattern {
@@ -77,7 +60,6 @@ private:
  std::array<bool, 8> userPatternValid{};
  std::array<std::atomic<bool>, 500> presetFavorites{};
  std::shared_ptr<const std::vector<float>> importedWavetable;
- std::shared_ptr<const SampleAsset> sampleAsset;
  juce::String importedWavetableName;
  class Voice;
  juce::Synthesiser synth;
@@ -98,10 +80,6 @@ private:
  std::array<std::vector<float>,2> delayBuffer;
  int delayWrite=0;
  double sampleRate=44100.0;
- std::atomic<double> hostTempoBpm{120.0};
- std::atomic<double> hostBeatsPerBar{4.0};
- std::array<double, 12> midiPitchClassWeights{};
- std::atomic<int> projectKeyClass{-1};
  float fxLfoPhase=0.0f;
  float compressorEnvelope=0.0f;
  std::array<std::array<std::vector<float>, 2>, 6> fxDelayBuffers;

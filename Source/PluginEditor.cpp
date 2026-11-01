@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include <algorithm>
 
 namespace {
 const juce::Colour bg       (0xff090711);
@@ -197,8 +198,8 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         updateFavoriteButton();
     };
 
-    presetSearch.setTextToShowWhenEmpty("SEARCH 500 FACTORY PATCHES", muted);
-    presetSearch.setTooltip("Search all factory sounds. Prefix with fav: to show favourites only.");
+    presetSearch.setTextToShowWhenEmpty("SEARCH THE FACTORY BANK", muted);
+    presetSearch.setTooltip("Search patch names. Prefix with fav: to search only favourites.");
     presetSearch.setColour(juce::TextEditor::backgroundColourId, surface);
     presetSearch.setColour(juce::TextEditor::textColourId, white);
     presetSearch.setColour(juce::TextEditor::highlightColourId, violet);
@@ -213,7 +214,37 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         "KEYS", "PIANOS", "PLUCKS", "BASS", "SYNTHS", "SOUND FX", "TEXTURES", "FX & SYNTH" }, 1);
     presetCategoryFilter.setSelectedId(1, juce::dontSendNotification);
     presetCategoryFilter.onChange = [this] { rebuildPresetList(); };
-    addAndMakeVisible(presetCategoryFilter);
+    presetCategoryFilter.setVisible(false);
+
+    static const char* presetFamilies[12] = {
+        "ALL SOUNDS", "LEADS", "PADS", "ATMOSPHERES", "KEYS", "PIANOS",
+        "PLUCKS", "BASS", "SYNTHS", "SOUND FX", "TEXTURES", "FX & SYNTH"
+    };
+    for (size_t i = 0; i < presetCategoryButtons.size(); ++i) {
+        auto& button = presetCategoryButtons[i];
+        button.setButtonText(presetFamilies[i]);
+        button.setLookAndFeel(&richLook);
+        button.setColour(juce::TextButton::textColourOffId, white);
+        button.setColour(juce::TextButton::textColourOnId, violetHi);
+        button.setClickingTogglesState(false);
+        button.onClick = [this, i] {
+            presetCategoryFilter.setSelectedId((int)i + 1, juce::dontSendNotification);
+            showFavoritesOnly = false;
+            presetShowFavoritesButton.setToggleState(false, juce::dontSendNotification);
+            rebuildPresetList();
+        };
+        addAndMakeVisible(button);
+    }
+    presetShowFavoritesButton.setLookAndFeel(&richLook);
+    presetShowFavoritesButton.setColour(juce::TextButton::textColourOffId, white);
+    presetShowFavoritesButton.setColour(juce::TextButton::textColourOnId, violetHi);
+    presetShowFavoritesButton.setClickingTogglesState(true);
+    presetShowFavoritesButton.setTooltip("Show only patches marked as favourites.");
+    presetShowFavoritesButton.onClick = [this] {
+        showFavoritesOnly = presetShowFavoritesButton.getToggleState();
+        rebuildPresetList();
+    };
+    addAndMakeVisible(presetShowFavoritesButton);
     presetBrowserList.setModel(this);
     presetBrowserList.setRowHeight(30);
     presetBrowserList.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff0d1017));
@@ -226,8 +257,12 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     presetCountLabel.setFont(juce::Font(juce::FontOptions(9.0f)));
     addAndMakeVisible(presetCountLabel);
     presetSelectedLabel.setColour(juce::Label::textColourId, violetHi);
-    presetSelectedLabel.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
+    presetSelectedLabel.setFont(juce::Font(juce::FontOptions(17.0f, juce::Font::bold)));
     addAndMakeVisible(presetSelectedLabel);
+    presetInfoLabel.setColour(juce::Label::textColourId, muted);
+    presetInfoLabel.setFont(juce::Font(juce::FontOptions(10.5f)));
+    presetInfoLabel.setJustificationType(juce::Justification::topLeft);
+    addAndMakeVisible(presetInfoLabel);
     rebuildPresetList();
 
     for (auto* button : { &presetFavoriteButton, &savePresetButton, &loadPresetButton }) {
@@ -342,82 +377,6 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         repaint();
     };
 
-    for (auto* button : { &sampleLoadButton, &sampleClearButton, &sampleResliceButton }) {
-        button->setLookAndFeel(&richLook);
-        button->setColour(juce::TextButton::textColourOffId, white);
-        button->setColour(juce::TextButton::textColourOnId, violetHi);
-        addAndMakeVisible(*button);
-    }
-
-    auto attachToggle = [&](juce::ToggleButton& button, const char* parameterId) {
-        button.setColour(juce::ToggleButton::textColourId, white);
-        button.setTooltip(parameterId);
-        addAndMakeVisible(button);
-        buttonAttachments.push_back(std::make_unique<ButtonAttach>(ap, parameterId, button));
-    };
-    attachToggle(sampleSliceButton, "sampleSliceMode");
-    attachToggle(sampleTempoButton, "sampleTempoSync");
-    attachToggle(sampleKeyButton, "sampleKeySync");
-    attachToggle(samplePreservePitchButton, "samplePreservePitch");
-    attachToggle(sampleLoopButton, "sampleLoop");
-    attachToggle(sampleReverseButton, "sampleReverse");
-    attachToggle(grainTempoButton, "grainTempoSync");
-    attachToggle(grainKeyButton, "grainKeySync");
-
-    sampleStatusLabel.setColour(juce::Label::textColourId, muted);
-    sampleStatusLabel.setFont(juce::Font(juce::FontOptions(9.0f)));
-    sampleStatusLabel.setText("NO AUDIO LOADED  /  IMPORT A WAV OR AIFF LOOP OR SONG",
-                               juce::dontSendNotification);
-    addAndMakeVisible(sampleStatusLabel);
-    granularStatusLabel.setColour(juce::Label::textColourId, muted);
-    granularStatusLabel.setFont(juce::Font(juce::FontOptions(9.0f)));
-    addAndMakeVisible(granularStatusLabel);
-
-    sampleLoadButton.setTooltip("Load WAV or AIFF audio for the sampler and granular engine.");
-    sampleLoadButton.onClick = [this] {
-        sampleChooser = std::make_unique<juce::FileChooser>(
-            "Load Audio into 2rich",
-            juce::File::getSpecialLocation(juce::File::userHomeDirectory),
-            "*.wav;*.aif;*.aiff");
-        sampleChooser->launchAsync(juce::FileBrowserComponent::openMode
-                                   | juce::FileBrowserComponent::canSelectFiles,
-            [this](const juce::FileChooser& chooser) {
-                const auto file = chooser.getResult();
-                if (file == juce::File{}) return;
-                juce::String error;
-                if (!proc.loadSampleFromFile(file, error)) {
-                    sampleStatusLabel.setText("LOAD FAILED: " + error, juce::dontSendNotification);
-                    granularStatusLabel.setText("LOAD FAILED: " + error, juce::dontSendNotification);
-                } else {
-                    if (auto* parameter = proc.params.getParameter("sampleMode")) {
-                        const float mode = currentPage == 4 ? 2.0f : 1.0f;
-                        parameter->setValueNotifyingHost(parameter->convertTo0to1(mode));
-                    }
-                    updateSampleStatus();
-                }
-                repaint();
-            });
-    };
-    sampleClearButton.setTooltip("Unload the current source audio.");
-    sampleClearButton.onClick = [this] {
-        proc.clearSample();
-        updateSampleStatus();
-        repaint();
-    };
-    sampleResliceButton.setTooltip("Re-run key, tempo and transient analysis using the current sensitivity settings.");
-    sampleResliceButton.onClick = [this] {
-        const auto sample = proc.getSampleAsset();
-        if (!sample) return;
-        juce::String error;
-        if (!proc.loadSampleFromFile(juce::File(sample->fullPath), error)) {
-            sampleStatusLabel.setText("ANALYSIS FAILED: " + error, juce::dontSendNotification);
-            granularStatusLabel.setText("ANALYSIS FAILED: " + error, juce::dontSendNotification);
-        } else {
-            updateSampleStatus();
-        }
-        repaint();
-    };
-
     auto addChoice = [&](juce::ComboBox& box, const juce::StringArray& items, const juce::String& id) {
         box.setLookAndFeel(&richLook);
         box.setColour(juce::ComboBox::textColourId, white);
@@ -428,18 +387,6 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     };
     addChoice(oscModeBox, { "Classic", "FM", "Ring Mod", "Hard Sync", "Super Saw" }, "oscMode");
     addChoice(filterTypeBox, { "Low Pass", "Band Pass", "High Pass" }, "filterType");
-    addChoice(sampleSyncBarsBox, { "AUTO LENGTH", "1 BAR", "2 BARS", "4 BARS", "8 BARS", "16 BARS", "1/16", "1/8", "1/4", "1/2" }, "sampleSyncBars");
-    addChoice(sampleTargetKeyBox, { "AUTO / SOURCE KEY", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, "sampleTargetKey");
-    addChoice(grainTargetKeyBox, { "AUTO / SOURCE KEY", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, "grainTargetKey");
-    addChoice(grainSyncDivisionBox, { "1/16", "1/8", "1/4", "1/2", "1 BAR", "2 BARS" }, "grainSyncDivision");
-    granularPresetBox.setLookAndFeel(&richLook);
-    granularPresetBox.setColour(juce::ComboBox::textColourId, white);
-    granularPresetBox.setColour(juce::ComboBox::arrowColourId, violetHi);
-    granularPresetBox.addItemList({ "INIT GRAIN", "GLASS DUST", "CLOUD CHOIR", "MOLECULAR STRINGS",
-        "TIME STRETCH", "FROZEN BELLS", "GRANULAR RAIN", "REVERSE NEBULA", "AMBIENT GRAINFIELD",
-        "PITCH FRACTURE", "MICROPHONIC", "TAPE MEMORY", "SHIMMER MOTION", "BROKEN TEXTURE",
-        "DIGITAL SAND", "HARMONIC DRIFT", "CINEMATIC CLOUD" }, 1);
-    addAndMakeVisible(granularPresetBox);
     const juce::StringArray fxTypeNames = { "Off", "Compressor", "Saturation", "Phaser",
         "Ping-Pong", "Reverb", "Chorus", "Multiband Dist.", "Limiter",
         "Bitcrusher", "Stereo Width", "Tremolo", "Ring Mod", "Filter", "Flanger" };
@@ -531,33 +478,6 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addChoice(seqPatternSlotBox, { "PATTERN 01", "PATTERN 02", "PATTERN 03", "PATTERN 04",
                                    "PATTERN 05", "PATTERN 06", "PATTERN 07", "PATTERN 08" }, "seqPatternSlot");
     auto addExtra=[&](juce::Slider& s,const juce::String& id,const juce::String& label){addKnob(s,label,id);attachments.push_back(std::make_unique<Attach>(ap,id,s));};
-    addExtra(sampleRootNote, "sampleRootNote", "ROOT NOTE");
-    addExtra(sampleMix, "sampleMix", "SAMPLE LEVEL");
-    addExtra(sampleTranspose, "sampleTranspose", "TRANSPOSE");
-    addExtra(sampleFineTune, "sampleFineTune", "FINE TUNE");
-    addExtra(sampleStart, "sampleStart", "START");
-    addExtra(sampleEnd, "sampleEnd", "END");
-    addExtra(sampleSliceSensitivity, "sampleSliceSensitivity", "SLICE SENS");
-    addExtra(sampleSliceMinGap, "sampleSliceMinGap", "MIN GAP MS");
-    addExtra(sampleMaxSlices, "sampleMaxSlices", "MAX SLICES");
-    addExtra(sampleStretchGrainMs, "sampleStretchGrainMs", "STRETCH WINDOW");
-    addExtra(grainSize, "grainSize", "GRAIN SIZE");
-    addExtra(grainDensity, "grainDensity", "DENSITY");
-    addExtra(grainPosition, "grainPosition", "POSITION");
-    addExtra(grainSpray, "grainSpray", "SPRAY");
-    addExtra(grainPitch, "grainPitch", "PITCH");
-    addExtra(grainTranspose, "grainTranspose", "TRANSPOSE");
-    addExtra(grainFineTune, "grainFineTune", "FINE TUNE");
-    addExtra(grainJitter, "grainJitter", "TIMING JITTER");
-    addExtra(grainStereo, "grainStereo", "STEREO SPREAD");
-    for (auto* slider : { &sampleRootNote, &sampleMix, &sampleTranspose, &sampleFineTune,
-                          &sampleStart, &sampleEnd, &sampleSliceSensitivity, &sampleSliceMinGap,
-                          &sampleMaxSlices, &sampleStretchGrainMs }) {
-        slider->setSliderStyle(juce::Slider::LinearHorizontal);
-        slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 46, 18);
-    }
-    sampleRootNote.setNumDecimalPlacesToDisplay(0);
-    sampleMaxSlices.setNumDecimalPlacesToDisplay(0);
     addExtra(wtPosition,"wtPosition","POSITION"); wtPosition.setSliderStyle(juce::Slider::LinearHorizontal); wtPosition.setTextBoxStyle(juce::Slider::TextBoxRight,false,42,18); addExtra(unison,"unison","VOICES"); addExtra(uniDetune,"uniDetune","DETUNE"); addExtra(uniSpread,"uniSpread","SPREAD");
     addExtra(fmAmount,"fmAmount","FM AMOUNT"); addExtra(syncRatio,"syncRatio","SYNC RATIO");
     for (auto* slider : { &fmAmount, &syncRatio }) {
@@ -602,15 +522,6 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     for (size_t i = 0; i < fxExtraKnobs.size(); ++i)
         addExtra(fxExtraKnobs[i], fxExtraDefinitions[i][0], fxExtraDefinitions[i][1]);
     addChoice(fxFilterTypeBox, { "Low Pass", "High Pass", "Band Pass" }, "fxFilterType");
-    // Granular window shapes and factory grain patches.
-    grainWindow.setRange(0.0, 3.0, 1.0);
-    grainWindow.setNumDecimalPlacesToDisplay(0);
-    addExtra(grainWindow, "grainWindow", "WINDOW");
-    granularPresetBox.onChange = [this] {
-        if (granularPresetBox.getSelectedId() > 0)
-            applyGranularPreset(granularPresetBox.getSelectedId());
-    };
-
     addExtra(lfo1Rate,"lfo1Rate","RATE"); addExtra(lfo2Rate,"lfo2Rate","RATE");
     addExtra(lfo3Rate,"lfo3Rate","RATE");
     addExtra(filterAttack,"filterAttack","ATTACK"); addExtra(filterDecay,"filterDecay","DECAY");
@@ -713,9 +624,8 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         modAmounts[(size_t)i].setSliderStyle(juce::Slider::LinearHorizontal);
         modAmounts[(size_t)i].setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
     }
-    for(auto* tab:{&synthTab,&wtTab,&fxTab,&samplerTab,&granularTab,&presetsTab}){tab->setLookAndFeel(&richLook);tab->setColour(juce::TextButton::textColourOffId,white);tab->setColour(juce::TextButton::textColourOnId,violetHi);tab->setClickingTogglesState(false);addAndMakeVisible(*tab);}
-    synthTab.onClick=[this]{setPage(0);};wtTab.onClick=[this]{setPage(1);};fxTab.onClick=[this]{setPage(2);};samplerTab.onClick=[this]{setPage(3);};granularTab.onClick=[this]{setPage(4);};presetsTab.onClick=[this]{setPage(5);};
-    updateSampleStatus();
+    for(auto* tab:{&synthTab,&wtTab,&fxTab,&presetsTab}){tab->setLookAndFeel(&richLook);tab->setColour(juce::TextButton::textColourOffId,white);tab->setColour(juce::TextButton::textColourOnId,violetHi);tab->setClickingTogglesState(false);addAndMakeVisible(*tab);}
+    synthTab.onClick=[this]{setPage(0);};wtTab.onClick=[this]{setPage(1);};fxTab.onClick=[this]{setPage(2);};presetsTab.onClick=[this]{setPage(3);};
     unison.setRange(1,7,1); unison.setNumDecimalPlacesToDisplay(0);
     add(mix, "mix", "MIX"); add(detune, "detune", "DETUNE"); add(sub, "sub", "SUB");
     add(cutoff, "cutoff", "CUTOFF"); add(res, "res", "RES");
@@ -731,11 +641,7 @@ AuroraEditor::~AuroraEditor() {
     for (auto& slider : fxExtraKnobs)
         slider.setLookAndFeel(nullptr);
     for (auto* slider : { &mix, &detune, &sub, &cutoff, &res, &attack, &decay, &sustain,
-                          &release, &master, &drive, &width, &wtPosition, &sampleRootNote, &sampleMix,
-                          &sampleTranspose, &sampleFineTune, &sampleStart, &sampleEnd,
-                          &sampleSliceSensitivity, &sampleSliceMinGap, &sampleMaxSlices, &sampleStretchGrainMs,
-                          &grainSize, &grainDensity, &grainPosition, &grainSpray, &grainPitch,
-                          &grainTranspose, &grainFineTune, &grainJitter, &grainWindow, &grainStereo,
+                          &release, &master, &drive, &width, &wtPosition,
                           &unison, &uniDetune, &uniSpread, &fmAmount, &syncRatio, &fxEq, &fxLow, &fxMid, &fxHigh, &fxDist, &fxChorus,
                           &fxFlange, &fxDelay, &fxReverb, &fxCompThreshold, &fxCompRatio, &fxCompAttack,
                           &fxCompRelease, &fxCompMakeup, &fxCompMix, &fxPhaserRate, &fxPingTime,
@@ -756,14 +662,11 @@ AuroraEditor::~AuroraEditor() {
     lfo1Shape.setLookAndFeel(nullptr); lfo2Shape.setLookAndFeel(nullptr); lfo3Shape.setLookAndFeel(nullptr);
     fxFilterTypeBox.setLookAndFeel(nullptr);
     oscModeBox.setLookAndFeel(nullptr); filterTypeBox.setLookAndFeel(nullptr);
-    sampleTargetKeyBox.setLookAndFeel(nullptr); sampleSyncBarsBox.setLookAndFeel(nullptr);
-    grainTargetKeyBox.setLookAndFeel(nullptr); grainSyncDivisionBox.setLookAndFeel(nullptr);
-    granularPresetBox.setLookAndFeel(nullptr);
     presetCategoryFilter.setLookAndFeel(nullptr);
+    for (auto& button : presetCategoryButtons) button.setLookAndFeel(nullptr);
+    presetShowFavoritesButton.setLookAndFeel(nullptr);
     importWavetableButton.setLookAndFeel(nullptr); clearWavetableButton.setLookAndFeel(nullptr);
-    sampleLoadButton.setLookAndFeel(nullptr); sampleClearButton.setLookAndFeel(nullptr); sampleResliceButton.setLookAndFeel(nullptr);
     wavetableChooser.reset();
-    sampleChooser.reset();
     presetBrowserList.setModel(nullptr);
     for (auto& box : modSources) box.setLookAndFeel(nullptr);
     for (auto& box : modTargets) box.setLookAndFeel(nullptr);
@@ -775,13 +678,13 @@ AuroraEditor::~AuroraEditor() {
     seqDirectionBox.setLookAndFeel(nullptr); seqLengthBox.setLookAndFeel(nullptr);
     seqPageBox.setLookAndFeel(nullptr); seqPatternSlotBox.setLookAndFeel(nullptr);
     synthTab.setLookAndFeel(nullptr);wtTab.setLookAndFeel(nullptr);fxTab.setLookAndFeel(nullptr);
-    samplerTab.setLookAndFeel(nullptr);granularTab.setLookAndFeel(nullptr);presetsTab.setLookAndFeel(nullptr);
+    presetsTab.setLookAndFeel(nullptr);
 }
 
 void AuroraEditor::rebuildPresetList() {
     const auto rawQuery = presetSearch.getText().trim().toLowerCase();
-    const bool favouritesOnly = rawQuery.startsWith("fav:");
-    const auto query = favouritesOnly ? rawQuery.substring(4).trim() : rawQuery;
+    const bool queryFavoritesOnly = rawQuery.startsWith("fav:");
+    const auto query = queryFavoritesOnly ? rawQuery.substring(4).trim() : rawQuery;
     const int previousId = presets.getSelectedId();
     const int categoryId = presetCategoryFilter.getSelectedId();
     const juce::String categoryFilter = categoryId > 1
@@ -797,39 +700,64 @@ void AuroraEditor::rebuildPresetList() {
         else if (category.startsWith("PADS")) normalizedCategory = "PADS";
         else if (category.startsWith("ATMOSPHERE")) normalizedCategory = "ATMOSPHERES";
         else if (category.startsWith("KEYS")) normalizedCategory = "KEYS";
+        else if (category.startsWith("PIANOS")) normalizedCategory = "PIANOS";
         else if (category.startsWith("PLUCKS")) normalizedCategory = "PLUCKS";
         else if (category.startsWith("BASS")) normalizedCategory = "BASS";
         else if (category.startsWith("SYNTHS")) normalizedCategory = "SYNTHS";
         else if (category.startsWith("SOUND FX")) normalizedCategory = "SOUND FX";
         else if (category.startsWith("TEXTURES")) normalizedCategory = "TEXTURES";
         else if (category.startsWith("FX &")) normalizedCategory = "FX & SYNTH";
-
-        const bool categoryMatches = categoryFilter == "ALL SOUNDS"
-            || normalizedCategory == categoryFilter;
+        const bool categoryMatches = categoryFilter == "ALL SOUNDS" || normalizedCategory == categoryFilter;
         const bool nameMatches = query.isEmpty() || name.toLowerCase().contains(query);
-        const bool favouriteMatches = !favouritesOnly || proc.isPresetFavorite(id);
-        if (categoryMatches && nameMatches && favouriteMatches)
-            filteredPresetIds.push_back(id);
-
+        const bool favouriteMatches = !(showFavoritesOnly || queryFavoritesOnly) || proc.isPresetFavorite(id);
+        if (categoryMatches && nameMatches && favouriteMatches) filteredPresetIds.push_back(id);
         presets.addItem(name, id);
     }
-
+    std::sort(filteredPresetIds.begin(), filteredPresetIds.end(), [](int a, int b) {
+        return factoryPresetName(a).compareIgnoreCase(factoryPresetName(b)) < 0;
+    });
     if (previousId > 0 && presets.indexOfItemId(previousId) >= 0)
         presets.setSelectedId(previousId, juce::dontSendNotification);
     presetBrowserList.updateContent();
     int selectedRow = -1;
     for (size_t i = 0; i < filteredPresetIds.size(); ++i)
-        if (filteredPresetIds[i] == presets.getSelectedId()) {
-            selectedRow = (int)i;
-            break;
-        }
+        if (filteredPresetIds[i] == presets.getSelectedId()) { selectedRow = (int)i; break; }
     presetBrowserList.selectRow(selectedRow, juce::dontSendNotification, true);
-    presetCountLabel.setText(juce::String(filteredPresetIds.size()) + " FACTORY PATCHES",
-                             juce::dontSendNotification);
-    presetSelectedLabel.setText(presets.getSelectedId() > 0
-        ? factoryPresetName(presets.getSelectedId()) : "SELECT A PATCH",
-        juce::dontSendNotification);
+    presetCountLabel.setText(juce::String(filteredPresetIds.size()) + " PATCHES", juce::dontSendNotification);
+    updatePresetInformation();
+    for (size_t i = 0; i < presetCategoryButtons.size(); ++i)
+        presetCategoryButtons[i].setToggleState((int)i + 1 == categoryId && !showFavoritesOnly, juce::dontSendNotification);
+    presetShowFavoritesButton.setToggleState(showFavoritesOnly, juce::dontSendNotification);
     updateFavoriteButton();
+}
+
+void AuroraEditor::updatePresetInformation() {
+    const int selectedId = presets.getSelectedId();
+    presetSelectedLabel.setText(selectedId > 0 ? factoryPresetName(selectedId) : "SELECT A PATCH",
+                                juce::dontSendNotification);
+    if (selectedId <= 0) {
+        presetInfoLabel.setText("FACTORY BANK\n500 patches across 10 sound families.\n\nChoose a family on the left, search by name, or open FAVOURITES to narrow the list.\n\nClick any patch to load it. SAVE exports your current sound as a .2richpreset file.",
+                                juce::dontSendNotification);
+        return;
+    }
+    const auto category = factoryPresetCategory(selectedId);
+    const auto lower = category.toLowerCase();
+    juce::String description = "A factory sound from the 2rich library.";
+    if (lower.startsWith("lead")) description = "A focused synth voice designed to sit clearly in the foreground.";
+    else if (lower.startsWith("pad")) description = "A sustained harmonic layer for chords, atmosphere and wide arrangements.";
+    else if (lower.startsWith("atmosphere")) description = "A spacious evolving tone for beds, transitions and cinematic layers.";
+    else if (lower.startsWith("key")) description = "A playable keyboard-style patch with a clear pitch centre.";
+    else if (lower.startsWith("piano")) description = "A piano-inspired synthetic tone for melodic and harmonic parts.";
+    else if (lower.startsWith("pluck")) description = "A short, defined attack for rhythmic notes and arpeggios.";
+    else if (lower.startsWith("bass")) description = "A low-register voice built for weight, movement and groove.";
+    else if (lower.startsWith("synth")) description = "A versatile electronic tone with a distinct oscillator and filter character.";
+    else if (lower.startsWith("sound fx")) description = "A designed effect patch for accents, transitions and sound design.";
+    else if (lower.startsWith("texture")) description = "A detailed, layered tone for subtle motion and background depth.";
+    else if (lower.startsWith("fx &")) description = "An experimental hybrid patch for unusual melodic and textural parts.";
+    presetInfoLabel.setText("SOUND FAMILY\n" + category + "\n\n" + description
+        + "\n\nPATCH ID\n" + juce::String(selectedId).paddedLeft('0', 3)
+        + "\n\nClick a name to load it. Use the arrow keys to step through the list.",
+        juce::dontSendNotification);
 }
 
 int AuroraEditor::getNumRows() {
@@ -855,13 +783,14 @@ void AuroraEditor::paintListBoxItem(int rowNumber, juce::Graphics& g,
     g.drawText(juce::String(presetId).paddedLeft('0', 3), 12, 0, 38, height,
                juce::Justification::centredLeft);
     g.setColour(rowIsSelected ? white : juce::Colour(0xffd5d0df));
-    g.setFont(juce::Font(juce::FontOptions(10.0f, rowIsSelected ? juce::Font::bold : juce::Font::plain)));
-    g.drawText(factoryPresetName(presetId), 58, 0, width - 240, height,
+    g.setFont(juce::Font(juce::FontOptions(10.5f, rowIsSelected ? juce::Font::bold : juce::Font::plain)));
+    g.drawText(factoryPresetName(presetId), 58, 0, width - 106, height,
                juce::Justification::centredLeft, true);
-    g.setColour(rowIsSelected ? violetHi : muted);
-    g.setFont(juce::Font(juce::FontOptions(8.0f, juce::Font::bold)));
-    g.drawText(factoryPresetCategory(presetId), width - 176, 0, 160, height,
-               juce::Justification::centredRight, true);
+    if (proc.isPresetFavorite(presetId)) {
+        g.setColour(violetHi);
+        g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+        g.drawText("★", width - 34, 0, 22, height, juce::Justification::centred);
+    }
 }
 
 void AuroraEditor::selectedRowsChanged(int lastRowSelected) {
@@ -869,7 +798,7 @@ void AuroraEditor::selectedRowsChanged(int lastRowSelected) {
     const int id = filteredPresetIds[(size_t)lastRowSelected];
     presets.setSelectedId(id, juce::dontSendNotification);
     applyPreset(id);
-    presetSelectedLabel.setText(factoryPresetName(id), juce::dontSendNotification);
+    updatePresetInformation();
     updateFavoriteButton();
 }
 
@@ -1048,7 +977,6 @@ void AuroraEditor::applyPreset(int id) {
         set("fxSlot5", generatedGroup == 8 ? (id % 2 == 0 ? 14.0f : 12.0f) : 0.0f);
         set("fxSlot6", p.flange > 0.22f ? 3.0f : 0.0f);
     }
-    set("sampleMode", 0.0f);
     set("oscMode", (float)oscillatorMode);
     set("fmAmount", generatedGroup == 4 ? 3.2f : randomRange(0.5f, 5.0f));
     set("syncRatio", randomRange(1.5f, 5.0f));
@@ -1120,19 +1048,6 @@ void AuroraEditor::writeSelectedStepParameter(const juce::String& baseId, float 
 }
 
 void AuroraEditor::mouseDown(const juce::MouseEvent& event) {
-    if (currentPage == 4) {
-        const float scale = juce::jmin(getWidth()/1200.0f,getHeight()/820.0f);
-        const int ox = (getWidth()-juce::roundToInt(1200.0f*scale))/2;
-        const int oy = (getHeight()-juce::roundToInt(820.0f*scale))/2;
-        const float x = ((float)event.x-(float)ox)/scale;
-        const float y = ((float)event.y-(float)oy)/scale;
-        if (proc.getSampleAsset() && x >= 52.0f && x <= 1148.0f && y >= 330.0f && y <= 480.0f) {
-            sampleScrubbing = true;
-            grainPosition.setValue(juce::jlimit(0.0,1.0,(double)((x-52.0f)/1096.0f)),
-                                   juce::sendNotification);
-        }
-        return;
-    }
     if(currentPage!=0)return;
     const float scale=juce::jmin(getWidth()/1200.0f,getHeight()/820.0f);
     const int ox=(getWidth()-juce::roundToInt(1200.0f*scale))/2;
@@ -1149,20 +1064,12 @@ void AuroraEditor::mouseDown(const juce::MouseEvent& event) {
 }
 
 void AuroraEditor::mouseDrag(const juce::MouseEvent& event) {
-    if (sampleScrubbing && currentPage == 4) {
-        const float scale = juce::jmin(getWidth()/1200.0f,getHeight()/820.0f);
-        const int ox = (getWidth()-juce::roundToInt(1200.0f*scale))/2;
-        const float x = ((float)event.x-(float)ox)/scale;
-        grainPosition.setValue(juce::jlimit(0.0,1.0,(double)((x-52.0f)/1096.0f)),
-                               juce::sendNotification);
-    } else if (drawingWavetable) {
+    if (drawingWavetable)
         editWavetableFromMouse(event);
-    }
 }
 
 void AuroraEditor::mouseUp(const juce::MouseEvent&) {
     drawingWavetable = false;
-    sampleScrubbing = false;
 }
 
 void AuroraEditor::editWavetableFromMouse(const juce::MouseEvent& event) {
@@ -1191,9 +1098,6 @@ void AuroraEditor::timerCallback() {
         changed = true;
     }
 
-    if (currentPage == 3 || currentPage == 4)
-        updateSampleStatus();
-
     if (currentPage == 1) {
         for (int route = 0; route < 4; ++route) {
             const float activity = proc.getModRouteActivity(route);
@@ -1209,20 +1113,11 @@ void AuroraEditor::timerCallback() {
 }
 
 void AuroraEditor::setPage(int page) {
-    currentPage = juce::jlimit(0, 5, page);
+    currentPage = juce::jlimit(0, 3, page);
     synthTab.setToggleState(currentPage == 0, juce::dontSendNotification);
     wtTab.setToggleState(currentPage == 1, juce::dontSendNotification);
     fxTab.setToggleState(currentPage == 2, juce::dontSendNotification);
-    samplerTab.setToggleState(currentPage == 3, juce::dontSendNotification);
-    granularTab.setToggleState(currentPage == 4, juce::dontSendNotification);
-    presetsTab.setToggleState(currentPage == 5, juce::dontSendNotification);
-
-    // Each workspace selects its engine explicitly; the old Oscillator/Sampler/Granular
-    // combo box is gone, so users never edit the wrong engine by accident.
-    if (auto* parameter = proc.params.getParameter("sampleMode")) {
-        const float mode = currentPage == 3 ? 1.0f : (currentPage == 4 ? 2.0f : 0.0f);
-        parameter->setValueNotifyingHost(parameter->convertTo0to1(mode));
-    }
+    presetsTab.setToggleState(currentPage == 3, juce::dontSendNotification);
 
     auto show = [](std::initializer_list<juce::Component*> list, bool visible) {
         for (auto* component : list) component->setVisible(visible);
@@ -1244,21 +1139,13 @@ void AuroraEditor::setPage(int page) {
          currentPage == 1);
     for (auto& button : stepButtons) button.setVisible(currentPage == 1);
 
-    // Header controls belong to the Presets workspace, not the tiny top strip.
-    show({ &presetSearch,&presetCategoryFilter,&presetBrowserList,&presetCountLabel,
-           &presetSelectedLabel,&presetFavoriteButton,&savePresetButton,&loadPresetButton },
-         currentPage == 5);
-    presets.setVisible(false);
     updateFxEditor();
-    updateSampleEditor();
-    updateGranularEditor();
     updatePresetBrowser();
     if (currentPage == 1) refreshSelectedStepControls();
     startTimerHz(30);
     resized();
     repaint();
 }
-
 
 void AuroraEditor::updateFxEditor() {
     const bool fxPage = currentPage == 2;
@@ -1318,109 +1205,16 @@ void AuroraEditor::updateFxEditor() {
     }
 }
 
-void AuroraEditor::updateSampleEditor() {
-    const bool samplerPage = currentPage == 3;
-    const bool sourcePage = samplerPage || currentPage == 4;
-    // These source controls are shared by both engines.
-    for (juce::Component* component : std::array<juce::Component*, 5>{
-            &sampleLoadButton,&sampleClearButton,&sampleSliceButton,&sampleLoopButton,&sampleReverseButton })
-        component->setVisible(sourcePage);
-    for (juce::Component* component : std::array<juce::Component*, 17>{
-            &sampleResliceButton,&sampleStatusLabel,&sampleTempoButton,&sampleKeyButton,
-            &samplePreservePitchButton,&sampleSyncBarsBox,&sampleTargetKeyBox,&sampleRootNote,
-            &sampleMix,&sampleTranspose,&sampleFineTune,&sampleStart,&sampleEnd,
-            &sampleSliceSensitivity,&sampleSliceMinGap,&sampleMaxSlices,&sampleStretchGrainMs })
-        component->setVisible(samplerPage);
-}
-
-void AuroraEditor::updateGranularEditor() {
-    const bool visible = currentPage == 4;
-    for (juce::Component* component : std::array<juce::Component*, 11>{
-            &granularStatusLabel,&grainTempoButton,&grainKeyButton,&grainTargetKeyBox,
-            &grainSyncDivisionBox,&granularPresetBox,&grainSize,&grainDensity,&grainPosition,
-            &grainSpray,&grainPitch })
-        component->setVisible(visible);
-    for (juce::Component* component : std::array<juce::Component*, 5>{
-            &grainTranspose,&grainFineTune,&grainJitter,&grainWindow,&grainStereo })
-        component->setVisible(visible);
-}
-
 void AuroraEditor::updatePresetBrowser() {
-    const bool visible = currentPage == 5;
-    for (juce::Component* component : std::array<juce::Component*, 9>{
-            &presetSearch,&presetCategoryFilter,&presetBrowserList,&presetCountLabel,
-            &presetSelectedLabel,&presetFavoriteButton,&savePresetButton,&loadPresetButton,&presets })
+    const bool visible = currentPage == 3;
+    for (juce::Component* component : std::array<juce::Component*, 10>{
+            &presetSearch,&presetBrowserList,&presetCountLabel,&presetSelectedLabel,
+            &presetInfoLabel,&presetFavoriteButton,&presetShowFavoritesButton,
+            &savePresetButton,&loadPresetButton,&presets })
         component->setVisible(visible && component != &presets);
-}
-
-void AuroraEditor::updateSampleStatus() {
-    const auto sample = proc.getSampleAsset();
-    if (!sample) {
-        const juce::String empty = "NO AUDIO LOADED  /  IMPORT A WAV OR AIFF FILE";
-        if (lastSampleStatusText != empty) {
-            sampleStatusLabel.setText(empty, juce::dontSendNotification);
-            granularStatusLabel.setText(empty, juce::dontSendNotification);
-            lastSampleStatusText = empty;
-        }
-        return;
-    }
-    const int sliceCount = juce::jmax(0, (int)sample->sliceStarts.size() - 1);
-    static const char* noteNames[12] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
-    const int projectKey = proc.getProjectKeyClass();
-    const juce::String projectKeyText = projectKey >= 0 ? noteNames[projectKey] : "WAITING FOR MIDI";
-    const juce::String info = "FILE: " + sample->fileName + "   /   SOURCE: "
-        + sample->keyName + "   /   MIDI KEY: " + projectKeyText
-        + "   /   SOURCE BPM: " + juce::String(sample->sourceBpm, 1)
-        + "   /   PROJECT BPM: " + juce::String(proc.getHostTempoBpm(), 1)
-        + "   /   " + juce::String(sliceCount) + " SLICES";
-    if (lastSampleStatusText != info) {
-        sampleStatusLabel.setText(info, juce::dontSendNotification);
-        granularStatusLabel.setText(info, juce::dontSendNotification);
-        lastSampleStatusText = info;
-    }
-}
-
-void AuroraEditor::applyGranularPreset(int presetId) {
-    struct GrainPatch {
-        float size, density, position, spray, pitch, transpose, fine, jitter, window, stereo;
-        int division, targetKey;
-        bool tempoSync, keySync;
-    };
-    static const GrainPatch patches[] = {
-        {120,18,.50f,.15f,0,0,0,0,0,.25f,2,0,true,true},
-        {75,26,.38f,.32f,12,0,-4,0.12f,0,.55f,1,0,true,true},
-        {240,9,.58f,.62f,-12,0,0,.35f,2,.82f,4,0,true,true},
-        {95,32,.44f,.24f,7,12,3,.18f,1,.65f,2,0,true,true},
-        {80,20,.50f,.04f,0,0,0,0,0,.20f,3,0,true,true},
-        {280,8,.65f,.55f,19,0,-7,.28f,2,.92f,4,0,true,true},
-        {48,40,.22f,.44f,-5,-12,0,.48f,1,1.0f,0,0,false,false},
-        {180,14,.82f,.95f,-24,-12,12,.55f,0,.72f,5,0,true,false},
-        {340,7,.50f,.8f,0,0,0,.32f,2,.9f,5,0,true,true},
-        {55,48,.5f,.2f,24,0,2,.12f,1,.4f,0,0,false,true},
-        {35,54,.16f,.18f,-12,12,0,.62f,1,.7f,1,0,true,false},
-        {210,12,.65f,.26f,-7,0,-12,.08f,2,.5f,3,0,true,true},
-        {115,24,.75f,.5f,12,7,0,.44f,0,1.0f,2,0,true,true},
-        {30,60,.35f,1.0f,-24,-12,18,.7f,1,1.0f,0,0,false,false},
-        {165,20,.48f,.12f,5,0,0,.05f,3,.45f,2,0,true,true},
-        {320,10,.62f,.68f,7,0,-3,.4f,2,.88f,4,0,true,true},
-        {420,6,.7f,.85f,-5,0,0,.52f,0,1.0f,5,0,true,true}
-    };
-    if (presetId < 1 || presetId > (int)std::size(patches)) return;
-    const auto& p = patches[presetId - 1];
-    auto set = [this](const char* id, float value) {
-        if (auto* parameter = proc.params.getParameter(id))
-            parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
-    };
-    set("grainSize",p.size);set("grainDensity",p.density);set("grainPosition",p.position);
-    set("grainSpray",p.spray);set("grainPitch",p.pitch);set("grainTranspose",p.transpose);
-    set("grainFineTune",p.fine);set("grainJitter",p.jitter);set("grainWindow",p.window);
-    set("grainStereo",p.stereo);set("grainSyncDivision",(float)p.division);
-    set("grainTargetKey",(float)p.targetKey);set("grainTempoSync",p.tempoSync?1.0f:0.0f);
-    set("grainKeySync",p.keySync?1.0f:0.0f);
-    grainTempoButton.setToggleState(p.tempoSync,juce::dontSendNotification);
-    grainKeyButton.setToggleState(p.keySync,juce::dontSendNotification);
-    granularPresetBox.setSelectedId(presetId,juce::dontSendNotification);
-    repaint();
+    for (auto& button : presetCategoryButtons)
+        button.setVisible(visible);
+    presetCategoryFilter.setVisible(false);
 }
 
 void AuroraEditor::parameterChanged(const juce::String& parameterID, float) {
@@ -1638,140 +1432,28 @@ void AuroraEditor::paint(juce::Graphics& g) {
             default: break;
         }
         label(420,636,150,"EQ AMOUNT");label(600,636,150,"LOW");label(780,636,150,"MID");label(960,636,150,"HIGH");
-    } else if (currentPage == 3) {
-        panel(32,128,1136,598,"SAMPLER","PITCH TRACKING  /  TRANSIENT SLICING  /  HOST TEMPO MATCH");
-        label(52,190,180,"SOURCE AUDIO");
-        label(390,190,700,"DETECTED ROOT / SOURCE TEMPO / SLICE MAP");
-        label(52,245,170,"PLAYBACK OPTIONS");
-        label(52,504,180,"ROOT NOTE");
-        label(270,504,190,"LEVEL / TRANSPOSE");
-        label(488,504,190,"FINE TUNE");
-        label(706,504,190,"START POSITION");
-        label(924,504,190,"TRIM / SLICING");
-        label(52,636,180,"END POSITION");
-        label(270,636,190,"SLICE SENSITIVITY");
-        label(488,636,190,"MINIMUM GAP");
-        label(706,636,190,"MAXIMUM SLICES");
-        label(924,636,190,"PITCH-PRESERVE WINDOW");
-
-        juce::ColourGradient sampleScreen(juce::Colour(0xff080d13),52,330,
-                                           juce::Colour(0xff151c27),52,480,false);
-        g.setGradientFill(sampleScreen);
-        g.fillRoundedRectangle(52,330,1096,150,6);
-        g.setColour(juce::Colour(0xff778393).withAlpha(0.55f));
-        g.drawRoundedRectangle(52.5f,330.5f,1095,149,6,0.8f);
-        for(int i=1;i<16;++i){
-            const float gx=52.0f+(float)i*1096.0f/16.0f;
-            g.setColour(juce::Colour(0xff8793a2).withAlpha(0.16f));
-            g.drawLine(gx,340,gx,470,0.55f);
-        }
-        g.setColour(juce::Colour(0xff8793a2).withAlpha(0.28f));
-        g.drawLine(60,405,1140,405,0.7f);
-        if (const auto sample = proc.getSampleAsset(); sample && !sample->thumbnail.empty()) {
-            const int totalSamples = juce::jmax(1,(int)sample->left.size());
-            for (size_t i = 0; i < sample->thumbnail.size(); ++i) {
-                const float x = 60.0f + (float)i * 1078.0f / (float)sample->thumbnail.size();
-                const float amplitude = juce::jlimit(0.0f,1.0f,sample->thumbnail[i]) * 61.0f;
-                g.setColour(violetHi.withAlpha(0.78f));
-                g.drawLine(x,405.0f-amplitude,x,405.0f+amplitude,1.0f);
-            }
-            for (size_t slice = 1; slice + 1 < sample->sliceStarts.size(); ++slice) {
-                const float x = 60.0f + (float)sample->sliceStarts[slice] * 1078.0f / (float)totalSamples;
-                g.setColour(neon.withAlpha(0.88f));
-                g.drawLine(x,337,x,473,1.0f);
-                g.fillEllipse(x-2.5f,334.5f,5.0f,5.0f);
-            }
-            g.setColour(white);g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
-            g.drawText(sample->keyName + "  /  " + juce::String(sample->sourceBpm,1)
-                       + " BPM  /  " + juce::String(sample->sliceStarts.size()-1) + " SLICES",
-                       68,336,500,12,juce::Justification::centredLeft);
-        } else {
-            g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(12.0f,juce::Font::bold)));
-            g.drawFittedText("LOAD A LOOP, VOCAL, DRUM BREAK OR FULL TRACK TO BEGIN",
-                             80,385,1040,36,juce::Justification::centred,1);
-        }
-        g.setColour(juce::Colour(0xffa1a5ae).withAlpha(0.22f));
-        g.drawLine(52,492,1148,492,0.8f);
-        g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(8.2f)));
-        g.drawFittedText("PRESERVE PITCH uses overlapping windows for basic tempo fitting. Disable it for classic varispeed playback. "
-                         "Target key is selectable because the standard JUCE VST3 playhead does not report the DAW key signature.",
-                         740,674,390,42,juce::Justification::centredLeft,3);
-    } else if (currentPage == 4) {
-        panel(32,128,1136,638,"GRANULAR ENGINE","GRAIN CLOUD SYNTHESIS  /  TEMPO-LOCKED WINDOWS  /  DEDICATED PATCHES");
-        label(52,190,180,"SOURCE AUDIO");
-        label(390,190,700,"DETECTED ROOT / SOURCE TEMPO / ACTIVE SLICES");
-        label(52,245,170,"GRAIN PLAYBACK");
-        label(52,504,190,"GRAIN SIZE");
-        label(270,504,190,"DENSITY");
-        label(488,504,190,"SOURCE POSITION");
-        label(706,504,190,"SPRAY");
-        label(924,504,190,"PITCH");
-        label(52,636,190,"TRANSPOSE");
-        label(270,636,190,"FINE TUNE");
-        label(488,636,190,"TIMING JITTER");
-        label(706,636,190,"WINDOW");
-        label(924,636,190,"STEREO SPREAD");
-
-        juce::ColourGradient grainScreen(juce::Colour(0xff080d13),52,330,
-                                          juce::Colour(0xff151c27),52,480,false);
-        g.setGradientFill(grainScreen);
-        g.fillRoundedRectangle(52,330,1096,150,6);
-        g.setColour(juce::Colour(0xff778393).withAlpha(0.55f));
-        g.drawRoundedRectangle(52.5f,330.5f,1095,149,6,0.8f);
-        for(int i=1;i<16;++i){
-            const float gx=52.0f+(float)i*1096.0f/16.0f;
-            g.setColour(juce::Colour(0xff8793a2).withAlpha(0.16f));
-            g.drawLine(gx,340,gx,470,0.55f);
-        }
-        g.setColour(juce::Colour(0xff8793a2).withAlpha(0.28f));
-        g.drawLine(60,405,1140,405,0.7f);
-        if (const auto sample = proc.getSampleAsset(); sample && !sample->thumbnail.empty()) {
-            const int totalSamples = juce::jmax(1,(int)sample->left.size());
-            for (size_t i = 0; i < sample->thumbnail.size(); ++i) {
-                const float x = 60.0f + (float)i * 1078.0f / (float)sample->thumbnail.size();
-                const float amplitude = juce::jlimit(0.0f,1.0f,sample->thumbnail[i]) * 61.0f;
-                g.setColour(violetHi.withAlpha(0.65f));
-                g.drawLine(x,405.0f-amplitude,x,405.0f+amplitude,1.0f);
-            }
-            g.setColour(neon.withAlpha(0.85f));
-            const float position = (float)grainPosition.getValue();
-            const float cursorX = 60.0f + position * 1078.0f;
-            g.drawLine(cursorX,337,cursorX,473,1.5f);
-            g.fillEllipse(cursorX-3.0f,334.0f,6.0f,6.0f);
-            g.setColour(white);g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
-            g.drawText(sample->keyName + "  /  " + juce::String(sample->sourceBpm,1)
-                       + " BPM  /  GRAIN SOURCE POSITION " + juce::String(position*100.0f,1) + "%",
-                       68,336,650,12,juce::Justification::centredLeft);
-        } else {
-            g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(12.0f,juce::Font::bold)));
-            g.drawFittedText("LOAD AUDIO IN SAMPLER OR HERE TO CREATE A GRAIN CLOUD",
-                             80,385,1040,36,juce::Justification::centred,1);
-        }
-        g.setColour(juce::Colour(0xffa1a5ae).withAlpha(0.22f));
-        g.drawLine(52,492,1148,492,0.8f);
-        g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(8.2f)));
-        g.drawFittedText("Use the Preset menu for dedicated granular starting points. Click or drag the waveform to move the grain source position.",
-                         720,675,420,36,juce::Justification::centredLeft,2);
     } else {
-        panel(32,128,760,598,"FACTORY PRESET LIBRARY","500 PATCHES  /  FILTER BY FAMILY  /  SEARCH / FAVOURITES");
-        panel(808,128,360,598,"PATCH DETAILS","SELECT A SOUND TO LOAD IT");
-        g.setColour(violetHi);g.setFont(juce::Font(juce::FontOptions(14.0f,juce::Font::bold)));
-        g.drawText("2RICH FACTORY BANK",836,220,300,26,juce::Justification::centredLeft);
-        g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(9.0f)));
-        g.drawFittedText("Browse by instrument family, search all names, or type fav: in the search field to filter favourites.",
-                         836,254,300,58,juce::Justification::topLeft,3);
-        g.setColour(juce::Colour(0xff353044));
-        g.fillRoundedRectangle(836,330,300,1,0.5f);
-        g.setColour(white);g.setFont(juce::Font(juce::FontOptions(9.0f,juce::Font::bold)));
-        g.drawText("CURRENT PATCH",836,350,300,16,juce::Justification::centredLeft);
+        panel(32,128,200,598,"DIRECTORY","FACTORY BANK");
+        panel(246,128,570,598,"PRESETS","SORTED A–Z  /  CLICK TO LOAD");
+        panel(828,128,340,598,"PRESET INFO","SELECTED SOUND");
+        g.setColour(violetHi);g.setFont(juce::Font(juce::FontOptions(9.0f,juce::Font::bold)));
+        g.drawText("LOCAL",50,188,164,16,juce::Justification::centredLeft);
         g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(8.0f)));
-        g.drawFittedText("Favorites are stored with the DAW project. SAVE exports the current complete patch as a .2richpreset file.",
-                         836,470,300,70,juce::Justification::topLeft,4);
+        g.drawText("500 FACTORY PATCHES",50,203,164,12,juce::Justification::centredLeft);
+        g.setColour(juce::Colour(0xff353044));
+        g.fillRoundedRectangle(50,216,164,1,0.5f);
+        g.setColour(violetHi);g.setFont(juce::Font(juce::FontOptions(9.0f,juce::Font::bold)));
+        g.drawText("SEARCH",264,178,540,12,juce::Justification::centredLeft);
+        g.setColour(violetHi);g.setFont(juce::Font(juce::FontOptions(9.0f,juce::Font::bold)));
+        g.drawText("PATCH DETAILS",850,188,286,16,juce::Justification::centredLeft);
+        g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(8.0f)));
+        g.drawFittedText("FAV marks a factory patch. SAVE writes the current complete synth state to a .2richpreset file; LOAD restores one.",
+                         850,570,286,54,juce::Justification::topLeft,4);
     }
     g.setColour(juce::Colour(0xff9398a3).withAlpha(0.28f));g.drawLine(32,778,1168,778,0.8f);
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(7.8f,juce::Font::bold)));
     g.drawText("2RICH  /  TIMAUDIO",36,784,260,12,juce::Justification::centredLeft);
-    g.drawText("VOICE  /  MOTION  /  FX  /  SAMPLER  /  GRANULAR  /  PRESETS",760,784,408,12,juce::Justification::centredRight);
+    g.drawText("VOICE  /  MOTION  /  FX  /  PRESETS",760,784,408,12,juce::Justification::centredRight);
 }
 
 void AuroraEditor::resized() {
@@ -1780,8 +1462,7 @@ void AuroraEditor::resized() {
     auto place=[&](juce::Component& c,juce::Rectangle<int> b){c.setBounds(scaledBounds(b,scale,ox,oy));};
 
     place(heading,{52,26,176,40});
-    place(synthTab,{244,35,74,32});place(wtTab,{324,35,94,32});place(fxTab,{424,35,62,32});
-    place(samplerTab,{492,35,94,32});place(granularTab,{592,35,104,32});place(presetsTab,{702,35,92,32});
+    place(synthTab,{244,35,74,32});place(wtTab,{326,35,94,32});place(fxTab,{428,35,62,32});place(presetsTab,{500,35,104,32});
     modTab.setVisible(false);seqTab.setVisible(false);
 
     // VOICE: oscillator and wavetable top row.
@@ -1860,50 +1541,18 @@ void AuroraEditor::resized() {
     place(fxEq,{420,660,150,28});place(fxLow,{600,660,150,28});
     place(fxMid,{780,660,150,28});place(fxHigh,{960,660,150,28});
 
-    // Dedicated Sampler workspace.
-    place(sampleLoadButton,{52,204,132,30});
-    place(sampleClearButton,{194,204,88,30});
-    place(sampleResliceButton,{292,204,100,30});
-    place(sampleStatusLabel,{404,204,744,30});
-    juce::ToggleButton* sampleOptions[6]={&sampleSliceButton,&sampleTempoButton,&sampleKeyButton,
-        &samplePreservePitchButton,&sampleLoopButton,&sampleReverseButton};
-    for(int i=0;i<6;++i)place(*sampleOptions[i],{52+i*183,252,174,30});
-    place(sampleSyncBarsBox,{52,292,220,28});
-    place(sampleTargetKeyBox,{286,292,220,28});
-    const int sampleX[5]={52,270,488,706,924};
-    juce::Slider* samplerRow1[5]={&sampleRootNote,&sampleMix,&sampleTranspose,&sampleFineTune,&sampleStart};
-    juce::Slider* samplerRow2[5]={&sampleEnd,&sampleSliceSensitivity,&sampleSliceMinGap,&sampleMaxSlices,&sampleStretchGrainMs};
-    for(int i=0;i<5;++i){
-        place(*samplerRow1[i],{sampleX[i],520,190,42});
-        place(*samplerRow2[i],{sampleX[i],650,190,42});
-    }
-
-    // Dedicated Granular workspace with its own preset bank and beat/key controls.
-    place(sampleLoadButton,{52,204,132,30});
-    place(sampleClearButton,{194,204,88,30});
-    place(granularStatusLabel,{300,204,848,30});
-    juce::ToggleButton* grainOptions[5]={&sampleSliceButton,&grainTempoButton,&grainKeyButton,
-        &sampleLoopButton,&sampleReverseButton};
-    for(int i=0;i<5;++i)place(*grainOptions[i],{52+i*218,252,208,30});
-    place(granularPresetBox,{52,292,260,28});
-    place(grainTargetKeyBox,{326,292,220,28});
-    place(grainSyncDivisionBox,{560,292,220,28});
-    const int grainX[5]={52,270,488,706,924};
-    juce::Slider* grainRow1[5]={&grainSize,&grainDensity,&grainPosition,&grainSpray,&grainPitch};
-    juce::Slider* grainRow2[5]={&grainTranspose,&grainFineTune,&grainJitter,&grainWindow,&grainStereo};
-    for(int i=0;i<5;++i){
-        place(*grainRow1[i],{grainX[i],520,190,112});
-        place(*grainRow2[i],{grainX[i],645,190,112});
-    }
-
     // Full Preset Browser: filters and a large list on the left, patch actions on the right.
-    place(presetSearch,{52,194,360,30});
-    place(presetCategoryFilter,{426,194,270,30});
-    place(presetCountLabel,{710,194,440,26});
-    place(presetBrowserList,{52,240,710,466});
-    place(presetSelectedLabel,{836,386,300,46});
-    place(presetFavoriteButton,{836,430,92,30});
-    place(savePresetButton,{938,430,92,30});
-    place(loadPresetButton,{1040,430,92,30});
+    // u-he Diva-inspired directory / patch list / inspector.
+    place(presetSearch,{264,192,548,30});
+    place(presetCountLabel,{264,224,548,18});
+    place(presetBrowserList,{264,246,548,460});
+    place(presetSelectedLabel,{850,224,286,48});
+    place(presetInfoLabel,{850,286,286,258});
+    place(presetFavoriteButton,{850,640,88,30});
+    place(savePresetButton,{946,640,88,30});
+    place(loadPresetButton,{1042,640,94,30});
+    for (size_t i = 0; i < presetCategoryButtons.size(); ++i)
+        place(presetCategoryButtons[i],{50,222+(int)i*34,164,30});
+    place(presetShowFavoritesButton,{50,638,164,30});
 }
 

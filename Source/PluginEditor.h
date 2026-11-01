@@ -29,22 +29,6 @@ private:
     juce::TextButton importWavetableButton{"IMPORT WAV"}, clearWavetableButton{"CLEAR"};
     juce::Label wavetableStatusLabel;
     std::unique_ptr<juce::FileChooser> wavetableChooser;
-    juce::TextButton samplerTab{"SAMPLER"}, granularTab{"GRANULAR"}, presetsTab{"PRESETS"};
-    juce::TextButton sampleLoadButton{"LOAD AUDIO"}, sampleClearButton{"CLEAR"}, sampleResliceButton{"RE-SLICE"};
-    juce::ToggleButton sampleSliceButton{"AUTO SLICE MAP"}, sampleTempoButton{"SYNC TO DAW"},
-        sampleKeyButton{"KEY MATCH"}, samplePreservePitchButton{"PRESERVE PITCH"},
-        sampleLoopButton{"LOOP"}, sampleReverseButton{"REVERSE"},
-        grainTempoButton{"SYNC GRAINS"}, grainKeyButton{"KEY MATCH"};
-    juce::ComboBox sampleSyncBarsBox, sampleTargetKeyBox, grainTargetKeyBox,
-        grainSyncDivisionBox, granularPresetBox;
-    juce::Slider sampleRootNote, sampleMix, sampleTranspose, sampleFineTune,
-        sampleStart, sampleEnd, sampleSliceSensitivity, sampleSliceMinGap,
-        sampleMaxSlices, sampleStretchGrainMs;
-    juce::Slider grainSize, grainDensity, grainPosition, grainSpray, grainPitch,
-        grainTranspose, grainFineTune, grainJitter, grainWindow, grainStereo;
-    juce::Label sampleStatusLabel, granularStatusLabel;
-    std::unique_ptr<juce::FileChooser> sampleChooser;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aSampleSlice;
     juce::Slider fxEq, fxLow, fxMid, fxHigh, fxDist, fxChorus, fxFlange, fxDelay, fxReverb;
     juce::Slider fxCompThreshold, fxCompRatio, fxCompAttack, fxCompRelease, fxCompMakeup, fxCompMix;
     juce::Slider fxPhaserRate, fxPingTime, fxPingFeedback, fxReverbRoom, fxReverbDamping, fxLimiterCeiling;
@@ -70,8 +54,11 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aFxCompEnabled;
     juce::TextButton synthTab{"VOICE"}, wtTab{"MOTION"}, fxTab{"FX"}, modTab{"MOD"}, seqTab{"SEQ"};
     juce::ListBox presetBrowserList;
-    juce::ComboBox presetCategoryFilter;
-    juce::Label presetCountLabel, presetSelectedLabel;
+    juce::ComboBox presetCategoryFilter; // Hidden category index used by the directory buttons.
+    std::array<juce::TextButton, 12> presetCategoryButtons;
+    juce::TextButton presetShowFavoritesButton{"FAVOURITES"};
+    juce::Label presetCountLabel, presetSelectedLabel, presetInfoLabel;
+    bool showFavoritesOnly = false;
     std::vector<int> filteredPresetIds;
     juce::ComboBox seqModeBox, arpStyleBox, seqRateBox, seqDirectionBox, seqLengthBox;
     juce::ComboBox seqPageBox, seqPatternSlotBox;
@@ -89,12 +76,10 @@ private:
     std::array<juce::Slider, 4> modAmounts;
     int currentPage = 0;
     bool drawingWavetable = false;
-    bool sampleScrubbing = false;
     int drawingFrame = 0;
     int previousDrawIndex = 0;
     float previousDrawValue = 0.0f;
     float lastOutputPeak = 0.0f;
-    juce::String lastSampleStatusText;
 
     using Attach = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ChoiceAttach = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
@@ -107,14 +92,11 @@ private:
     void addKnob(juce::Slider&, const juce::String&, const juce::String&);
     void applyPreset(int presetId);
     void rebuildPresetList();
+    void updatePresetInformation();
     void updateFavoriteButton();
     void setPage(int page);
     void updateFxEditor();
-    void updateSampleEditor();
-    void updateGranularEditor();
     void updatePresetBrowser();
-    void updateSampleStatus();
-    void applyGranularPreset(int presetId);
     void refreshSelectedStepControls();
     void writeSelectedStepParameter(const juce::String& baseId, float value);
     void editWavetableFromMouse(const juce::MouseEvent&);

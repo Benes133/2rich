@@ -40,69 +40,7 @@ public:
         filterStage = 1;
         voiceFilter.reset();
 
-        sampleAsset = processor != nullptr ? processor->getSampleAsset() : nullptr;
-        samplePlaying = false;
-        sampleStretchDone = false;
-        samplePosition = sampleStretchPosition = 0.0;
-        grainCountdown = sampleStretchCountdown = 0;
-        sampleReverse = false;
-        sampleLoop = false;
-        for (auto& grain : grains) grain = {};
-        if (sampleAsset && !sampleAsset->left.empty() && srForNote() > 0.0) {
-            sampleStart = 0;
-            sampleEnd = (int)sampleAsset->left.size();
-            const bool sliceMode = processor->params.getRawParameterValue("sampleSliceMode")->load() > 0.5f;
-            const int sliceCount = (int)sampleAsset->sliceStarts.size() - 1;
-            const bool mappedSlice = sliceMode && sliceCount > 1;
-            if (mappedSlice) {
-                const int sliceIndex = juce::jlimit(0, sliceCount - 1, note - 36);
-                sampleStart = sampleAsset->sliceStarts[(size_t)sliceIndex];
-                sampleEnd = sampleAsset->sliceStarts[(size_t)sliceIndex + 1];
-            }
-
-            const float trimStart = processor->params.getRawParameterValue("sampleStart")->load();
-            const float trimEnd = processor->params.getRawParameterValue("sampleEnd")->load();
-            const int untrimmedStart = sampleStart;
-            const int untrimmedLength = juce::jmax(1, sampleEnd - sampleStart);
-            sampleStart = untrimmedStart + juce::roundToInt((float)untrimmedLength * trimStart);
-            sampleEnd = untrimmedStart + juce::roundToInt((float)untrimmedLength * trimEnd);
-            if (sampleEnd <= sampleStart + 1) sampleEnd = juce::jmin((int)sampleAsset->left.size(), sampleStart + 2);
-
-            const int sampleEngine = (int)processor->params.getRawParameterValue("sampleMode")->load();
-            sampleReverse = processor->params.getRawParameterValue("sampleReverse")->load() > 0.5f;
-            sampleLoop = processor->params.getRawParameterValue("sampleLoop")->load() > 0.5f;
-            const bool keySync = processor->params.getRawParameterValue(
-                sampleEngine == 2 ? "grainKeySync" : "sampleKeySync")->load() > 0.5f;
-            const int targetKey = (int)processor->params.getRawParameterValue(
-                sampleEngine == 2 ? "grainTargetKey" : "sampleTargetKey")->load();
-
-            int desiredKey = targetKey > 0 ? targetKey - 1 : processor->getProjectKeyClass();
-            int keyShift = 0;
-            if (keySync && desiredKey >= 0) {
-                keyShift = desiredKey - (sampleAsset->rootMidiNote % 12);
-                if (keyShift > 6) keyShift -= 12;
-                if (keyShift < -6) keyShift += 12;
-            }
-
-            const float transpose = processor->params.getRawParameterValue(
-                sampleEngine == 2 ? "grainTranspose" : "sampleTranspose")->load();
-            const float fineTune = processor->params.getRawParameterValue(
-                sampleEngine == 2 ? "grainFineTune" : "sampleFineTune")->load();
-            // In slice mapping, MIDI selects a region. Key sync/transpose still
-            // applies, while the slice index itself does not create extra pitch steps.
-            const double keyboardOffset = mappedSlice ? 0.0 : (double)note
-                - (double)processor->params.getRawParameterValue("sampleRootNote")->load();
-            const double semitoneOffset = keyboardOffset + (double)keyShift
-                + (double)transpose + (double)fineTune / 100.0;
-            sampleIncrement = sampleAsset->sampleRate / srForNote()
-                * std::pow(2.0, semitoneOffset / 12.0);
-            const double firstPosition = sampleReverse ? (double)(sampleEnd - 1) : (double)sampleStart;
-            samplePosition = sampleStretchPosition = firstPosition;
-            samplePlaying = sampleEnd > sampleStart + 1;
-        }
     }
-
-    double srForNote() const noexcept { return getSampleRate(); }
 
     void stopNote(float, bool allowTailOff) override {
         if (allowTailOff) {
@@ -112,9 +50,6 @@ public:
             clearCurrentNote();
             env = 0.0f;
             filterEnv = 0.0f;
-            samplePlaying = false;
-            sampleStretchDone = true;
-            for (auto& grain : grains) grain.active = false;
             voiceFilter.reset();
         }
     }
@@ -145,60 +80,6 @@ public:
         const float syncRatio = value("syncRatio");
         const int filterType = juce::jlimit(0, 2, (int)value("filterType"));
         const auto importedTable = processor->getImportedWavetable();
-        const int sampleMode = juce::jlimit(0, 2, (int)value("sampleMode"));
-        const float sampleGain = juce::jlimit(0.0f, 1.0f, value("sampleMix"));
-        const float grainSizeMs = value("grainSize");
-        const float grainDensity = juce::jmax(1.0f, value("grainDensity"));
-        const float grainPosition = value("grainPosition");
-        const float grainSpray = value("grainSpray");
-        const float grainPitch = value("grainPitch");
-        const float grainJitter = value("grainJitter");
-        const float grainWindow = value("grainWindow");
-        const float grainStereo = value("grainStereo");
-        const bool sampleTempoSync = value("sampleTempoSync") > 0.5f;
-        const bool samplePreservePitch = value("samplePreservePitch") > 0.5f;
-        const bool grainTempoSync = value("grainTempoSync") > 0.5f;
-        const bool sampleReverseNow = value("sampleReverse") > 0.5f;
-        const bool sampleLoopNow = value("sampleLoop") > 0.5f;
-        const double hostBpm = processor->getHostTempoBpm();
-        const double beatsPerBar = processor->getHostBeatsPerBar();
-        double sampleTempoRatio = 1.0;
-        if (sampleTempoSync && sampleAsset && sampleAsset->sampleRate > 0.0) {
-            const int syncChoice = juce::jlimit(0, 9, (int)value("sampleSyncBars"));
-            const double duration = (double)juce::jmax(1, sampleEnd - sampleStart) / sampleAsset->sampleRate;
-            const double sourceBeats = duration * sampleAsset->sourceBpm / 60.0;
-            static const double autoBeatChoices[9] = { 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0 };
-            static const double fractionalChoices[4] = { 0.25, 0.5, 1.0, 2.0 };
-            double targetBeats = sourceBeats;
-            if (syncChoice >= 1 && syncChoice <= 5)
-                targetBeats = beatsPerBar * std::pow(2.0, (double)(syncChoice - 1));
-            else if (syncChoice > 5)
-                targetBeats = fractionalChoices[syncChoice - 6];
-            else {
-                double bestDistance = 1.0e30;
-                for (const double candidate : autoBeatChoices) {
-                    const double distance = std::abs(std::log2(juce::jmax(0.01, sourceBeats) / candidate));
-                    if (distance < bestDistance) { bestDistance = distance; targetBeats = candidate; }
-                }
-            }
-            const double targetDuration = targetBeats * 60.0 / juce::jlimit(20.0, 400.0, hostBpm);
-            if (duration > 0.01 && targetDuration > 0.01)
-                sampleTempoRatio = juce::jlimit(0.25, 4.0, duration / targetDuration);
-        }
-        double liveSampleIncrement = sampleIncrement;
-        if (sampleMode == 1 && !samplePreservePitch)
-            liveSampleIncrement *= sampleTempoSync ? sampleTempoRatio : 1.0;
-        const double direction = sampleReverseNow ? -1.0 : 1.0;
-        const int syncedGrainDivision = juce::jlimit(0, 5, (int)value("grainSyncDivision"));
-        static const double fractionalGrainBeats[4] = { 0.25, 0.5, 1.0, 2.0 };
-        const double grainBeats = syncedGrainDivision < 4
-            ? fractionalGrainBeats[syncedGrainDivision]
-            : beatsPerBar * (double)(syncedGrainDivision - 3);
-        const int grainLength = grainTempoSync
-            ? juce::jlimit(16, (int)(sr * 8.0),
-                (int)(sr * 60.0 / juce::jlimit(20.0,400.0,hostBpm) * grainBeats))
-            : juce::jlimit(64, (int)(sr * 0.5), (int)(sr * grainSizeMs * 0.001f));
-
         if (filterType != activeFilterType) {
             const auto type = filterType == 1
                 ? juce::dsp::StateVariableTPTFilterType::bandpass
@@ -398,172 +279,6 @@ public:
                 processor->fxModWeightBlock[(size_t)blockIndex] += weight;
             }
 
-            // SAMPLER: optionally use overlapping grains to match the host tempo
-            // without changing pitch. Disabling Preserve Pitch selects classic varispeed.
-            if (sampleMode == 1 && sampleAsset && !sampleAsset->left.empty()) {
-                auto readInterpolated = [&](const std::vector<float>& channel, double position) {
-                    if (channel.empty()) return 0.0f;
-                    const int indexA = juce::jlimit(0, (int)channel.size() - 1, (int)position);
-                    const int indexB = juce::jmin((int)channel.size() - 1, indexA + 1);
-                    return juce::jmap((float)(position - std::floor(position)),
-                                      channel[(size_t)indexA], channel[(size_t)indexB]);
-                };
-
-                if (sampleTempoSync && samplePreservePitch) {
-                    const int stretchLength = juce::jlimit(128, (int)(sr * 0.35),
-                        (int)(sr * value("sampleStretchGrainMs") * 0.001f));
-                    const int stretchInterval = juce::jmax(32, stretchLength / 2);
-                    if (samplePlaying && sampleStretchCountdown <= 0 && !sampleStretchDone) {
-                        Grain* target = nullptr;
-                        for (auto& grain : grains) if (!grain.active) { target = &grain; break; }
-                        if (target == nullptr) {
-                            target = &*std::min_element(grains.begin(), grains.end(),
-                                [](const Grain& a, const Grain& b) { return a.age > b.age; });
-                        }
-                        target->position = sampleStretchPosition;
-                        target->increment = sampleIncrement * direction;
-                        target->age = 0;
-                        target->length = stretchLength;
-                        target->active = true;
-                        const double sourceAdvance = (double)stretchInterval
-                            * sampleAsset->sampleRate / sr * sampleTempoRatio;
-                        sampleStretchPosition += direction * sourceAdvance;
-                        if (sampleReverseNow ? sampleStretchPosition < (double)sampleStart
-                                             : sampleStretchPosition >= (double)sampleEnd) {
-                            if (sampleLoopNow) {
-                                const double length = (double)juce::jmax(1, sampleEnd - sampleStart);
-                                sampleStretchPosition = sampleReverseNow
-                                    ? (double)sampleEnd - 1.0 - std::fmod((double)sampleStart - sampleStretchPosition, length)
-                                    : (double)sampleStart + std::fmod(sampleStretchPosition - (double)sampleStart, length);
-                            } else {
-                                sampleStretchDone = true;
-                            }
-                        }
-                        sampleStretchCountdown = stretchInterval;
-                    }
-                    --sampleStretchCountdown;
-                    float sumL = 0.0f, sumR = 0.0f;
-                    int active = 0;
-                    for (auto& grain : grains) {
-                        if (!grain.active) continue;
-                        if (grain.age >= grain.length
-                            || (sampleReverseNow ? grain.position < (double)sampleStart
-                                                 : grain.position >= (double)sampleEnd)) {
-                            grain.active = false;
-                            continue;
-                        }
-                        const float phase = (float)grain.age / (float)juce::jmax(1, grain.length - 1);
-                        const float window = 0.5f - 0.5f * std::cos(juce::MathConstants<float>::twoPi * phase);
-                        sumL += readInterpolated(sampleAsset->left, grain.position) * window;
-                        sumR += readInterpolated(sampleAsset->right, grain.position) * window;
-                        grain.position += grain.increment;
-                        ++grain.age;
-                        ++active;
-                    }
-                    const float normaliser = 1.0f / juce::jmax(1.0f, (float)active * 0.72f);
-                    left = sumL * normaliser * sampleGain * vel * env;
-                    right = sumR * normaliser * sampleGain * vel * env;
-                    if (sampleStretchDone && active == 0) samplePlaying = false;
-                } else {
-                    float sampleL = 0.0f, sampleR = 0.0f;
-                    if (samplePlaying) {
-                        const bool outside = sampleReverseNow
-                            ? samplePosition < (double)sampleStart
-                            : samplePosition >= (double)sampleEnd;
-                        if (outside) {
-                            if (sampleLoopNow) {
-                                samplePosition = sampleReverseNow ? (double)(sampleEnd - 1)
-                                                                  : (double)sampleStart;
-                            } else {
-                                samplePlaying = false;
-                            }
-                        }
-                        if (samplePlaying) {
-                            sampleL = readInterpolated(sampleAsset->left, samplePosition);
-                            sampleR = readInterpolated(sampleAsset->right, samplePosition);
-                            samplePosition += direction * liveSampleIncrement;
-                        }
-                    }
-                    left = sampleL * sampleGain * vel * env;
-                    right = sampleR * sampleGain * vel * env;
-                }
-            }
-            // GRANULAR: grain duration can be locked to the host's beat grid.
-            else if (sampleMode == 2 && sampleAsset && !sampleAsset->left.empty()) {
-                auto readInterpolated = [&](const std::vector<float>& channel, double position) {
-                    if (channel.empty()) return 0.0f;
-                    const int indexA = juce::jlimit(0, (int)channel.size() - 1, (int)position);
-                    const int indexB = juce::jmin((int)channel.size() - 1, indexA + 1);
-                    return juce::jmap((float)(position - std::floor(position)),
-                                      channel[(size_t)indexA], channel[(size_t)indexB]);
-                };
-                const int regionLength = juce::jmax(1, sampleEnd - sampleStart);
-                const int spawnInterval = juce::jmax(1, (int)(sr / grainDensity));
-                if (grainCountdown <= 0) {
-                    Grain* target = nullptr;
-                    for (auto& grain : grains) if (!grain.active) { target = &grain; break; }
-                    if (target == nullptr) target = &grains[0];
-
-                    grainSeed ^= grainSeed << 13;
-                    grainSeed ^= grainSeed >> 17;
-                    grainSeed ^= grainSeed << 5;
-                    const float random = (float)(grainSeed & 0x00ffffffu) / 8388607.5f - 1.0f;
-                    const double jitter = (double)random * (double)grainSpray
-                        * (double)regionLength * 0.5;
-                    const double centre = (double)sampleStart
-                        + (double)grainPosition * (double)regionLength;
-                    const double position = juce::jlimit((double)sampleStart,
-                        (double)(sampleEnd - 1), centre + jitter);
-                    target->position = position;
-                    target->increment = sampleIncrement
-                        * std::pow(2.0, (double)grainPitch / 12.0) * direction;
-                    target->age = 0;
-                    target->length = grainLength;
-                    target->active = true;
-                    grainCountdown = juce::jmax(1, (int)std::round(
-                        (double)spawnInterval * (1.0 + (double)random * (double)grainJitter * 0.65)));
-                }
-                --grainCountdown;
-
-                float grainL = 0.0f, grainR = 0.0f;
-                int activeGrains = 0;
-                float leftPan = 0.0f, rightPan = 0.0f;
-                for (size_t grainIndex = 0; grainIndex < grains.size(); ++grainIndex) {
-                    auto& grain = grains[grainIndex];
-                    if (!grain.active) continue;
-                    const bool outside = sampleReverseNow ? grain.position < (double)sampleStart
-                                                           : grain.position >= (double)sampleEnd;
-                    if (grain.age >= grain.length || outside) {
-                        if (sampleLoopNow) {
-                            const double length = (double)regionLength;
-                            grain.position = sampleReverseNow
-                                ? (double)sampleEnd - 1.0 - std::fmod((double)sampleStart - grain.position, length)
-                                : (double)sampleStart + std::fmod(grain.position - (double)sampleStart, length);
-                        } else {
-                            grain.active = false;
-                            continue;
-                        }
-                    }
-                    const float phase = (float)grain.age / (float)juce::jmax(1, grain.length - 1);
-                    const int windowType = juce::jlimit(0, 3, (int)grainWindow);
-                    float window = 1.0f;
-                    if (windowType == 0) window = 0.5f - 0.5f * std::cos(juce::MathConstants<float>::twoPi * phase);
-                    else if (windowType == 1) window = 1.0f - std::abs(2.0f * phase - 1.0f);
-                    else if (windowType == 2) window = 0.54f - 0.46f * std::cos(juce::MathConstants<float>::twoPi * phase);
-                    const float l = readInterpolated(sampleAsset->left, grain.position) * window;
-                    const float r = readInterpolated(sampleAsset->right, grain.position) * window;
-                    const float pan = (float)((int)grainIndex - 5) / 5.0f * grainStereo;
-                    grainL += l * std::sqrt(0.5f * (1.0f - pan));
-                    grainR += r * std::sqrt(0.5f * (1.0f + pan));
-                    grain.position += grain.increment;
-                    ++grain.age;
-                    ++activeGrains;
-                }
-                const float normaliser = 1.0f / std::sqrt((float)juce::jmax(1, activeGrains));
-                left = grainL * normaliser * sampleGain * vel * env * 1.45f;
-                right = grainR * normaliser * sampleGain * vel * env * 1.45f;
-            }
-
             // Recalculate filter coefficients every four samples to reduce per-voice DSP cost.
             if ((i & 3) == 0) {
                 voiceFilter.setCutoffFrequency(cutoffHz);
@@ -637,18 +352,6 @@ private:
         return juce::jmap(position, first, second);
     }
 
-    struct Grain {
-        double position = 0.0, increment = 1.0;
-        int age = 0, length = 0;
-        bool active = false;
-    };
-    AuroraProcessor* processor = nullptr;
-    std::shared_ptr<const AuroraProcessor::SampleAsset> sampleAsset;
-    std::array<Grain, 12> grains{};
-    double samplePosition = 0.0, sampleIncrement = 1.0, sampleStretchPosition = 0.0;
-    int sampleStart = 0, sampleEnd = 0, grainCountdown = 0, sampleStretchCountdown = 0;
-    uint32_t grainSeed = 0x13579bdu;
-    bool samplePlaying = false, sampleReverse = false, sampleLoop = false, sampleStretchDone = false;
     juce::dsp::StateVariableTPTFilter<float> voiceFilter;
     int activeFilterType = 0;
     double hz = 440.0;
@@ -840,42 +543,6 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     f("fxChorusDepth", "Chorus Depth", 0.0f, 1.0f, 0.5f);
     f("fxChorusWidth", "Chorus Width", 0.0f, 1.0f, 0.5f);
 
-    // SAMPLER: all IDs are appended to preserve existing project compatibility.
-    choice("sampleMode", "Sample Engine", { "Oscillator", "Sampler", "Granular" }, 0);
-    layout.add(std::make_unique<juce::AudioParameterBool>("sampleSliceMode", "Auto Slice Mapping", true));
-    layout.add(std::make_unique<juce::AudioParameterBool>("sampleTempoSync", "Sampler Tempo Sync", true));
-    layout.add(std::make_unique<juce::AudioParameterBool>("sampleKeySync", "Sampler Key Sync", true));
-    layout.add(std::make_unique<juce::AudioParameterBool>("samplePreservePitch", "Sampler Preserve Pitch", true));
-    layout.add(std::make_unique<juce::AudioParameterBool>("sampleLoop", "Sampler Loop", false));
-    layout.add(std::make_unique<juce::AudioParameterBool>("sampleReverse", "Sampler Reverse", false));
-    choice("sampleSyncBars", "Sampler Sync Length", { "Auto", "1 Bar", "2 Bars", "4 Bars", "8 Bars", "16 Bars", "1/16", "1/8", "1/4", "1/2" }, 0);
-    choice("sampleTargetKey", "Sampler Target Key", { "Auto", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0);
-    f("sampleRootNote", "Sample Root MIDI Note", 0.0f, 127.0f, 60.0f);
-    f("sampleMix", "Sample Level", 0.0f, 1.0f, 0.85f);
-    f("sampleTranspose", "Sampler Transpose", -48.0f, 48.0f, 0.0f);
-    f("sampleFineTune", "Sampler Fine Tune", -100.0f, 100.0f, 0.0f);
-    f("sampleStart", "Sampler Start", 0.0f, 1.0f, 0.0f);
-    f("sampleEnd", "Sampler End", 0.0f, 1.0f, 1.0f);
-    f("sampleSliceSensitivity", "Slice Sensitivity", 0.01f, 0.8f, 0.12f);
-    f("sampleSliceMinGap", "Slice Minimum Gap", 20.0f, 500.0f, 80.0f);
-    f("sampleMaxSlices", "Maximum Slices", 1.0f, 32.0f, 32.0f);
-    f("sampleStretchGrainMs", "Sampler Stretch Window", 20.0f, 200.0f, 80.0f, 0.65f);
-    // GRANULAR: dedicated tempo/key controls and independent performance settings.
-    layout.add(std::make_unique<juce::AudioParameterBool>("grainTempoSync", "Granular Tempo Sync", true));
-    layout.add(std::make_unique<juce::AudioParameterBool>("grainKeySync", "Granular Key Sync", true));
-    choice("grainTargetKey", "Granular Target Key", { "Auto", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0);
-    choice("grainSyncDivision", "Grain Sync Division", { "1/16", "1/8", "1/4", "1/2", "1 Bar", "2 Bars" }, 2);
-    f("grainSize", "Grain Size", 20.0f, 500.0f, 120.0f, 0.5f);
-    f("grainDensity", "Grain Density", 2.0f, 60.0f, 18.0f, 0.5f);
-    f("grainPosition", "Grain Position", 0.0f, 1.0f, 0.5f);
-    f("grainSpray", "Grain Spray", 0.0f, 1.0f, 0.15f);
-    f("grainPitch", "Grain Pitch", -24.0f, 24.0f, 0.0f);
-    f("grainTranspose", "Granular Transpose", -48.0f, 48.0f, 0.0f);
-    f("grainFineTune", "Granular Fine Tune", -100.0f, 100.0f, 0.0f);
-    f("grainJitter", "Grain Timing Jitter", 0.0f, 1.0f, 0.0f);
-    f("grainWindow", "Grain Window", 0.0f, 3.0f, 0.0f);
-    f("grainStereo", "Grain Stereo Spread", 0.0f, 1.0f, 0.35f);
-
     return layout;
 }
 
@@ -943,53 +610,6 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     if (samples <= 0 || buffer.getNumChannels() != 2
         || !std::isfinite(sampleRate) || sampleRate < 1000.0)
         return;
-
-    // JUCE exposes host tempo and meter here. Key signature is not part of
-    // PositionInfo, so target key remains an explicit musical setting in the UI.
-    if (auto* playHead = getPlayHead()) {
-        if (const auto position = playHead->getPosition()) {
-            if (const auto bpm = position->getBpm(); bpm && std::isfinite(*bpm))
-                hostTempoBpm.store(juce::jlimit(20.0, 400.0, *bpm), std::memory_order_relaxed);
-            if (const auto signature = position->getTimeSignature()) {
-                if (signature->numerator > 0 && signature->denominator > 0) {
-                    const double beatsPerBar = (double)signature->numerator
-                        * 4.0 / (double)signature->denominator;
-                    hostBeatsPerBar.store(juce::jlimit(1.0, 16.0, beatsPerBar),
-                                          std::memory_order_relaxed);
-                }
-            }
-        }
-    }
-
-    // Estimate the tonal centre of incoming MIDI over time. This is a local
-    // track/part estimate (not a DAW-wide key-signature API).
-    for (const auto metadata : midi) {
-        const auto message = metadata.getMessage();
-        if (!message.isNoteOn()) continue;
-        for (auto& weight : midiPitchClassWeights) weight *= 0.9975;
-        const int pitchClass = message.getNoteNumber() % 12;
-        midiPitchClassWeights[(size_t)pitchClass] += (double)message.getFloatVelocity();
-        double totalWeight = 0.0;
-        for (const auto weight : midiPitchClassWeights) totalWeight += weight;
-        if (totalWeight > 3.0) {
-            static const double majorProfile[12] =
-                { 6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88 };
-            static const double minorProfile[12] =
-                { 6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17 };
-            double bestScore = -1.0e30;
-            int bestRoot = -1;
-            for (int root = 0; root < 12; ++root) {
-                for (int mode = 0; mode < 2; ++mode) {
-                    const auto* profile = mode == 0 ? majorProfile : minorProfile;
-                    double score = 0.0;
-                    for (int note = 0; note < 12; ++note)
-                        score += midiPitchClassWeights[(size_t)((root + note) % 12)] * profile[note];
-                    if (score > bestScore) { bestScore = score; bestRoot = root; }
-                }
-            }
-            projectKeyClass.store(bestRoot, std::memory_order_relaxed);
-        }
-    }
 
     auto value = [this](const char* id) {
         if (const auto* parameter = params.getRawParameterValue(id))
@@ -1750,199 +1370,6 @@ bool AuroraProcessor::loadWavetableFromFile(const juce::File& file, juce::String
     return true;
 }
 
-bool AuroraProcessor::loadSampleFromFile(const juce::File& file, juce::String& error) {
-    if (!file.existsAsFile()) {
-        error = "File not found";
-        return false;
-    }
-
-    juce::AudioFormatManager formats;
-    formats.registerBasicFormats();
-    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
-    if (reader == nullptr || reader->lengthInSamples < 1024 || reader->numChannels < 1
-        || !std::isfinite(reader->sampleRate) || reader->sampleRate < 1000.0) {
-        error = "Unsupported or empty audio file";
-        return false;
-    }
-
-    constexpr int64_t maximumFrames = 10000000;
-    const int frames = (int)juce::jmin<int64_t>(maximumFrames, reader->lengthInSamples);
-    juce::AudioBuffer<float> decoded(2, frames);
-    decoded.clear();
-    if (!reader->read(&decoded, 0, frames, 0, true, reader->numChannels > 1)) {
-        error = "Could not decode audio data";
-        return false;
-    }
-
-    auto asset = std::make_shared<SampleAsset>();
-    asset->sampleRate = reader->sampleRate;
-    asset->fileName = file.getFileName();
-    asset->fullPath = file.getFullPathName();
-    asset->left.resize((size_t)frames);
-    asset->right.resize((size_t)frames);
-    for (int i = 0; i < frames; ++i) {
-        const float left = decoded.getSample(0, i);
-        const float right = reader->numChannels > 1 ? decoded.getSample(1, i) : left;
-        asset->left[(size_t)i] = std::isfinite(left) ? left : 0.0f;
-        asset->right[(size_t)i] = std::isfinite(right) ? right : 0.0f;
-    }
-
-    // Fast offline chroma analysis: averaged FFT energy is matched against
-    // standard major/minor key profiles to estimate the track tonic.
-    constexpr int fftOrder = 12;
-    constexpr int fftSize = 1 << fftOrder;
-    juce::dsp::FFT fft(fftOrder);
-    std::vector<float> fftData((size_t)fftSize * 2u, 0.0f);
-    std::array<double, 12> chroma{};
-    const int hop = fftSize / 2;
-    int analysedFrames = 0;
-    for (int offset = 0; offset + fftSize <= frames; offset += hop) {
-        std::fill(fftData.begin(), fftData.end(), 0.0f);
-        for (int n = 0; n < fftSize; ++n) {
-            const float mono = 0.5f * (asset->left[(size_t)(offset + n)]
-                                     + asset->right[(size_t)(offset + n)]);
-            const float window = 0.5f - 0.5f * std::cos(juce::MathConstants<float>::twoPi
-                                                       * (float)n / (float)(fftSize - 1));
-            fftData[(size_t)n] = mono * window;
-        }
-        fft.performFrequencyOnlyForwardTransform(fftData.data());
-        for (int bin = 2; bin < fftSize / 2; ++bin) {
-            const double frequency = (double)bin * reader->sampleRate / (double)fftSize;
-            if (frequency < 45.0 || frequency > 5000.0) continue;
-            const int midiNote = (int)std::round(69.0 + 12.0 * std::log2(frequency / 440.0));
-            const int pitchClass = (midiNote % 12 + 12) % 12;
-            const double magnitude = fftData[(size_t)bin];
-            chroma[(size_t)pitchClass] += magnitude * magnitude;
-        }
-        ++analysedFrames;
-    }
-
-    static const double majorProfile[12] =
-        { 6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88 };
-    static const double minorProfile[12] =
-        { 6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17 };
-    static const char* noteNames[12] =
-        { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-    double bestScore = -1.0e30;
-    int bestRoot = 0;
-    bool bestMinor = false;
-    double mean = 0.0;
-    for (const auto value : chroma) mean += value / 12.0;
-    for (int root = 0; root < 12; ++root) {
-        for (int mode = 0; mode < 2; ++mode) {
-            const auto* profile = mode == 0 ? majorProfile : minorProfile;
-            double score = 0.0;
-            for (int note = 0; note < 12; ++note)
-                score += (chroma[(size_t)((note + root) % 12)] - mean) * profile[note];
-            if (score > bestScore) {
-                bestScore = score;
-                bestRoot = root;
-                bestMinor = mode == 1;
-            }
-        }
-    }
-    asset->rootMidiNote = 60 + bestRoot;
-    asset->keyName = juce::String(noteNames[bestRoot]) + (bestMinor ? " minor" : " major");
-
-    // Build the 10 ms RMS energy envelope used by both tempo estimation and slicing.
-    const int analysisWindow = juce::jmax(1, (int)std::round(reader->sampleRate * 0.01));
-    std::vector<float> rms;
-    rms.reserve((size_t)(frames / analysisWindow + 1));
-    float maximumRms = 0.0f;
-    for (int windowStart = 0; windowStart < frames; windowStart += analysisWindow) {
-        const int windowEnd = juce::jmin(frames, windowStart + analysisWindow);
-        double energy = 0.0;
-        for (int i = windowStart; i < windowEnd; ++i) {
-            const float mono = 0.5f * (asset->left[(size_t)i] + asset->right[(size_t)i]);
-            energy += (double)mono * (double)mono;
-        }
-        const float level = (float)std::sqrt(energy / (double)juce::jmax(1, windowEnd - windowStart));
-        rms.push_back(level);
-        maximumRms = juce::jmax(maximumRms, level);
-    }
-
-    // 10 ms onset envelope: positive RMS rises are more useful for tempo
-    // estimation than the raw energy curve.
-    std::vector<float> onset(rms.size(), 0.0f);
-    for (size_t i = 1; i < rms.size(); ++i)
-        onset[i] = juce::jmax(0.0f, rms[i] - rms[i - 1]);
-
-    double bestTempoScore = 0.0;
-    double estimatedTempo = 120.0;
-    if (onset.size() > 180u) {
-        for (int bpm = 60; bpm <= 180; ++bpm) {
-            const int lag = juce::jmax(1, (int)std::round(60.0 / ((double)bpm * 0.01)));
-            double score = 0.0, energyA = 0.0, energyB = 0.0;
-            for (size_t i = (size_t)lag; i < onset.size(); ++i) {
-                const double a = onset[i], b = onset[i - (size_t)lag];
-                score += a * b;
-                energyA += a * a;
-                energyB += b * b;
-            }
-            const double normalised = score / std::sqrt(energyA * energyB + 1.0e-20);
-            if (normalised > bestTempoScore) {
-                bestTempoScore = normalised;
-                estimatedTempo = (double)bpm;
-            }
-        }
-    }
-    asset->sourceBpm = bestTempoScore > 0.015 ? estimatedTempo : 120.0;
-
-    const float sensitivity = params.getRawParameterValue("sampleSliceSensitivity")->load();
-    const float minimumGapMs = params.getRawParameterValue("sampleSliceMinGap")->load();
-    const int maximumSlices = juce::jlimit(1, 32,
-        (int)std::round(params.getRawParameterValue("sampleMaxSlices")->load()));
-    asset->sliceStarts.push_back(0);
-    int lastSlice = 0;
-    const int minimumGap = (int)(reader->sampleRate * minimumGapMs * 0.001f);
-    for (size_t i = 1; i < rms.size()
-         && asset->sliceStarts.size() < (size_t)maximumSlices; ++i) {
-        const float previous = rms[i - 1];
-        const float current = rms[i];
-        const int samplePosition = (int)i * analysisWindow;
-        const float riseRatio = 1.08f + (1.0f - sensitivity) * 1.25f;
-        if (current > maximumRms * sensitivity && current > previous * riseRatio
-            && samplePosition - lastSlice >= minimumGap
-            && samplePosition < frames - minimumGap) {
-            asset->sliceStarts.push_back(samplePosition);
-            lastSlice = samplePosition;
-        }
-    }
-    if (asset->sliceStarts.size() < 4u) {
-        asset->sliceStarts.clear();
-        asset->sliceStarts.push_back(0);
-        const int fallbackSlices = juce::jmax(1, juce::jmin(8, maximumSlices));
-        for (int slice = 1; slice < fallbackSlices; ++slice)
-            asset->sliceStarts.push_back((int)((int64_t)frames * slice / fallbackSlices));
-    }
-    asset->sliceStarts.push_back(frames);
-
-    constexpr int thumbnailSize = 512;
-    asset->thumbnail.resize(thumbnailSize, 0.0f);
-    for (int bucket = 0; bucket < thumbnailSize; ++bucket) {
-        const int start = (int)((int64_t)bucket * frames / thumbnailSize);
-        const int end = juce::jmax(start + 1, (int)((int64_t)(bucket + 1) * frames / thumbnailSize));
-        float peak = 0.0f;
-        for (int i = start; i < juce::jmin(frames, end); ++i)
-            peak = juce::jmax(peak, juce::jmax(std::abs(asset->left[(size_t)i]),
-                                               std::abs(asset->right[(size_t)i])));
-        asset->thumbnail[(size_t)bucket] = peak;
-    }
-
-    std::atomic_store_explicit(&sampleAsset,
-        std::shared_ptr<const SampleAsset>(std::move(asset)), std::memory_order_release);
-    if (auto* parameter = params.getParameter("sampleRootNote"))
-        parameter->setValueNotifyingHost(parameter->convertTo0to1((float)(60 + bestRoot)));
-    error.clear();
-    juce::ignoreUnused(analysedFrames);
-    return true;
-}
-
-void AuroraProcessor::clearSample() noexcept {
-    std::atomic_store_explicit(&sampleAsset, std::shared_ptr<const SampleAsset>{},
-                               std::memory_order_release);
-}
-
 void AuroraProcessor::clearImportedWavetable() {
     std::atomic_store_explicit(&importedWavetable,
                                std::shared_ptr<const std::vector<float>>{},
@@ -2056,10 +1483,6 @@ void AuroraProcessor::getStateInformation(juce::MemoryBlock& destination) {
         const auto encoded = juce::Base64::toBase64(imported->data(), imported->size() * sizeof(float));
         wavetable->addTextElement(encoded);
     }
-    if (const auto sample = getSampleAsset()) {
-        auto* sampleElement = xml->createNewChildElement("IMPORTED_SAMPLE");
-        sampleElement->setAttribute("path", sample->fullPath);
-    }
     copyXmlToBinary(*xml, destination);
 }
 
@@ -2070,15 +1493,8 @@ void AuroraProcessor::setStateInformation(const void* data, int size) {
         for (auto& favourite : presetFavorites)
             favourite.store(false, std::memory_order_relaxed);
         clearImportedWavetable();
-        clearSample();
-        if (auto* sampleElement = xml->getChildByName("IMPORTED_SAMPLE")) {
-            const juce::File sampleFile(sampleElement->getStringAttribute("path"));
-            if (sampleFile.existsAsFile()) {
-                juce::String ignoredError;
-                loadSampleFromFile(sampleFile, ignoredError);
-            }
-            xml->removeChildElement(sampleElement, true);
-        }
+        if (auto* legacySample = xml->getChildByName("IMPORTED_SAMPLE"))
+            xml->removeChildElement(legacySample, true);
         if (auto* favourites = xml->getChildByName("PRESET_FAVOURITES")) {
             for (auto* favourite = favourites->getFirstChildElement(); favourite != nullptr;
                  favourite = favourite->getNextElement()) {
