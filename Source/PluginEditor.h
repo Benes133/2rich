@@ -3,7 +3,7 @@
 #include "PluginProcessor.h"
 #include <array>
 
-class AuroraEditor : public juce::AudioProcessorEditor, private juce::AudioProcessorValueTreeState::Listener {
+class AuroraEditor : public juce::AudioProcessorEditor, private juce::AudioProcessorValueTreeState::Listener, private juce::Timer {
 public:
     explicit AuroraEditor(AuroraProcessor&);
     ~AuroraEditor() override;
@@ -18,10 +18,15 @@ private:
     juce::Slider wtPosition, unison, uniDetune, uniSpread;
     juce::Slider fxEq, fxLow, fxMid, fxHigh, fxDist, fxChorus, fxFlange, fxDelay, fxReverb;
     juce::TextButton synthTab{"SYNTH"}, wtTab{"WAVETABLE"}, fxTab{"FX"}, modTab{"MOD"}, seqTab{"SEQ"};
-    juce::ComboBox seqModeBox, arpStyleBox, seqRateBox;
+    juce::ComboBox seqModeBox, arpStyleBox, seqRateBox, seqDirectionBox, seqLengthBox;
+    juce::ComboBox seqPageBox, seqPatternSlotBox;
     juce::Slider seqOctaves, seqGate, seqSwing;
     std::array<juce::TextButton, 16> stepButtons;
-    std::array<juce::Slider, 16> stepPitchSliders;
+    juce::Slider stepPitch, stepVelocity, stepGate;
+    juce::TextButton stepAccentButton{"ACCENT"}, savePatternButton{"SAVE"}, loadPatternButton{"LOAD"};
+    juce::Label selectedStepLabel, patternStatusLabel;
+    int selectedStep = 0;
+    int lastActiveStep = -1;
     juce::Slider lfo1Rate, lfo2Rate, filterAttack, filterDecay, filterSustain, filterRelease, filterEnvAmount;
     juce::ComboBox lfo1Shape, lfo2Shape;
     std::array<juce::ComboBox, 4> modSources, modTargets;
@@ -33,12 +38,14 @@ private:
     using ButtonAttach = juce::AudioProcessorValueTreeState::ButtonAttachment;
     std::vector<std::unique_ptr<Attach>> attachments;
     std::vector<std::unique_ptr<ChoiceAttach>> choiceAttachments;
-    std::array<std::unique_ptr<ButtonAttach>, 16> stepButtonAttachments;
     std::unique_ptr<ChoiceAttach> aWave1, aWave2, aWtTable;
 
     void addKnob(juce::Slider&, const juce::String&, const juce::String&);
     void applyPreset(int presetId);
     void setPage(int page);
+    void refreshSelectedStepControls();
+    void writeSelectedStepParameter(const juce::String& baseId, float value);
+    void timerCallback() override;
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AuroraEditor)
 };

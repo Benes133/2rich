@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include <array>
 #include <vector>
+#include <atomic>
 class AuroraProcessor : public juce::AudioProcessor {
 public:
  using APVTS=juce::AudioProcessorValueTreeState;
@@ -26,7 +27,13 @@ public:
  void setStateInformation(const void*,int) override;
  APVTS params;
  static APVTS::ParameterLayout createLayout();
+ void saveUserPattern(int slot);
+ void loadUserPattern(int slot);
+ int getSequencerCurrentStep() const noexcept { return sequenceCurrentStep.load(std::memory_order_relaxed); }
 private:
+ struct StepData { bool enabled = true; int pitch = 0; float velocity = 100.0f; float gate = 100.0f; bool accent = false; };
+ std::array<std::array<StepData, 32>, 8> userPatterns{};
+ std::array<bool, 8> userPatternValid{};
  class Voice;
  juce::Synthesiser synth;
  std::vector<float> lfo1Block, lfo2Block;
@@ -37,6 +44,7 @@ private:
  double sequenceSamplesUntilStep=0.0, sequenceSamplesUntilOff=0.0;
  int sequenceStepIndex=0, sequenceCurrentNote=-1, arpDirection=1;
  bool sequenceNoteActive=false, sequencerWasRunning=false;
+ std::atomic<int> sequenceCurrentStep{-1};
  juce::dsp::Reverb reverb;
  std::array<std::vector<float>,2> delayBuffer;
  int delayWrite=0;

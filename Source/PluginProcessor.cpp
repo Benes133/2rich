@@ -316,14 +316,23 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     layout.add(std::make_unique<juce::AudioParameterInt>("seqOctaves", "Arpeggiator Octaves", 1, 4, 1));
     f("seqGate", "Sequencer Gate", 10.0f, 100.0f, 82.0f);
     f("seqSwing", "Sequencer Swing", 0.0f, 60.0f, 0.0f);
-    const int defaultStepPitches[16] = { 0, 7, 12, 7, 0, 7, 12, 7, 0, 7, 12, 7, 0, 7, 12, 7 };
-    for (int step = 0; step < 16; ++step) {
+    choice("seqDirection", "Sequencer Direction", { "Forward", "Reverse", "Ping-Pong", "Random" }, 0);
+    choice("seqLength", "Pattern Length", { "4", "8", "16", "32" }, 2);
+    choice("seqPage", "Pattern Page", { "Steps 1-16", "Steps 17-32" }, 0);
+    choice("seqPatternSlot", "User Pattern Slot", { "01", "02", "03", "04", "05", "06", "07", "08" }, 0);
+    const int defaultStepPitches[8] = { 0, 7, 12, 7, 0, 7, 12, 7 };
+    for (int step = 0; step < 32; ++step) {
         const auto suffix = juce::String(step);
+        const auto stepName = "Step " + juce::String(step + 1) + " ";
         layout.add(std::make_unique<juce::AudioParameterBool>(
-            ("stepOn" + suffix).toRawUTF8(), ("Step " + juce::String(step + 1) + " On").toRawUTF8(), true));
+            ("stepOn" + suffix).toRawUTF8(), (stepName + "On").toRawUTF8(), true));
         layout.add(std::make_unique<juce::AudioParameterInt>(
-            ("stepPitch" + suffix).toRawUTF8(), ("Step " + juce::String(step + 1) + " Pitch").toRawUTF8(),
-            -12, 12, defaultStepPitches[step]));
+            ("stepPitch" + suffix).toRawUTF8(), (stepName + "Pitch").toRawUTF8(),
+            -12, 12, defaultStepPitches[step % 8]));
+        f(("stepVelocity" + suffix).toRawUTF8(), (stepName + "Velocity").toRawUTF8(), 1.0f, 127.0f, 100.0f);
+        f(("stepGate" + suffix).toRawUTF8(), (stepName + "Gate").toRawUTF8(), 10.0f, 100.0f, 100.0f);
+        layout.add(std::make_unique<juce::AudioParameterBool>(
+            ("stepAccent" + suffix).toRawUTF8(), (stepName + "Accent").toRawUTF8(), false));
     }
 
     f("master", "Master", 0.0f, 1.0f, 0.8f);
@@ -432,6 +441,7 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         sequencerWasRunning = false;
         sequenceNoteActive = false;
         sequenceCurrentNote = -1;
+        sequenceCurrentStep.store(-1, std::memory_order_relaxed);
         heldNoteVelocities.fill(0.0f);
         synth.renderNextBlock(buffer, midi, 0, samples);
     } else {
@@ -469,6 +479,9 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         const float swing = juce::jlimit(0.0f, 0.60f, value("seqSwing") * 0.01f);
         const int octaveCount = juce::jlimit(1, 4, (int)value("seqOctaves"));
         const int arpStyle = juce::jlimit(0, 3, (int)value("arpStyle"));
+        const int patternLengths[4] = { 4, 8, 16, 32 };
+        const int patternLength = patternLengths[juce::jlimit(0, 3, (int)value("seqLength"))];
+        const int seqDirection = juce::jlimit(0, 3, (int)value("seqDirection"));
 
         auto stopSequencedNote = [&](int samplePosition) {
             if (sequenceNoteActive && sequenceCurrentNote >= 0) {
@@ -504,6 +517,7 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             if (heldCount == 0) {
                 stopSequencedNote(sample);
                 sequenceSamplesUntilStep = 0.0;
+                sequenceCurrentStep.store(-1, std::memory_order_relaxed);
                 continue;
             }
 
@@ -551,21 +565,47 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                     const int root = (int)std::distance(heldNoteVelocities.begin(),
                         std::find_if(heldNoteVelocities.begin(), heldNoteVelocities.end(),
                                      [](float v) { return v > 0.0f; }));
-                    const int step = sequenceStepIndex % 16;
+                    int step = 0;
+                    const int cyclePosition = sequenceStepIndex % patternLength;
+                    if (seqDirection == 1) {
+                        step = patternLength - 1 - cyclePosition;
+                    } else if (seqDirection == 2) {
+                        const int cycleLength = juce::jmax(1, patternLength * 2 - 2);
+                        const int position = sequenceStepIndex % cycleLength;
+                        step = position < patternLength ? position : cycleLength - position;
+                    } else if (seqDirection == 3) {
+                        randomSeed ^= randomSeed << 13;
+                        randomSeed ^= randomSeed >> 17;
+                        randomSeed ^= randomSeed << 5;
+                        step = (int)(randomSeed % (uint32_t)patternLength);
+                    } else {
+                        step = cyclePosition;
+                    }
+
+                    sequenceCurrentStep.store(step, std::memory_order_relaxed);
                     const auto suffix = juce::String(step);
                     if (value(("stepOn" + suffix).toRawUTF8()) > 0.5f) {
                         const int pitch = (int)value(("stepPitch" + suffix).toRawUTF8());
+                        const float stepVelocity = juce::jlimit(1.0f, 127.0f,
+                            value(("stepVelocity" + suffix).toRawUTF8())) / 127.0f;
+                        const float stepGate = juce::jlimit(10.0f, 100.0f,
+                            value(("stepGate" + suffix).toRawUTF8())) * 0.01f;
+                        const bool accent = value(("stepAccent" + suffix).toRawUTF8()) > 0.5f;
+                        const float accentGain = accent ? 1.25f : 1.0f;
                         note = root + pitch;
-                        velocity = heldNoteVelocities[(size_t)root];
+                        velocity = heldNoteVelocities[(size_t)root] * stepVelocity * accentGain;
+                        sequenceSamplesUntilOff = baseStepSamples * gate * stepGate;
                     }
                 }
 
                 if (note >= 0) {
                     note = juce::jlimit(0, 127, note);
+                    velocity = juce::jlimit(0.01f, 1.0f, velocity);
                     sequencedMidi.addEvent(juce::MidiMessage::noteOn(1, note, velocity), sample);
                     sequenceCurrentNote = note;
                     sequenceNoteActive = true;
-                    sequenceSamplesUntilOff = baseStepSamples * gate;
+                    if (sequencerMode == 1)
+                        sequenceSamplesUntilOff = baseStepSamples * gate;
                 }
 
                 const double swingMultiplier = (sequenceStepIndex & 1) == 0
@@ -657,15 +697,95 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     }
 }
 
+void AuroraProcessor::saveUserPattern(int slot) {
+    slot = juce::jlimit(0, 7, slot);
+    for (int step = 0; step < 32; ++step) {
+        const auto suffix = juce::String(step);
+        auto& data = userPatterns[(size_t)slot][(size_t)step];
+        data.enabled = params.getRawParameterValue(("stepOn" + suffix).toRawUTF8())->load() > 0.5f;
+        data.pitch = (int)params.getRawParameterValue(("stepPitch" + suffix).toRawUTF8())->load();
+        data.velocity = params.getRawParameterValue(("stepVelocity" + suffix).toRawUTF8())->load();
+        data.gate = params.getRawParameterValue(("stepGate" + suffix).toRawUTF8())->load();
+        data.accent = params.getRawParameterValue(("stepAccent" + suffix).toRawUTF8())->load() > 0.5f;
+    }
+    userPatternValid[(size_t)slot] = true;
+}
+
+void AuroraProcessor::loadUserPattern(int slot) {
+    slot = juce::jlimit(0, 7, slot);
+    if (!userPatternValid[(size_t)slot])
+        return;
+
+    auto setParameter = [this](const juce::String& id, float valueToSet) {
+        if (auto* parameter = params.getParameter(id)) {
+            parameter->beginChangeGesture();
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(valueToSet));
+            parameter->endChangeGesture();
+        }
+    };
+
+    for (int step = 0; step < 32; ++step) {
+        const auto suffix = juce::String(step);
+        const auto& data = userPatterns[(size_t)slot][(size_t)step];
+        setParameter("stepOn" + suffix, data.enabled ? 1.0f : 0.0f);
+        setParameter("stepPitch" + suffix, (float)data.pitch);
+        setParameter("stepVelocity" + suffix, data.velocity);
+        setParameter("stepGate" + suffix, data.gate);
+        setParameter("stepAccent" + suffix, data.accent ? 1.0f : 0.0f);
+    }
+}
+
 void AuroraProcessor::getStateInformation(juce::MemoryBlock& destination) {
     auto xml = params.copyState().createXml();
+    auto* bank = xml->createNewChildElement("USER_PATTERNS");
+    for (int slot = 0; slot < 8; ++slot) {
+        if (!userPatternValid[(size_t)slot])
+            continue;
+        auto* pattern = bank->createNewChildElement("PATTERN");
+        pattern->setAttribute("slot", slot);
+        for (int step = 0; step < 32; ++step) {
+            const auto& data = userPatterns[(size_t)slot][(size_t)step];
+            auto* element = pattern->createNewChildElement("STEP");
+            element->setAttribute("index", step);
+            element->setAttribute("on", data.enabled ? 1 : 0);
+            element->setAttribute("pitch", data.pitch);
+            element->setAttribute("velocity", (double)data.velocity);
+            element->setAttribute("gate", (double)data.gate);
+            element->setAttribute("accent", data.accent ? 1 : 0);
+        }
+    }
     copyXmlToBinary(*xml, destination);
 }
 
 void AuroraProcessor::setStateInformation(const void* data, int size) {
     std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, size));
-    if (xml && xml->hasTagName(params.state.getType()))
+    if (xml && xml->hasTagName(params.state.getType())) {
+        userPatternValid.fill(false);
+        if (auto* bank = xml->getChildByName("USER_PATTERNS")) {
+            for (auto* pattern = bank->getFirstChildElement(); pattern != nullptr; pattern = pattern->getNextElement()) {
+                if (!pattern->hasTagName("PATTERN"))
+                    continue;
+                const int slot = pattern->getIntAttribute("slot", -1);
+                if (slot < 0 || slot >= 8)
+                    continue;
+                for (auto* element = pattern->getFirstChildElement(); element != nullptr; element = element->getNextElement()) {
+                    if (!element->hasTagName("STEP"))
+                        continue;
+                    const int step = element->getIntAttribute("index", -1);
+                    if (step < 0 || step >= 32)
+                        continue;
+                    auto& target = userPatterns[(size_t)slot][(size_t)step];
+                    target.enabled = element->getIntAttribute("on", 1) != 0;
+                    target.pitch = element->getIntAttribute("pitch", 0);
+                    target.velocity = (float)element->getDoubleAttribute("velocity", 100.0);
+                    target.gate = (float)element->getDoubleAttribute("gate", 100.0);
+                    target.accent = element->getIntAttribute("accent", 0) != 0;
+                }
+                userPatternValid[(size_t)slot] = true;
+            }
+        }
         params.replaceState(juce::ValueTree::fromXml(*xml));
+    }
 }
 
 juce::AudioProcessorEditor* AuroraProcessor::createEditor() {

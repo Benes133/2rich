@@ -157,6 +157,11 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addChoice(seqModeBox, { "Off", "Arpeggiator", "Step Sequencer" }, "seqMode");
     addChoice(arpStyleBox, { "Up", "Down", "Up / Down", "Random" }, "arpStyle");
     addChoice(seqRateBox, { "1/4", "1/8", "1/16", "1/32", "1/8T" }, "seqRate");
+    addChoice(seqDirectionBox, { "Forward", "Reverse", "Ping-Pong", "Random" }, "seqDirection");
+    addChoice(seqLengthBox, { "4 Steps", "8 Steps", "16 Steps", "32 Steps" }, "seqLength");
+    addChoice(seqPageBox, { "STEPS 01-16", "STEPS 17-32" }, "seqPage");
+    addChoice(seqPatternSlotBox, { "PATTERN 01", "PATTERN 02", "PATTERN 03", "PATTERN 04",
+                                   "PATTERN 05", "PATTERN 06", "PATTERN 07", "PATTERN 08" }, "seqPatternSlot");
     auto addExtra=[&](juce::Slider& s,const juce::String& id,const juce::String& label){addKnob(s,label,id);attachments.push_back(std::make_unique<Attach>(ap,id,s));};
     addExtra(wtPosition,"wtPosition","POSITION"); addExtra(unison,"unison","VOICES"); addExtra(uniDetune,"uniDetune","DETUNE"); addExtra(uniSpread,"uniSpread","SPREAD");
     addExtra(fxEq,"fxEq","EQ MIX"); addExtra(fxLow,"fxLow","LOW"); addExtra(fxMid,"fxMid","MID"); addExtra(fxHigh,"fxHigh","HIGH");
@@ -174,23 +179,81 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     }
     seqOctaves.setNumDecimalPlacesToDisplay(0);
     for (int i = 0; i < 16; ++i) {
-        const auto suffix = juce::String(i);
         auto& button = stepButtons[(size_t)i];
-        button.setButtonText(juce::String(i + 1).paddedLeft('0', 2));
         button.setLookAndFeel(&richLook);
-        button.setClickingTogglesState(true);
+        button.setClickingTogglesState(false);
         button.setColour(juce::TextButton::textColourOffId, white);
         button.setColour(juce::TextButton::textColourOnId, violetHi);
+        button.onClick = [this, i] {
+            selectedStep = i;
+            const int pageOffset = seqPageBox.getSelectedId() == 2 ? 16 : 0;
+            const auto stepId = juce::String(pageOffset + i);
+            const auto parameterId = "stepOn" + stepId;
+            const bool isEnabled = proc.params.getRawParameterValue(parameterId)->load() > 0.5f;
+            writeSelectedStepParameter("stepOn", isEnabled ? 0.0f : 1.0f);
+            refreshSelectedStepControls();
+            repaint();
+        };
         addAndMakeVisible(button);
-        stepButtonAttachments[(size_t)i] = std::make_unique<ButtonAttach>(ap, "stepOn" + suffix, button);
-
-        auto& pitch = stepPitchSliders[(size_t)i];
-        addExtra(pitch, "stepPitch" + suffix, "PITCH");
-        pitch.setRange(-12, 12, 1);
-        pitch.setSliderStyle(juce::Slider::LinearVertical);
-        pitch.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 42, 18);
-        pitch.setNumDecimalPlacesToDisplay(0);
     }
+
+    auto setupStepEditor = [this](juce::Slider& slider, float minimum, float maximum, float interval,
+                                  const juce::String& baseId) {
+        addKnob(slider, baseId, baseId);
+        slider.setSliderStyle(juce::Slider::LinearHorizontal);
+        slider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 18);
+        slider.setRange(minimum, maximum, interval);
+        auto* sliderPtr = &slider;
+        slider.onValueChange = [this, sliderPtr, baseId] {
+            writeSelectedStepParameter(baseId, (float)sliderPtr->getValue());
+        };
+    };
+    setupStepEditor(stepPitch, -12.0f, 12.0f, 1.0f, "stepPitch");
+    setupStepEditor(stepVelocity, 1.0f, 127.0f, 1.0f, "stepVelocity");
+    setupStepEditor(stepGate, 10.0f, 100.0f, 1.0f, "stepGate");
+
+    stepAccentButton.setLookAndFeel(&richLook);
+    stepAccentButton.setClickingTogglesState(false);
+    stepAccentButton.onClick = [this] {
+        const int pageOffset = seqPageBox.getSelectedId() == 2 ? 16 : 0;
+        const auto id = "stepAccent" + juce::String(pageOffset + selectedStep);
+        const bool enabled = proc.params.getRawParameterValue(id)->load() > 0.5f;
+        writeSelectedStepParameter("stepAccent", enabled ? 0.0f : 1.0f);
+        refreshSelectedStepControls();
+    };
+    addAndMakeVisible(stepAccentButton);
+
+    for (auto* button : { &savePatternButton, &loadPatternButton }) {
+        button->setLookAndFeel(&richLook);
+        button->setColour(juce::TextButton::textColourOffId, white);
+        button->setColour(juce::TextButton::textColourOnId, violetHi);
+        addAndMakeVisible(*button);
+    }
+    savePatternButton.setTooltip("Save the current 32-step pattern into the selected project pattern slot.");
+    loadPatternButton.setTooltip("Load the selected user pattern from this project.");
+    savePatternButton.onClick = [this] {
+        proc.saveUserPattern(juce::jmax(0, seqPatternSlotBox.getSelectedId() - 1));
+        patternStatusLabel.setText("SAVED TO PROJECT", juce::dontSendNotification);
+    };
+    loadPatternButton.onClick = [this] {
+        proc.loadUserPattern(juce::jmax(0, seqPatternSlotBox.getSelectedId() - 1));
+        refreshSelectedStepControls();
+        patternStatusLabel.setText("PATTERN LOADED", juce::dontSendNotification);
+        repaint();
+    };
+    selectedStepLabel.setColour(juce::Label::textColourId, white);
+    selectedStepLabel.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
+    addAndMakeVisible(selectedStepLabel);
+    patternStatusLabel.setColour(juce::Label::textColourId, muted);
+    patternStatusLabel.setFont(juce::Font(juce::FontOptions(8.5f)));
+    patternStatusLabel.setText("PATTERNS ARE STORED WITH THE DAW PROJECT", juce::dontSendNotification);
+    addAndMakeVisible(patternStatusLabel);
+
+    seqPageBox.onChange = [this] {
+        selectedStep = juce::jlimit(0, 15, selectedStep);
+        refreshSelectedStepControls();
+        repaint();
+    };
     for (int i = 0; i < 4; ++i) {
         addExtra(modAmounts[(size_t)i], "mod" + juce::String(i + 1) + "Amount", "AMOUNT");
         modAmounts[(size_t)i].setSliderStyle(juce::Slider::LinearHorizontal);
@@ -216,17 +279,19 @@ AuroraEditor::~AuroraEditor() {
                           &fxFlange, &fxDelay, &fxReverb, &lfo1Rate, &lfo2Rate, &filterAttack,
                           &filterDecay, &filterSustain, &filterRelease, &filterEnvAmount,
                           &modAmounts[0], &modAmounts[1], &modAmounts[2], &modAmounts[3],
-                          &seqOctaves, &seqGate, &seqSwing,
-                          &stepPitchSliders[0], &stepPitchSliders[1], &stepPitchSliders[2], &stepPitchSliders[3],
-                          &stepPitchSliders[4], &stepPitchSliders[5], &stepPitchSliders[6], &stepPitchSliders[7],
-                          &stepPitchSliders[8], &stepPitchSliders[9], &stepPitchSliders[10], &stepPitchSliders[11],
-                          &stepPitchSliders[12], &stepPitchSliders[13], &stepPitchSliders[14], &stepPitchSliders[15] }) slider->setLookAndFeel(nullptr);
+                          &seqOctaves, &seqGate, &seqSwing, &stepPitch, &stepVelocity, &stepGate })
+        slider->setLookAndFeel(nullptr);
     wave1.setLookAndFeel(nullptr); wave2.setLookAndFeel(nullptr); presets.setLookAndFeel(nullptr); wtTable.setLookAndFeel(nullptr);
     lfo1Shape.setLookAndFeel(nullptr); lfo2Shape.setLookAndFeel(nullptr);
     for (auto& box : modSources) box.setLookAndFeel(nullptr);
     for (auto& box : modTargets) box.setLookAndFeel(nullptr);
     for (auto& button : stepButtons) button.setLookAndFeel(nullptr);
+    stepAccentButton.setLookAndFeel(nullptr);
+    savePatternButton.setLookAndFeel(nullptr);
+    loadPatternButton.setLookAndFeel(nullptr);
     seqModeBox.setLookAndFeel(nullptr); arpStyleBox.setLookAndFeel(nullptr); seqRateBox.setLookAndFeel(nullptr);
+    seqDirectionBox.setLookAndFeel(nullptr); seqLengthBox.setLookAndFeel(nullptr);
+    seqPageBox.setLookAndFeel(nullptr); seqPatternSlotBox.setLookAndFeel(nullptr);
     synthTab.setLookAndFeel(nullptr);wtTab.setLookAndFeel(nullptr);fxTab.setLookAndFeel(nullptr);modTab.setLookAndFeel(nullptr);seqTab.setLookAndFeel(nullptr);
 }
 
@@ -304,6 +369,48 @@ void AuroraEditor::applyPreset(int id) {
     repaint();
 }
 
+void AuroraEditor::refreshSelectedStepControls() {
+    const int pageOffset = seqPageBox.getSelectedId() == 2 ? 16 : 0;
+    const int globalStep = pageOffset + selectedStep;
+    const auto suffix = juce::String(globalStep);
+    auto read = [this, &suffix](const juce::String& baseId) {
+        if (auto* raw = proc.params.getRawParameterValue(baseId + suffix))
+            return raw->load();
+        return 0.0f;
+    };
+    selectedStepLabel.setText("STEP " + juce::String(globalStep + 1).paddedLeft('0', 2),
+                              juce::dontSendNotification);
+    stepPitch.setValue(read("stepPitch"), juce::dontSendNotification);
+    stepVelocity.setValue(read("stepVelocity"), juce::dontSendNotification);
+    stepGate.setValue(read("stepGate"), juce::dontSendNotification);
+    stepAccentButton.setToggleState(read("stepAccent") > 0.5f, juce::dontSendNotification);
+    stepAccentButton.setButtonText(read("stepAccent") > 0.5f ? "ACCENT ON" : "ACCENT OFF");
+    for (int i = 0; i < 16; ++i) {
+        const auto id = "stepOn" + juce::String(pageOffset + i);
+        const bool enabled = proc.params.getRawParameterValue(id)->load() > 0.5f;
+        stepButtons[(size_t)i].setToggleState(enabled, juce::dontSendNotification);
+        stepButtons[(size_t)i].setButtonText(juce::String(pageOffset + i + 1).paddedLeft('0', 2));
+    }
+}
+
+void AuroraEditor::writeSelectedStepParameter(const juce::String& baseId, float valueToSet) {
+    const int pageOffset = seqPageBox.getSelectedId() == 2 ? 16 : 0;
+    const auto id = baseId + juce::String(pageOffset + selectedStep);
+    if (auto* parameter = proc.params.getParameter(id)) {
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(valueToSet));
+        parameter->endChangeGesture();
+    }
+}
+
+void AuroraEditor::timerCallback() {
+    const int activeStep = proc.getSequencerCurrentStep();
+    if (activeStep != lastActiveStep) {
+        lastActiveStep = activeStep;
+        repaint();
+    }
+}
+
 void AuroraEditor::setPage(int page) {
     currentPage = page;
     synthTab.setToggleState(page == 0, juce::dontSendNotification);
@@ -323,11 +430,18 @@ void AuroraEditor::setPage(int page) {
         modTargets[(size_t)i].setVisible(page == 3);
         modAmounts[(size_t)i].setVisible(page == 3);
     }
-    show({ &seqModeBox, &arpStyleBox, &seqRateBox, &seqOctaves, &seqGate, &seqSwing }, page == 4);
-    for (int i = 0; i < 16; ++i) {
-        stepButtons[(size_t)i].setVisible(page == 4);
-        stepPitchSliders[(size_t)i].setVisible(page == 4);
-    }
+    show({ &seqModeBox, &arpStyleBox, &seqRateBox, &seqDirectionBox, &seqLengthBox,
+           &seqPageBox, &seqPatternSlotBox, &seqOctaves, &seqGate, &seqSwing,
+           &stepPitch, &stepVelocity, &stepGate, &stepAccentButton, &savePatternButton,
+           &loadPatternButton, &selectedStepLabel, &patternStatusLabel }, page == 4);
+    for (auto& button : stepButtons)
+        button.setVisible(page == 4);
+    if (page == 4)
+        refreshSelectedStepControls();
+    if (page == 4)
+        startTimerHz(30);
+    else
+        stopTimer();
     repaint();
     resized();
 }
@@ -569,21 +683,40 @@ void AuroraEditor::paint(juce::Graphics& g) {
         knobLabel(744,478,100,"FILTER ENV AMOUNT");
     }
     else {
-        panel(32,106,896,132,"PERFORMANCE","TEMPO-SYNCED ARPEGGIATOR AND STEP SEQUENCER");
-        panel(32,254,896,326,"16 STEP PATTERN","ENABLE STEPS AND SET EACH STEP'S PITCH OFFSET");
-
+        panel(32,106,896,158,"PERFORMANCE","HOST-TEMPO SYNC / ARPEGGIATOR / PATTERN PLAYBACK");
+        panel(32,280,896,300,"32 STEP PATTERN","SELECT A STEP TO EDIT PITCH, VELOCITY, GATE AND ACCENT");
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
+        g.drawText("MODE",52,164,150,12,juce::Justification::centredLeft);
+        g.drawText("ARP ORDER",222,164,150,12,juce::Justification::centredLeft);
+        g.drawText("RATE",392,164,150,12,juce::Justification::centredLeft);
+        g.drawText("OCTAVES",566,164,150,12,juce::Justification::centredLeft);
+        g.drawText("DIRECTION",52,210,170,12,juce::Justification::centredLeft);
+        g.drawText("LENGTH",242,210,150,12,juce::Justification::centredLeft);
+        g.drawText("GLOBAL GATE",422,210,205,12,juce::Justification::centredLeft);
+        g.drawText("SWING",657,210,250,12,juce::Justification::centredLeft);
+        g.setColour(cardHi);
+        g.fillRoundedRectangle(526.0f,348.0f,380.0f,183.0f,9.0f);
+        g.setColour(border);
+        g.drawRoundedRectangle(526.5f,348.5f,379.0f,182.0f,9.0f,1.0f);
         g.setColour(muted);
         g.setFont(juce::Font(juce::FontOptions(8.5f,juce::Font::bold)));
-        g.drawText("MODE",52,168,150,14,juce::Justification::centredLeft);
-        g.drawText("ARP ORDER",222,168,150,14,juce::Justification::centredLeft);
-        g.drawText("RATE",392,168,150,14,juce::Justification::centredLeft);
-        g.drawText("OCTAVES",566,168,90,14,juce::Justification::centredLeft);
-        g.drawText("GATE",680,168,90,14,juce::Justification::centredLeft);
-        g.drawText("SWING",794,168,90,14,juce::Justification::centredLeft);
-        g.setFont(juce::Font(juce::FontOptions(8.5f)));
-        g.drawText("Host tempo sync",52,222,160,12,juce::Justification::centredLeft);
-        g.drawText("Pitch range: -12 to +12 semitones",52,558,300,12,juce::Justification::centredLeft);
-        g.drawText("Disabled steps are skipped",650,558,250,12,juce::Justification::centredRight);
+        g.drawText("PITCH",548,389,58,12,juce::Justification::centredLeft);
+        g.drawText("VELOCITY",548,431,75,12,juce::Justification::centredLeft);
+        g.drawText("STEP GATE",548,473,75,12,juce::Justification::centredLeft);
+        g.drawText("USER PATTERN BANK",52,534,200,12,juce::Justification::centredLeft);
+        const int pageOffset = seqPageBox.getSelectedId() == 2 ? 16 : 0;
+        if (lastActiveStep >= pageOffset && lastActiveStep < pageOffset + 16) {
+            const int local = lastActiveStep - pageOffset;
+            const int x = 52 + (local % 4) * 116;
+            const int y = 354 + (local / 4) * 44;
+            g.setColour(neon.withAlpha(0.95f));
+            g.drawRoundedRectangle((float)x - 3.0f,(float)y - 3.0f,110.0f,35.0f,7.0f,2.0f);
+        }
+        const int selectedX = 52 + (selectedStep % 4) * 116;
+        const int selectedY = 354 + (selectedStep / 4) * 44;
+        g.setColour(violetHi.withAlpha(0.85f));
+        g.drawRoundedRectangle((float)selectedX - 2.0f,(float)selectedY - 2.0f,108.0f,33.0f,7.0f,1.3f);
     }
 
     g.setColour(border);
@@ -656,20 +789,30 @@ void AuroraEditor::resized() {
         place(modAmounts[(size_t)i],{394,rowY+2,205,25});
     }
 
-    // Sequencer page: controls were created and shown, but had never been
-    // assigned bounds. Keep the performance row and all 16 steps inside
-    // their panels at the editor's 960x640 reference size.
-    place(seqModeBox,{52,188,150,30});
-    place(arpStyleBox,{222,188,150,30});
-    place(seqRateBox,{392,188,150,30});
-    place(seqOctaves,{566,188,96,30});
-    place(seqGate,{680,188,96,30});
-    place(seqSwing,{794,188,96,30});
+    // Sequencer Pro workspace: transport, selectable 4x4 step grid and detail editor.
+    place(seqModeBox,{52,180,150,26});
+    place(arpStyleBox,{222,180,150,26});
+    place(seqRateBox,{392,180,150,26});
+    place(seqOctaves,{566,180,330,26});
+    place(seqDirectionBox,{52,226,170,26});
+    place(seqLengthBox,{242,226,150,26});
+    place(seqGate,{422,226,205,26});
+    place(seqSwing,{657,226,250,26});
     for (int i = 0; i < 16; ++i) {
-        const int x = 50 + i * 54;
-        place(stepButtons[(size_t)i],{x,320,50,28});
-        place(stepPitchSliders[(size_t)i],{x + 4,354,42,174});
+        const int x = 52 + (i % 4) * 116;
+        const int y = 354 + (i / 4) * 44;
+        place(stepButtons[(size_t)i],{x,y,104,29});
     }
+    place(selectedStepLabel,{548,354,180,24});
+    place(stepPitch,{548,399,340,28});
+    place(stepVelocity,{548,441,340,28});
+    place(stepGate,{548,483,340,28});
+    place(stepAccentButton,{548,507,112,24});
+    place(seqPageBox,{52,548,160,24});
+    place(seqPatternSlotBox,{222,548,150,24});
+    place(savePatternButton,{388,546,76,27});
+    place(loadPatternButton,{472,546,76,27});
+    place(patternStatusLabel,{564,538,340,22});
 
     if(currentPage!=0) {
         juce::Component* controls[]={&mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,
@@ -695,11 +838,10 @@ void AuroraEditor::resized() {
         }
     }
     if(currentPage!=4) {
-        juce::Component* controls[]={&seqModeBox,&arpStyleBox,&seqRateBox,&seqOctaves,&seqGate,&seqSwing};
+        juce::Component* controls[]={&seqModeBox,&arpStyleBox,&seqRateBox,&seqDirectionBox,&seqLengthBox,
+            &seqPageBox,&seqPatternSlotBox,&seqOctaves,&seqGate,&seqSwing,&stepPitch,&stepVelocity,
+            &stepGate,&stepAccentButton,&savePatternButton,&loadPatternButton,&selectedStepLabel,&patternStatusLabel};
         for(auto* control:controls) control->setVisible(false);
-        for(int i=0;i<16;++i) {
-            stepButtons[(size_t)i].setVisible(false);
-            stepPitchSliders[(size_t)i].setVisible(false);
-        }
+        for(auto& button:stepButtons) button.setVisible(false);
     }
 }

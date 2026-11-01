@@ -1,17 +1,17 @@
-# 2rich 0.5.0 — Sequencer Update
+# 2rich 0.6.0 — Sequencer Pro
 
 2rich is an original JUCE-based polyphonic synthesizer for Windows VST3.
 
-## New in 0.5.0
+## New in 0.6.0
 
-- Tempo-synced arpeggiator with Up, Down, Up/Down and Random order.
-- Arpeggiator octave range from one to four octaves.
-- 16-step sequencer with per-step enable and semitone pitch offset.
-- Step rates: 1/4, 1/8, 1/16, 1/32 and 1/8 triplet.
-- Gate and Swing controls.
-- Host BPM synchronization with a 120 BPM fallback if the host does not provide tempo.
-- Dedicated SEQ workspace with aligned control and step grids.
-- Restored the factory list to the original 25 presets; the additional 20-preset expansion bank has been removed. Preset categories and expansion support remain part of the browser concept.
+- 32-step MIDI sequencer with two editable 16-step pages.
+- Per-step pitch, velocity, gate length and accent.
+- Pattern lengths of 4, 8, 16 or 32 steps.
+- Forward, Reverse, Ping-Pong and Random playback directions.
+- Live current-step indication.
+- Eight user pattern slots with save/load controls.
+- User patterns are embedded in the DAW project state and restored with the project.
+- Existing arpeggiator modes, octave range, rate, global gate and swing remain available.
 
 ## Previous modulation features
 
@@ -26,20 +26,20 @@
 - **WAVETABLE** — built-in wavetable bank, morph-position preview and unison.
 - **FX** — tone/EQ, saturation, modulation and space.
 - **MOD** — dual LFOs, modulation matrix and filter envelope.
-- **SEQ** — arpeggiator and 16-step sequencer.
+- **SEQ** — host-synced arpeggiator and 32-step sequencer with per-step sound shaping.
 
 ## Sound engine
 
-- 16-voice polyphonic MIDI instrument
-- Saw, square, triangle and sine oscillator shapes
-- Oscillator blend, detune and sub oscillator
-- ADSR amplitude envelope and per-voice filter envelope
-- Per-voice state-variable low-pass filter
-- Built-in wavetable morphing
-- Up to 7 unison voices with detune and stereo spread
-- EQ, distortion, chorus, flanger, delay and reverb controls
-- Parameter state persistence
-- 25 original factory presets
+- 16-voice polyphonic MIDI instrument.
+- Saw, square, triangle and sine oscillator shapes.
+- Oscillator blend, detune and sub oscillator.
+- ADSR amplitude envelope and per-voice filter envelope.
+- Per-voice state-variable low-pass filter.
+- Built-in wavetable morphing.
+- Up to 7 unison voices with detune and stereo spread.
+- EQ, distortion, chorus, flanger, delay and reverb controls.
+- Parameter and user-pattern state persistence.
+- 25 original factory presets.
 
 ## Build and download
 
@@ -49,7 +49,7 @@ Download the **`2rich-Windows-VST3`** artifact from a successful workflow run. T
 
 ## Project
 
-- Framework: JUCE 8.0.6
-- Build system: CMake
-- Plugin format: VST3
-- Current version: 0.5.0
+- Framework: JUCE 8.0.6.
+- Build system: CMake.
+- Plugin format: VST3.
+- Current version: 0.6.0.
