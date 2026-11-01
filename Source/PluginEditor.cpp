@@ -298,9 +298,62 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addChoice(filterTypeBox, { "Low Pass", "Band Pass", "High Pass" }, "filterType");
     const juce::StringArray fxTypeNames = { "Off", "Compressor", "Saturation", "Phaser",
         "Ping-Pong", "Reverb", "Chorus", "Multiband Dist.", "Limiter" };
+    auto moveFxSlot = [this](int index, int direction) {
+        const int other = index + direction;
+        if (other < 0 || other >= 6) return;
+        const auto idA = "fxSlot" + juce::String(index + 1);
+        const auto idB = "fxSlot" + juce::String(other + 1);
+        auto* parameterA = proc.params.getParameter(idA);
+        auto* parameterB = proc.params.getParameter(idB);
+        auto* valueA = proc.params.getRawParameterValue(idA);
+        auto* valueB = proc.params.getRawParameterValue(idB);
+        if (parameterA == nullptr || parameterB == nullptr || valueA == nullptr || valueB == nullptr) return;
+        const float a = valueA->load(), b = valueB->load();
+        parameterA->beginChangeGesture();
+        parameterA->setValueNotifyingHost(parameterA->convertTo0to1(b));
+        parameterA->endChangeGesture();
+        parameterB->beginChangeGesture();
+        parameterB->setValueNotifyingHost(parameterB->convertTo0to1(a));
+        parameterB->endChangeGesture();
+        selectedFxSlot = other;
+        updateFxEditor();
+        repaint();
+    };
+
     for (int i = 0; i < 6; ++i) {
         addChoice(fxSlots[(size_t)i], fxTypeNames, "fxSlot" + juce::String(i + 1));
-        fxSlots[(size_t)i].setTooltip("FX Chain slot " + juce::String(i + 1) + ". Signal flows from slot 1 to slot 6.");
+        fxSlots[(size_t)i].setTooltip("Choose the effect for this insert. Select OFF to bypass the slot.");
+        fxSlots[(size_t)i].onChange = [this, i] {
+            selectedFxSlot = i;
+            updateFxEditor();
+            repaint();
+        };
+
+        auto& select = fxSlotSelectButtons[(size_t)i];
+        select.setButtonText(juce::String::formatted("%02d", i + 1));
+        select.setLookAndFeel(&richLook);
+        select.setClickingTogglesState(false);
+        select.setColour(juce::TextButton::textColourOffId, white);
+        select.setColour(juce::TextButton::textColourOnId, violetHi);
+        select.setTooltip("Select insert " + juce::String(i + 1) + " to edit its effect.");
+        select.onClick = [this, i] { selectedFxSlot = i; updateFxEditor(); repaint(); };
+        addAndMakeVisible(select);
+
+        auto& up = fxMoveUpButtons[(size_t)i];
+        up.setButtonText("↑");
+        up.setLookAndFeel(&richLook);
+        up.setColour(juce::TextButton::textColourOffId, white);
+        up.setTooltip("Move this effect earlier in the signal chain.");
+        up.onClick = [moveFxSlot, i] { moveFxSlot(i, -1); };
+        addAndMakeVisible(up);
+
+        auto& down = fxMoveDownButtons[(size_t)i];
+        down.setButtonText("↓");
+        down.setLookAndFeel(&richLook);
+        down.setColour(juce::TextButton::textColourOffId, white);
+        down.setTooltip("Move this effect later in the signal chain.");
+        down.onClick = [moveFxSlot, i] { moveFxSlot(i, 1); };
+        addAndMakeVisible(down);
     }
 
     fxCompEnabledButton.setLookAndFeel(&richLook);
@@ -353,10 +406,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addExtra(fxReverbRoom,"fxReverbRoom","ROOM SIZE");
     addExtra(fxReverbDamping,"fxReverbDamping","DAMPING");
     addExtra(fxLimiterCeiling,"fxLimiterCeiling","CEILING");
-    for (auto* slider : { &fxPhaserRate, &fxPingTime, &fxPingFeedback, &fxReverbRoom, &fxReverbDamping, &fxLimiterCeiling }) {
-        slider->setSliderStyle(juce::Slider::LinearHorizontal);
-        slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 38, 18);
-    }
+
     addExtra(lfo1Rate,"lfo1Rate","RATE"); addExtra(lfo2Rate,"lfo2Rate","RATE");
     addExtra(lfo3Rate,"lfo3Rate","RATE");
     addExtra(filterAttack,"filterAttack","ATTACK"); addExtra(filterDecay,"filterDecay","DECAY");
@@ -486,6 +536,9 @@ AuroraEditor::~AuroraEditor() {
         slider->setLookAndFeel(nullptr);
     wave1.setLookAndFeel(nullptr); wave2.setLookAndFeel(nullptr); presets.setLookAndFeel(nullptr); wtTable.setLookAndFeel(nullptr);
     for (auto& slot : fxSlots) slot.setLookAndFeel(nullptr);
+    for (auto& button : fxSlotSelectButtons) button.setLookAndFeel(nullptr);
+    for (auto& button : fxMoveUpButtons) button.setLookAndFeel(nullptr);
+    for (auto& button : fxMoveDownButtons) button.setLookAndFeel(nullptr);
     for (auto* button : { &presetFavoriteButton, &savePresetButton, &loadPresetButton })
         button->setLookAndFeel(nullptr);
     fxCompEnabledButton.setLookAndFeel(nullptr);
@@ -756,15 +809,53 @@ void AuroraEditor::setPage(int page) {
           &seqPatternSlotBox,&seqOctaves,&seqGate,&seqSwing,&stepPitch,&stepVelocity,&stepGate,
           &stepAccentButton,&savePatternButton,&loadPatternButton,&selectedStepLabel,&patternStatusLabel},currentPage==1);
     for(auto& b:stepButtons)b.setVisible(currentPage==1);
-    show({&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb,
-          &fxCompThreshold,&fxCompRatio,&fxCompAttack,&fxCompRelease,&fxCompMakeup,&fxCompMix,
-          &fxCompEnabledButton,&fxPhaserRate,&fxPingTime,&fxPingFeedback,&fxReverbRoom,
-          &fxReverbDamping,&fxLimiterCeiling},currentPage==2);
-    for(auto& slot:fxSlots)slot.setVisible(currentPage==2);
+    updateFxEditor();
     if(currentPage==1)refreshSelectedStepControls();
     startTimerHz(30); repaint(); resized();
 }
 
+
+void AuroraEditor::updateFxEditor() {
+    const bool fxPage = currentPage == 2;
+    for (auto& slot : fxSlots) slot.setVisible(fxPage);
+    for (auto& button : fxSlotSelectButtons) button.setVisible(fxPage);
+    for (auto& button : fxMoveUpButtons) button.setVisible(fxPage);
+    for (auto& button : fxMoveDownButtons) button.setVisible(fxPage);
+
+    for (juce::Component* component : std::array<juce::Component*, 4>{ &fxEq, &fxLow, &fxMid, &fxHigh })
+        component->setVisible(fxPage);
+
+    for (juce::Component* component : std::array<juce::Component*, 18>{
+            &fxDist, &fxChorus, &fxFlange, &fxDelay, &fxReverb,
+            &fxCompThreshold, &fxCompRatio, &fxCompAttack, &fxCompRelease,
+            &fxCompMakeup, &fxCompMix, &fxPhaserRate, &fxPingTime,
+            &fxPingFeedback, &fxReverbRoom, &fxReverbDamping,
+            &fxLimiterCeiling, &fxCompEnabledButton })
+        component->setVisible(false);
+
+    for (int i = 0; i < 6; ++i)
+        fxSlotSelectButtons[(size_t)i].setToggleState(i == selectedFxSlot, juce::dontSendNotification);
+
+    if (!fxPage) return;
+
+    const int effect = juce::jlimit(0, 8, fxSlots[(size_t)selectedFxSlot].getSelectedId() - 1);
+    auto show = [](std::initializer_list<juce::Component*> components) {
+        for (auto* component : components) component->setVisible(true);
+    };
+
+    switch (effect) {
+        case 1: show({ &fxCompEnabledButton, &fxCompThreshold, &fxCompRatio, &fxCompAttack,
+                       &fxCompRelease, &fxCompMakeup, &fxCompMix }); break;
+        case 2: show({ &fxDist }); break;
+        case 3: show({ &fxPhaserRate, &fxFlange }); break;
+        case 4: show({ &fxPingTime, &fxPingFeedback, &fxDelay }); break;
+        case 5: show({ &fxReverbRoom, &fxReverbDamping, &fxReverb }); break;
+        case 6: show({ &fxChorus }); break;
+        case 7: show({ &fxDist }); break;
+        case 8: show({ &fxLimiterCeiling }); break;
+        default: break;
+    }
+}
 
 void AuroraEditor::parameterChanged(const juce::String& parameterID, float) {
     if (parameterID == "wave1" || parameterID == "wave2" ||
@@ -922,22 +1013,55 @@ void AuroraEditor::paint(juce::Graphics& g) {
         const int selectedX=52+(selectedStep%8)*61,selectedY=610+(selectedStep/8)*34;
         g.setColour(violet.withAlpha(0.95f));g.drawRoundedRectangle((float)selectedX-1.5f,(float)selectedY-1.5f,57,31,4,1.4f);
     }else{
-        panel(32,128,1136,112,"FX SIGNAL CHAIN","SIX INSERT SLOTS / LEFT TO RIGHT");
-        for(int i=0;i<6;++i){
-            const int sx=42+i*186;
-            g.setColour(juce::Colour(0xff090c12).withAlpha(0.9f));g.fillRoundedRectangle((float)sx,193,178,32,6);
-            g.setColour(violet.withAlpha(0.32f));g.drawRoundedRectangle(sx+0.5f,193.5f,177,31,6,0.9f);
-            g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(7.8f,juce::Font::bold)));
-            g.drawText("INSERT 0"+juce::String(i+1),sx+6,176,164,12,juce::Justification::centredLeft);
+        panel(32,128,300,598,"FX RACK","SIGNAL FLOW / TOP TO BOTTOM");
+        panel(348,128,820,420,"MODULE EDITOR","SELECT AN INSERT TO EDIT ITS CONTROLS");
+        panel(348,560,820,166,"MASTER EQ","GLOBAL TONE SHAPING AFTER THE FX CHAIN");
+
+        label(48,194,264,"PROCESSING ORDER");
+        const juce::StringArray fxNames = { "OFF", "COMPRESSOR", "SATURATION", "PHASER",
+            "PING-PONG DELAY", "REVERB", "CHORUS", "MULTIBAND DIST.", "LIMITER" };
+        for (int i = 0; i < 6; ++i) {
+            const int rowY = 208 + i * 70;
+            const bool selected = i == selectedFxSlot;
+            auto row = juce::Rectangle<float>(44.0f, (float)rowY, 276.0f, 44.0f);
+            g.setColour(selected ? juce::Colour(0xff302540) : juce::Colour(0xff11151d));
+            g.fillRoundedRectangle(row, 6.0f);
+            g.setColour(selected ? violetHi.withAlpha(0.85f) : juce::Colour(0xff707784).withAlpha(0.38f));
+            g.drawRoundedRectangle(row, 6.0f, selected ? 1.2f : 0.75f);
+            g.setColour(selected ? violetHi : muted);
+            g.fillRoundedRectangle(row.getX() + 4.0f, row.getY() + 8.0f, 3.0f, 28.0f, 1.4f);
+            g.setColour(muted);
+            g.setFont(juce::Font(juce::FontOptions(7.2f, juce::Font::bold)));
+            g.drawText("INSERT " + juce::String::formatted("%02d", i + 1),
+                       48, rowY - 13, 110, 11, juce::Justification::centredLeft);
         }
-        panel(32,256,258,470,"EQ / DRIVE","TONE / HARMONICS");panel(304,256,420,470,"DYNAMICS","COMPRESSOR / LEVEL CONTROL");
-        panel(738,256,430,470,"TIME / SPACE","MODULATION / AMBIENCE / LIMITING");
-        label(42,338,70,"EQ MIX");label(114,338,70,"LOW");label(186,338,70,"MID");label(78,502,70,"HIGH");label(150,502,70,"SATURATION");
-        label(324,362,110,"THRESHOLD");label(450,362,110,"RATIO");label(576,362,110,"ATTACK");
-        label(324,526,110,"RELEASE");label(450,526,110,"MAKEUP");label(576,526,110,"MIX");
-        label(750,326,92,"CHORUS");label(844,326,92,"FLANGER");label(938,326,92,"DELAY");label(1032,326,92,"REVERB");
-        label(752,492,180,"PHASER RATE");label(950,492,190,"PING TIME");label(752,555,180,"PING FEEDBACK");
-        label(950,555,190,"ROOM SIZE");label(752,618,180,"DAMPING");label(950,618,190,"LIMITER CEILING");
+
+        const int effect = juce::jlimit(0, 8, fxSlots[(size_t)selectedFxSlot].getSelectedId() - 1);
+        const juce::String selectedName = fxNames[effect];
+        g.setColour(violetHi);
+        g.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
+        g.drawText("INSERT " + juce::String::formatted("%02d", selectedFxSlot + 1)
+                   + "  /  " + selectedName, 374, 207, 760, 24, juce::Justification::centredLeft);
+
+        switch (effect) {
+            case 0:
+                g.setColour(muted); g.setFont(juce::Font(juce::FontOptions(11.0f)));
+                g.drawFittedText("EMPTY INSERT  —  CHOOSE AN EFFECT FROM THE SLOT MENU",
+                                 380, 330, 740, 42, juce::Justification::centred, 1);
+                break;
+            case 1:
+                label(370,286,110,"THRESHOLD");label(496,286,110,"RATIO");label(622,286,110,"ATTACK");
+                label(748,286,110,"RELEASE");label(874,286,110,"MAKEUP");label(1000,286,110,"MIX"); break;
+            case 2: label(660,286,140,"DRIVE"); break;
+            case 3: label(520,286,140,"RATE");label(690,286,140,"DEPTH"); break;
+            case 4: label(450,286,125,"TIME");label(595,286,125,"FEEDBACK");label(740,286,125,"MIX"); break;
+            case 5: label(450,286,125,"ROOM SIZE");label(595,286,125,"DAMPING");label(740,286,125,"MIX"); break;
+            case 6: label(660,286,140,"MIX"); break;
+            case 7: label(660,286,140,"DRIVE"); break;
+            case 8: label(660,286,140,"CEILING"); break;
+            default: break;
+        }
+        label(422,626,126,"EQ MIX");label(592,626,126,"LOW");label(762,626,126,"MID");label(932,626,126,"HIGH");
     }
     g.setColour(juce::Colour(0xff9398a3).withAlpha(0.28f));g.drawLine(32,778,1168,778,0.8f);
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(7.8f,juce::Font::bold)));
@@ -990,16 +1114,24 @@ void AuroraEditor::resized() {
     place(seqPageBox,{930,620,100,28});place(seqPatternSlotBox,{1040,620,110,28});
     place(savePatternButton,{930,652,100,28});place(loadPatternButton,{1040,652,110,28});place(patternStatusLabel,{930,690,220,18});
 
-    // FX.
-    for(int i=0;i<6;++i)place(fxSlots[(size_t)i],{42+i*186,193,178,32});
-    place(fxEq,{42,356,70,126});place(fxLow,{114,356,70,126});place(fxMid,{186,356,70,126});
-    place(fxHigh,{78,520,70,126});place(fxDist,{150,520,70,126});
-    place(fxCompEnabledButton,{326,328,376,28});
-    place(fxCompThreshold,{324,382,110,132});place(fxCompRatio,{450,382,110,132});place(fxCompAttack,{576,382,110,132});
-    place(fxCompRelease,{324,548,110,132});place(fxCompMakeup,{450,548,110,132});place(fxCompMix,{576,548,110,132});
-    place(fxChorus,{750,344,92,132});place(fxFlange,{844,344,92,132});place(fxDelay,{938,344,92,132});place(fxReverb,{1032,344,92,132});
-    place(fxPhaserRate,{752,512,180,28});place(fxPingTime,{950,512,190,28});
-    place(fxPingFeedback,{752,575,180,28});place(fxReverbRoom,{950,575,190,28});
-    place(fxReverbDamping,{752,638,180,28});place(fxLimiterCeiling,{950,638,190,28});
+    // FX rack: ordered inserts at left, selected module editor at right.
+    for (int i = 0; i < 6; ++i) {
+        const int y = 214 + i * 70;
+        place(fxSlotSelectButtons[(size_t)i], {48,y,28,32});
+        place(fxSlots[(size_t)i], {80,y,154,32});
+        place(fxMoveUpButtons[(size_t)i], {238,y,23,32});
+        place(fxMoveDownButtons[(size_t)i], {265,y,23,32});
+    }
+    place(fxCompEnabledButton,{370,238,180,28});
+    place(fxCompThreshold,{370,318,110,156});place(fxCompRatio,{496,318,110,156});
+    place(fxCompAttack,{622,318,110,156});place(fxCompRelease,{748,318,110,156});
+    place(fxCompMakeup,{874,318,110,156});place(fxCompMix,{1000,318,110,156});
+    place(fxDist,{660,318,140,156});
+    place(fxPhaserRate,{520,318,140,156});place(fxFlange,{690,318,140,156});
+    place(fxPingTime,{450,318,125,156});place(fxPingFeedback,{595,318,125,156});place(fxDelay,{740,318,125,156});
+    place(fxReverbRoom,{450,318,125,156});place(fxReverbDamping,{595,318,125,156});place(fxReverb,{740,318,125,156});
+    place(fxChorus,{660,318,140,156});place(fxLimiterCeiling,{660,318,140,156});
+    place(fxEq,{422,644,126,76});place(fxLow,{592,644,126,76});
+    place(fxMid,{762,644,126,76});place(fxHigh,{932,644,126,76});
 }
 
