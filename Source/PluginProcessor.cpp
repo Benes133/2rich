@@ -167,12 +167,16 @@ public:
             const int syncChoice = juce::jlimit(0, 9, (int)value("sampleSyncBars"));
             const double duration = (double)juce::jmax(1, sampleEnd - sampleStart) / sampleAsset->sampleRate;
             const double sourceBeats = duration * sampleAsset->sourceBpm / 60.0;
-            static const double beatChoices[9] = { 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0 };
+            static const double autoBeatChoices[9] = { 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0 };
+            static const double fractionalChoices[4] = { 0.25, 0.5, 1.0, 2.0 };
             double targetBeats = sourceBeats;
-            if (syncChoice > 0) targetBeats = beatChoices[syncChoice - 1];
+            if (syncChoice >= 1 && syncChoice <= 5)
+                targetBeats = beatsPerBar * std::pow(2.0, (double)(syncChoice - 1));
+            else if (syncChoice > 5)
+                targetBeats = fractionalChoices[syncChoice - 6];
             else {
                 double bestDistance = 1.0e30;
-                for (const double candidate : beatChoices) {
+                for (const double candidate : autoBeatChoices) {
                     const double distance = std::abs(std::log2(juce::jmax(0.01, sourceBeats) / candidate));
                     if (distance < bestDistance) { bestDistance = distance; targetBeats = candidate; }
                 }
@@ -844,7 +848,7 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout() {
     layout.add(std::make_unique<juce::AudioParameterBool>("samplePreservePitch", "Sampler Preserve Pitch", true));
     layout.add(std::make_unique<juce::AudioParameterBool>("sampleLoop", "Sampler Loop", false));
     layout.add(std::make_unique<juce::AudioParameterBool>("sampleReverse", "Sampler Reverse", false));
-    choice("sampleSyncBars", "Sampler Sync Length", { "Auto", "1/16", "1/8", "1/4", "1/2", "1 Bar", "2 Bars", "4 Bars", "8 Bars", "16 Bars" }, 0);
+    choice("sampleSyncBars", "Sampler Sync Length", { "Auto", "1 Bar", "2 Bars", "4 Bars", "8 Bars", "16 Bars", "1/16", "1/8", "1/4", "1/2" }, 0);
     choice("sampleTargetKey", "Sampler Target Key", { "Auto", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0);
     f("sampleRootNote", "Sample Root MIDI Note", 0.0f, 127.0f, 60.0f);
     f("sampleMix", "Sample Level", 0.0f, 1.0f, 0.85f);
