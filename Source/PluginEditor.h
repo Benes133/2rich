@@ -4,6 +4,7 @@
 class AuroraEditor:public juce::AudioProcessorEditor{
 public:
  explicit AuroraEditor(AuroraProcessor&);
+ ~AuroraEditor() override;
  void paint(juce::Graphics&)override; void resized()override;
 private:
  AuroraProcessor& proc; juce::Label heading;
