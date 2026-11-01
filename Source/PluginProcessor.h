@@ -7,6 +7,14 @@
 class AuroraProcessor : public juce::AudioProcessor {
 public:
  using APVTS=juce::AudioProcessorValueTreeState;
+ struct SampleAsset {
+  std::vector<float> left, right, thumbnail;
+  std::vector<int> sliceStarts; // Includes the terminal sample position.
+  double sampleRate = 44100.0;
+  int rootMidiNote = 60;
+  juce::String keyName = "C";
+  juce::String fileName, fullPath;
+ };
  AuroraProcessor();
  void prepareToPlay(double,int) override;
  void releaseResources() override {}
@@ -32,6 +40,11 @@ public:
  bool loadUserPattern(int slot);
  void setPresetFavorite(int presetId, bool favorite) noexcept;
  bool isPresetFavorite(int presetId) const noexcept;
+ bool loadSampleFromFile(const juce::File& file, juce::String& error);
+ void clearSample() noexcept;
+ std::shared_ptr<const SampleAsset> getSampleAsset() const noexcept {
+  return std::atomic_load_explicit(&sampleAsset, std::memory_order_acquire);
+ }
  bool loadWavetableFromFile(const juce::File& file, juce::String& error);
  void clearImportedWavetable();
  void editImportedWavetableRange(int frame, int firstSample, int lastSample,
@@ -58,8 +71,9 @@ private:
  };
  std::array<UserPattern, 8> userPatterns{};
  std::array<bool, 8> userPatternValid{};
- std::array<std::atomic<bool>, 25> presetFavorites{};
+ std::array<std::atomic<bool>, 500> presetFavorites{};
  std::shared_ptr<const std::vector<float>> importedWavetable;
+ std::shared_ptr<const SampleAsset> sampleAsset;
  juce::String importedWavetableName;
  class Voice;
  juce::Synthesiser synth;
