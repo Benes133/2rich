@@ -317,6 +317,53 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         repaint();
     };
 
+    for (auto* button : { &sampleLoadButton, &sampleClearButton }) {
+        button->setLookAndFeel(&richLook);
+        button->setColour(juce::TextButton::textColourOffId, white);
+        button->setColour(juce::TextButton::textColourOnId, violetHi);
+        addAndMakeVisible(*button);
+    }
+    sampleSliceButton.setColour(juce::ToggleButton::textColourId, white);
+    sampleSliceButton.setTooltip("Map detected audio slices to consecutive MIDI notes starting at C2.");
+    addAndMakeVisible(sampleSliceButton);
+    aSampleSlice = std::make_unique<ButtonAttach>(ap, "sampleSliceMode", sampleSliceButton);
+    sampleStatusLabel.setColour(juce::Label::textColourId, muted);
+    sampleStatusLabel.setFont(juce::Font(juce::FontOptions(9.0f)));
+    sampleStatusLabel.setText("NO AUDIO LOADED  /  IMPORT A WAV OR AIFF LOOP OR SONG",
+                               juce::dontSendNotification);
+    addAndMakeVisible(sampleStatusLabel);
+
+    sampleLoadButton.setTooltip("Load a WAV or AIFF file for sample playback, slice mapping and granular synthesis.");
+    sampleLoadButton.onClick = [this] {
+        sampleChooser = std::make_unique<juce::FileChooser>(
+            "Load Audio into 2rich Sample Lab",
+            juce::File::getSpecialLocation(juce::File::userHomeDirectory),
+            "*.wav;*.aif;*.aiff");
+        sampleChooser->launchAsync(juce::FileBrowserComponent::openMode
+                                   | juce::FileBrowserComponent::canSelectFiles,
+            [this](const juce::FileChooser& chooser) {
+                const auto file = chooser.getResult();
+                if (file == juce::File{}) return;
+                juce::String error;
+                if (!proc.loadSampleFromFile(file, error)) {
+                    sampleStatusLabel.setText("LOAD FAILED: " + error, juce::dontSendNotification);
+                } else {
+                    updateSampleStatus();
+                    sampleModeBox.setSelectedId(2, juce::sendNotification);
+                }
+                repaint();
+            });
+    };
+    sampleClearButton.setTooltip("Unload the current sample.");
+    sampleClearButton.onClick = [this] {
+        proc.clearSample();
+        if (auto* parameter = proc.params.getParameter("sampleMode"))
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(0.0f));
+        sampleModeBox.setSelectedId(1, juce::dontSendNotification);
+        updateSampleStatus();
+        repaint();
+    };
+
     auto addChoice = [&](juce::ComboBox& box, const juce::StringArray& items, const juce::String& id) {
         box.setLookAndFeel(&richLook);
         box.setColour(juce::ComboBox::textColourId, white);
@@ -327,6 +374,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     };
     addChoice(oscModeBox, { "Classic", "FM", "Ring Mod", "Hard Sync", "Super Saw" }, "oscMode");
     addChoice(filterTypeBox, { "Low Pass", "Band Pass", "High Pass" }, "filterType");
+    addChoice(sampleModeBox, { "OSCILLATOR", "SAMPLE", "GRANULAR" }, "sampleMode");
     const juce::StringArray fxTypeNames = { "Off", "Compressor", "Saturation", "Phaser",
         "Ping-Pong", "Reverb", "Chorus", "Multiband Dist.", "Limiter",
         "Bitcrusher", "Stereo Width", "Tremolo", "Ring Mod", "Filter", "Flanger" };
@@ -418,6 +466,16 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addChoice(seqPatternSlotBox, { "PATTERN 01", "PATTERN 02", "PATTERN 03", "PATTERN 04",
                                    "PATTERN 05", "PATTERN 06", "PATTERN 07", "PATTERN 08" }, "seqPatternSlot");
     auto addExtra=[&](juce::Slider& s,const juce::String& id,const juce::String& label){addKnob(s,label,id);attachments.push_back(std::make_unique<Attach>(ap,id,s));};
+    addExtra(sampleRootNote, "sampleRootNote", "ROOT NOTE");
+    addExtra(sampleMix, "sampleMix", "SAMPLE LEVEL");
+    addExtra(grainSize, "grainSize", "GRAIN SIZE");
+    addExtra(grainDensity, "grainDensity", "DENSITY");
+    addExtra(grainPosition, "grainPosition", "POSITION");
+    addExtra(grainSpray, "grainSpray", "SPRAY");
+    addExtra(grainPitch, "grainPitch", "PITCH");
+    sampleRootNote.setSliderStyle(juce::Slider::LinearHorizontal);
+    sampleRootNote.setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
+    sampleRootNote.setNumDecimalPlacesToDisplay(0);
     addExtra(wtPosition,"wtPosition","POSITION"); wtPosition.setSliderStyle(juce::Slider::LinearHorizontal); wtPosition.setTextBoxStyle(juce::Slider::TextBoxRight,false,42,18); addExtra(unison,"unison","VOICES"); addExtra(uniDetune,"uniDetune","DETUNE"); addExtra(uniSpread,"uniSpread","SPREAD");
     addExtra(fmAmount,"fmAmount","FM AMOUNT"); addExtra(syncRatio,"syncRatio","SYNC RATIO");
     for (auto* slider : { &fmAmount, &syncRatio }) {
@@ -565,8 +623,9 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
         modAmounts[(size_t)i].setSliderStyle(juce::Slider::LinearHorizontal);
         modAmounts[(size_t)i].setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 18);
     }
-    for(auto* tab:{&synthTab,&wtTab,&fxTab,&modTab,&seqTab}){tab->setLookAndFeel(&richLook);tab->setColour(juce::TextButton::textColourOffId,white);tab->setColour(juce::TextButton::textColourOnId,violetHi);tab->setClickingTogglesState(false);addAndMakeVisible(*tab);}
-    synthTab.onClick=[this]{setPage(0);};wtTab.onClick=[this]{setPage(1);};fxTab.onClick=[this]{setPage(2);};modTab.onClick=[this]{setPage(1);};seqTab.onClick=[this]{setPage(1);};
+    for(auto* tab:{&synthTab,&wtTab,&fxTab,&sampleTab,&modTab,&seqTab}){tab->setLookAndFeel(&richLook);tab->setColour(juce::TextButton::textColourOffId,white);tab->setColour(juce::TextButton::textColourOnId,violetHi);tab->setClickingTogglesState(false);addAndMakeVisible(*tab);}
+    synthTab.onClick=[this]{setPage(0);};wtTab.onClick=[this]{setPage(1);};fxTab.onClick=[this]{setPage(2);};sampleTab.onClick=[this]{setPage(3);};modTab.onClick=[this]{setPage(1);};seqTab.onClick=[this]{setPage(1);};
+    updateSampleStatus();
     unison.setRange(1,7,1); unison.setNumDecimalPlacesToDisplay(0);
     add(mix, "mix", "MIX"); add(detune, "detune", "DETUNE"); add(sub, "sub", "SUB");
     add(cutoff, "cutoff", "CUTOFF"); add(res, "res", "RES");
@@ -604,7 +663,9 @@ AuroraEditor::~AuroraEditor() {
     fxFilterTypeBox.setLookAndFeel(nullptr);
     oscModeBox.setLookAndFeel(nullptr); filterTypeBox.setLookAndFeel(nullptr);
     importWavetableButton.setLookAndFeel(nullptr); clearWavetableButton.setLookAndFeel(nullptr);
+    sampleLoadButton.setLookAndFeel(nullptr); sampleClearButton.setLookAndFeel(nullptr);
     wavetableChooser.reset();
+    sampleChooser.reset();
     for (auto& box : modSources) box.setLookAndFeel(nullptr);
     for (auto& box : modTargets) box.setLookAndFeel(nullptr);
     for (auto& button : stepButtons) button.setLookAndFeel(nullptr);
@@ -614,7 +675,7 @@ AuroraEditor::~AuroraEditor() {
     seqModeBox.setLookAndFeel(nullptr); arpStyleBox.setLookAndFeel(nullptr); seqRateBox.setLookAndFeel(nullptr);
     seqDirectionBox.setLookAndFeel(nullptr); seqLengthBox.setLookAndFeel(nullptr);
     seqPageBox.setLookAndFeel(nullptr); seqPatternSlotBox.setLookAndFeel(nullptr);
-    synthTab.setLookAndFeel(nullptr);wtTab.setLookAndFeel(nullptr);fxTab.setLookAndFeel(nullptr);modTab.setLookAndFeel(nullptr);seqTab.setLookAndFeel(nullptr);
+    synthTab.setLookAndFeel(nullptr);wtTab.setLookAndFeel(nullptr);fxTab.setLookAndFeel(nullptr);sampleTab.setLookAndFeel(nullptr);modTab.setLookAndFeel(nullptr);seqTab.setLookAndFeel(nullptr);
 }
 
 void AuroraEditor::rebuildPresetList() {
