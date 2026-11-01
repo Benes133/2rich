@@ -430,10 +430,14 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addChoice(sampleTargetKeyBox, { "AUTO / SOURCE KEY", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, "sampleTargetKey");
     addChoice(grainTargetKeyBox, { "AUTO / SOURCE KEY", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, "grainTargetKey");
     addChoice(grainSyncDivisionBox, { "1/16", "1/8", "1/4", "1/2", "1 BAR", "2 BARS" }, "grainSyncDivision");
-    addChoice(granularPresetBox, { "Init Grain", "Glass Dust", "Cloud Choir", "Molecular Strings",
-        "Time Stretch", "Frozen Bells", "Granular Rain", "Reverse Nebula", "Ambient Grainfield",
-        "Pitch Fracture", "Microphonic", "Tape Memory", "Shimmer Motion", "Broken Texture",
-        "Digital Sand", "Harmonic Drift", "Cinematic Cloud" }, "grainPresetNotAParam");
+    granularPresetBox.setLookAndFeel(&richLook);
+    granularPresetBox.setColour(juce::ComboBox::textColourId, white);
+    granularPresetBox.setColour(juce::ComboBox::arrowColourId, violetHi);
+    granularPresetBox.addItemList({ "INIT GRAIN", "GLASS DUST", "CLOUD CHOIR", "MOLECULAR STRINGS",
+        "TIME STRETCH", "FROZEN BELLS", "GRANULAR RAIN", "REVERSE NEBULA", "AMBIENT GRAINFIELD",
+        "PITCH FRACTURE", "MICROPHONIC", "TAPE MEMORY", "SHIMMER MOTION", "BROKEN TEXTURE",
+        "DIGITAL SAND", "HARMONIC DRIFT", "CINEMATIC CLOUD" }, 1);
+    addAndMakeVisible(granularPresetBox);
     const juce::StringArray fxTypeNames = { "Off", "Compressor", "Saturation", "Phaser",
         "Ping-Pong", "Reverb", "Chorus", "Multiband Dist.", "Limiter",
         "Bitcrusher", "Stereo Width", "Tremolo", "Ring Mod", "Filter", "Flanger" };
