@@ -914,7 +914,6 @@ void AuroraEditor::paint(juce::Graphics& g) {
         label(52,538,140,"MODE");label(200,538,130,"ARP ORDER");label(338,538,100,"RATE");label(446,538,130,"DIRECTION");
         label(584,538,110,"LENGTH");label(704,538,140,"OCTAVES");label(852,538,140,"GLOBAL GATE");label(1000,538,150,"SWING");
         label(580,586,330,"PITCH");label(580,628,330,"VELOCITY");label(580,670,330,"STEP GATE");
-        label(580,578,330,"PITCH");label(580,612,330,"VELOCITY");label(580,646,330,"STEP GATE");
         const int pageOffset=seqPageBox.getSelectedId()==2?16:0;
         if(lastActiveStep>=pageOffset&&lastActiveStep<pageOffset+16){
             const int local=lastActiveStep-pageOffset,x=52+(local%8)*61,y=610+(local/8)*34;
