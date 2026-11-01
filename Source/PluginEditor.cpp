@@ -269,7 +269,16 @@ void AuroraEditor::resized() {
     place(wtTable,{65,230,220,34});place(wtPosition,{70,340,160,155});place(unison,{300,340,145,155});place(uniDetune,{485,340,145,155});place(uniSpread,{670,340,145,155});
     juce::Slider* fx[]={&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb};
     for(int i=0;i<9;++i)place(*fx[i],{55+(i%5)*165,220+(i/5)*175,145,150});
-    if(currentPage!=0){for(auto* c:{(juce::Component*)&mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,&wave1,&wave2})c->setVisible(false);}
-    if(currentPage!=1){for(auto* c:{(juce::Component*)&wtTable,&wtPosition,&unison,&uniDetune,&uniSpread})c->setVisible(false);}
-    if(currentPage!=2){for(auto* c:{(juce::Component*)&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb})c->setVisible(false);}
+    if(currentPage!=0){
+        juce::Component* synthControls[] = {&mix,&detune,&sub,&cutoff,&res,&attack,&decay,&sustain,&release,&master,&drive,&width,&wave1,&wave2};
+        for(auto* c : synthControls) c->setVisible(false);
+    }
+    if(currentPage!=1){
+        juce::Component* wtControls[] = {&wtTable,&wtPosition,&unison,&uniDetune,&uniSpread};
+        for(auto* c : wtControls) c->setVisible(false);
+    }
+    if(currentPage!=2){
+        juce::Component* fxControls[] = {&fxEq,&fxLow,&fxMid,&fxHigh,&fxDist,&fxChorus,&fxFlange,&fxDelay,&fxReverb};
+        for(auto* c : fxControls) c->setVisible(false);
+    }
 }
