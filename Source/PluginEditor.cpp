@@ -772,8 +772,99 @@ void AuroraEditor::applyPreset(int id) {
         {0,1,5,.58f,38,.28f,1700,.68f,.003f,.38f,.48f,.72f,.76f,.72f,.86f,7,42,1.0f,.48f,.42f,3,4,.72f,.25f,.48f,.30f,.24f,0.0f},
         {3,0,4,.46f,13,.16f,4600,.26f,.45f,2.6f,.86f,4.6f,.76f,.14f,.94f,6,30,1.0f,.70f,.30f,2,3,.14f,.58f,.30f,.48f,.70f,0.0f}
     };
-    if (id < 1 || id > (int)std::size(patches)) return;
-    const auto& p = patches[id - 1];
+    if (id < 1 || id > 500) return;
+    Patch generated{};
+    const Patch* selectedPatch = nullptr;
+    int generatedGroup = -1;
+    int oscillatorMode = 0;
+    uint32_t seed = (uint32_t)id * 0x9e3779b9u + 0x6d2b79f5u;
+    auto random01 = [&seed]() {
+        seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+        return (float)(seed & 0x00ffffffu) / 16777215.0f;
+    };
+    auto randomRange = [&random01](float low, float high) {
+        return low + (high - low) * random01();
+    };
+
+    if (id <= (int)std::size(patches)) {
+        selectedPatch = &patches[id - 1];
+    } else {
+        generatedGroup = juce::jlimit(0, 9, (id - 26) / 50);
+        auto& p = generated;
+        p.w1=(int)randomRange(0.0f,4.0f);p.w2=(int)randomRange(0.0f,4.0f);p.table=(int)randomRange(0.0f,6.0f);
+        p.mix=randomRange(0.18f,0.78f);p.detune=randomRange(2.0f,28.0f);p.sub=randomRange(0.0f,0.34f);
+        p.cutoff=randomRange(1600.0f,14500.0f);p.res=randomRange(0.08f,0.58f);
+        p.attack=0.005f;p.decay=0.35f;p.sustain=0.55f;p.release=0.35f;
+        p.master=randomRange(0.68f,0.84f);p.drive=randomRange(0.0f,0.28f);p.width=randomRange(0.55f,1.0f);
+        p.voices=randomRange(1.0f,5.0f);p.uniDetune=randomRange(5.0f,28.0f);p.uniSpread=randomRange(0.25f,1.0f);
+        p.position=random01();p.eq=randomRange(0.05f,0.55f);
+        p.low=randomRange(-2.0f,2.0f);p.mid=randomRange(-2.5f,2.5f);p.high=randomRange(-2.0f,3.0f);
+        p.fxDist=randomRange(0.0f,0.35f);p.chorus=randomRange(0.0f,0.48f);
+        p.flange=randomRange(0.0f,0.42f);p.delay=randomRange(0.0f,0.42f);p.reverb=randomRange(0.0f,0.55f);
+        switch (generatedGroup) {
+            case 0: // Leads
+                p.attack=randomRange(0.001f,0.035f);p.decay=randomRange(0.12f,0.55f);
+                p.sustain=randomRange(0.48f,0.86f);p.release=randomRange(0.12f,0.65f);
+                p.cutoff=randomRange(4200.0f,15500.0f);p.voices=randomRange(1.0f,4.0f);
+                p.reverb=randomRange(0.03f,0.22f);p.delay=randomRange(0.08f,0.38f);break;
+            case 1: // Pads
+                p.attack=randomRange(0.35f,3.2f);p.decay=randomRange(1.0f,4.0f);
+                p.sustain=randomRange(0.68f,0.98f);p.release=randomRange(1.8f,5.0f);
+                p.cutoff=randomRange(1800.0f,9000.0f);p.voices=randomRange(4.0f,7.0f);
+                p.uniSpread=randomRange(0.72f,1.0f);p.reverb=randomRange(0.35f,0.78f);
+                p.chorus=randomRange(0.24f,0.62f);break;
+            case 2: // Atmospheres
+                p.attack=randomRange(0.8f,4.0f);p.decay=randomRange(1.5f,4.0f);
+                p.sustain=randomRange(0.72f,1.0f);p.release=randomRange(2.8f,5.0f);
+                p.cutoff=randomRange(900.0f,7200.0f);p.voices=randomRange(4.0f,7.0f);
+                p.position=randomRange(0.2f,0.9f);p.reverb=randomRange(0.48f,0.88f);
+                p.chorus=randomRange(0.25f,0.68f);p.delay=randomRange(0.12f,0.42f);oscillatorMode=4;break;
+            case 3: // Keys
+                p.attack=randomRange(0.001f,0.025f);p.decay=randomRange(0.18f,0.85f);
+                p.sustain=randomRange(0.18f,0.58f);p.release=randomRange(0.12f,0.8f);
+                p.cutoff=randomRange(4800.0f,16000.0f);p.voices=randomRange(1.0f,3.0f);
+                p.reverb=randomRange(0.08f,0.32f);break;
+            case 4: // Piano family
+                p.w1=3;p.w2=2;p.table=4;p.mix=randomRange(0.25f,0.62f);
+                p.attack=0.001f;p.decay=randomRange(0.75f,2.1f);p.sustain=randomRange(0.04f,0.32f);
+                p.release=randomRange(0.45f,1.8f);p.cutoff=randomRange(6500.0f,17000.0f);
+                p.voices=1.0f;p.uniSpread=0.0f;p.drive=randomRange(0.0f,0.12f);
+                p.reverb=randomRange(0.12f,0.42f);oscillatorMode=1;break;
+            case 5: // Plucks
+                p.attack=0.001f;p.decay=randomRange(0.14f,0.85f);p.sustain=randomRange(0.02f,0.28f);
+                p.release=randomRange(0.12f,0.72f);p.cutoff=randomRange(5200.0f,17000.0f);
+                p.voices=randomRange(1.0f,3.0f);p.reverb=randomRange(0.08f,0.38f);
+                p.delay=randomRange(0.0f,0.28f);p.sub=0.0f;break;
+            case 6: // Bass
+                p.attack=0.001f;p.decay=randomRange(0.12f,0.6f);p.sustain=randomRange(0.45f,0.9f);
+                p.release=randomRange(0.08f,0.38f);p.cutoff=randomRange(280.0f,4200.0f);
+                p.res=randomRange(0.18f,0.78f);p.voices=randomRange(1.0f,2.0f);
+                p.uniSpread=randomRange(0.0f,0.32f);p.sub=randomRange(0.28f,0.72f);
+                p.drive=randomRange(0.12f,0.62f);p.reverb=randomRange(0.0f,0.12f);
+                p.chorus=randomRange(0.0f,0.14f);oscillatorMode=random01()>0.55f?2:0;break;
+            case 7: // Hybrid synths
+                p.attack=randomRange(0.001f,1.0f);p.decay=randomRange(0.2f,2.0f);
+                p.sustain=randomRange(0.25f,0.86f);p.release=randomRange(0.2f,2.0f);
+                p.voices=randomRange(2.0f,7.0f);p.uniSpread=randomRange(0.55f,1.0f);
+                p.reverb=randomRange(0.05f,0.42f);p.chorus=randomRange(0.08f,0.48f);
+                oscillatorMode=(int)randomRange(0.0f,5.0f);break;
+            case 8: // Sound design
+                p.attack=randomRange(0.001f,1.5f);p.decay=randomRange(0.15f,3.5f);
+                p.sustain=randomRange(0.05f,0.8f);p.release=randomRange(0.2f,4.0f);
+                p.cutoff=randomRange(350.0f,15000.0f);p.drive=randomRange(0.2f,0.85f);
+                p.reverb=randomRange(0.18f,0.75f);p.delay=randomRange(0.15f,0.72f);
+                p.flange=randomRange(0.2f,0.68f);oscillatorMode=(int)randomRange(0.0f,5.0f);break;
+            case 9: // Textures
+                p.attack=randomRange(0.4f,3.8f);p.decay=randomRange(1.0f,4.0f);
+                p.sustain=randomRange(0.55f,1.0f);p.release=randomRange(2.2f,5.0f);
+                p.cutoff=randomRange(600.0f,11000.0f);p.voices=randomRange(3.0f,7.0f);
+                p.position=random01();p.reverb=randomRange(0.35f,0.82f);
+                p.chorus=randomRange(0.18f,0.62f);oscillatorMode=4;break;
+            default: break;
+        }
+        selectedPatch = &generated;
+    }
+    const auto& p = *selectedPatch;
     auto set = [this](const char* key, float value) {
         if (auto* parameter = proc.params.getParameter(key))
             parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
@@ -788,12 +879,46 @@ void AuroraEditor::applyPreset(int id) {
     set("fxEq",p.eq); set("fxLow",p.low); set("fxMid",p.mid); set("fxHigh",p.high);
     set("fxDist",p.fxDist); set("fxChorus",p.chorus); set("fxFlange",p.flange);
     set("fxDelay",p.delay); set("fxReverb",p.reverb);
-    set("fxSlot1", (p.drive > 0.01f || p.fxDist > 0.01f) ? 2.0f : 0.0f);
-    set("fxSlot2", 1.0f);
-    set("fxSlot3", p.flange > 0.01f ? 3.0f : 0.0f);
-    set("fxSlot4", p.delay > 0.01f ? 4.0f : 0.0f);
-    set("fxSlot5", p.reverb > 0.01f ? 5.0f : 0.0f);
-    set("fxSlot6", p.chorus > 0.01f ? 6.0f : 0.0f);
+    if (generatedGroup < 0) {
+        set("fxSlot1", (p.drive > 0.01f || p.fxDist > 0.01f) ? 2.0f : 0.0f);
+        set("fxSlot2", 1.0f);
+        set("fxSlot3", p.flange > 0.01f ? 3.0f : 0.0f);
+        set("fxSlot4", p.delay > 0.01f ? 4.0f : 0.0f);
+        set("fxSlot5", p.reverb > 0.01f ? 5.0f : 0.0f);
+        set("fxSlot6", p.chorus > 0.01f ? 6.0f : 0.0f);
+    } else {
+        set("fxSlot1", p.fxDist > 0.16f ? 2.0f : (generatedGroup == 8 ? 9.0f : 0.0f));
+        set("fxSlot2", p.reverb > 0.22f ? 5.0f : 0.0f);
+        set("fxSlot3", p.chorus > 0.16f ? 6.0f : 0.0f);
+        set("fxSlot4", p.delay > 0.18f ? 4.0f : 0.0f);
+        set("fxSlot5", generatedGroup == 8 ? (id % 2 == 0 ? 14.0f : 12.0f) : 0.0f);
+        set("fxSlot6", p.flange > 0.22f ? 3.0f : 0.0f);
+    }
+    set("sampleMode", 0.0f);
+    set("oscMode", (float)oscillatorMode);
+    set("fmAmount", generatedGroup == 4 ? 3.2f : randomRange(0.5f, 5.0f));
+    set("syncRatio", randomRange(1.5f, 5.0f));
+    set("fxCompEnabled", generatedGroup == 6 && p.drive > 0.3f ? 1.0f : 0.0f);
+    set("fxSatTone", randomRange(-0.25f, 0.25f));
+    set("fxSatMix", 0.85f);
+    set("fxPhaserFeedback", randomRange(0.08f, 0.48f));
+    set("fxPingTone", randomRange(0.35f, 0.85f));
+    set("fxReverbWidth", randomRange(0.65f, 1.0f));
+    set("fxChorusRate", randomRange(0.08f, 1.2f));
+    set("fxChorusDepth", randomRange(0.2f, 0.85f));
+    set("fxChorusWidth", randomRange(0.3f, 1.0f));
+    set("fxFlangerRate", randomRange(0.08f, 1.5f));
+    set("fxFlangerDepth", randomRange(0.15f, 0.75f));
+    set("fxFlangerFeedback", randomRange(-0.3f, 0.55f));
+    set("fxFlangerTime", randomRange(1.0f, 8.0f));
+    set("fxFlangerMix", p.flange);
+    set("fxTremRate", randomRange(2.0f, 9.0f));
+    set("fxTremDepth", generatedGroup == 8 ? randomRange(0.2f,0.8f) : 0.4f);
+    set("fxRingFreq", randomRange(70.0f, 900.0f));
+    set("fxRingMix", generatedGroup == 8 ? randomRange(0.2f,0.75f) : 0.0f);
+    set("fxBitDepth", randomRange(5.0f, 12.0f));
+    set("fxBitRate", randomRange(2.0f, 12.0f));
+    set("fxBitMix", generatedGroup == 8 ? randomRange(0.25f,0.75f) : 0.0f);
 
     // Keep factory patches predictable: modulation is opt-in unless a patch explicitly defines it.
     set("filterEnvAmount", 0.0f);
