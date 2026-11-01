@@ -211,6 +211,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     presetCategoryFilter.setColour(juce::ComboBox::arrowColourId, violetHi);
     presetCategoryFilter.addItemList({ "ALL SOUNDS", "LEADS", "PADS", "ATMOSPHERES",
         "KEYS", "PIANOS", "PLUCKS", "BASS", "SYNTHS", "SOUND FX", "TEXTURES", "FX & SYNTH" }, 1);
+    presetCategoryFilter.setSelectedId(1, juce::dontSendNotification);
     presetCategoryFilter.onChange = [this] { rebuildPresetList(); };
     addAndMakeVisible(presetCategoryFilter);
     presetBrowserList.setModel(this);
