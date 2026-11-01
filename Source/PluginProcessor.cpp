@@ -50,14 +50,17 @@ public:
             sampleEnd = (int)sampleAsset->left.size();
             const bool sliceMode = processor->params.getRawParameterValue("sampleSliceMode")->load() > 0.5f;
             const int sliceCount = (int)sampleAsset->sliceStarts.size() - 1;
-            if (sliceMode && sliceCount > 1) {
+            const bool mappedSlice = sliceMode && sliceCount > 1;
+            if (mappedSlice) {
                 const int sliceIndex = juce::jlimit(0, sliceCount - 1, note - 36);
                 sampleStart = sampleAsset->sliceStarts[(size_t)sliceIndex];
                 sampleEnd = sampleAsset->sliceStarts[(size_t)sliceIndex + 1];
             }
             const float rootNote = processor->params.getRawParameterValue("sampleRootNote")->load();
+            // Slice keys select regions; they do not transpose each region by the keyboard's C2-based index.
+            const double semitoneOffset = mappedSlice ? 0.0 : (double)note - (double)rootNote;
             sampleIncrement = sampleAsset->sampleRate / srForNote()
-                * std::pow(2.0, ((double)note - (double)rootNote) / 12.0);
+                * std::pow(2.0, semitoneOffset / 12.0);
             samplePosition = (double)sampleStart;
             samplePlaying = sampleEnd > sampleStart + 1;
         }
