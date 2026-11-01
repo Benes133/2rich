@@ -17,7 +17,11 @@ private:
     juce::ComboBox wave1, wave2, presets, wtTable;
     juce::Slider wtPosition, unison, uniDetune, uniSpread;
     juce::Slider fxEq, fxLow, fxMid, fxHigh, fxDist, fxChorus, fxFlange, fxDelay, fxReverb;
-    juce::TextButton synthTab{"SYNTH"}, wtTab{"WAVETABLE"}, fxTab{"FX"}, modTab{"MOD"};
+    juce::TextButton synthTab{"SYNTH"}, wtTab{"WAVETABLE"}, fxTab{"FX"}, modTab{"MOD"}, seqTab{"SEQ"};
+    juce::ComboBox seqModeBox, arpStyleBox, seqRateBox;
+    juce::Slider seqOctaves, seqGate, seqSwing;
+    std::array<juce::TextButton, 16> stepButtons;
+    std::array<juce::Slider, 16> stepPitchSliders;
     juce::Slider lfo1Rate, lfo2Rate, filterAttack, filterDecay, filterSustain, filterRelease, filterEnvAmount;
     juce::ComboBox lfo1Shape, lfo2Shape;
     std::array<juce::ComboBox, 4> modSources, modTargets;
@@ -26,8 +30,10 @@ private:
 
     using Attach = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ChoiceAttach = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+    using ButtonAttach = juce::AudioProcessorValueTreeState::ButtonAttachment;
     std::vector<std::unique_ptr<Attach>> attachments;
     std::vector<std::unique_ptr<ChoiceAttach>> choiceAttachments;
+    std::array<std::unique_ptr<ButtonAttach>, 16> stepButtonAttachments;
     std::unique_ptr<ChoiceAttach> aWave1, aWave2, aWtTable;
 
     void addKnob(juce::Slider&, const juce::String&, const juce::String&);
