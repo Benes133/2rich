@@ -63,6 +63,9 @@ AuroraProcessor::APVTS::ParameterLayout AuroraProcessor::createLayout(){
  p.add(std::make_unique<juce::AudioParameterFloat>("decay","Decay",juce::NormalisableRange<float>(.01f,4.f,.001f,.4f),.2f));
  p.add(std::make_unique<juce::AudioParameterFloat>("sustain","Sustain",juce::NormalisableRange<float>(0,1,.001f),.75f));
  p.add(std::make_unique<juce::AudioParameterFloat>("release","Release",juce::NormalisableRange<float>(.01f,5.f,.001f,.4f),.3f));
+ p.add(std::make_unique<juce::AudioParameterFloat>("master","Master",juce::NormalisableRange<float>(0.f,1.f,.001f),.8f));
+ p.add(std::make_unique<juce::AudioParameterFloat>("drive","Drive",juce::NormalisableRange<float>(0.f,1.f,.001f),0.f));
+ p.add(std::make_unique<juce::AudioParameterFloat>("width","Stereo Width",juce::NormalisableRange<float>(0.f,1.f,.001f),.5f));
  return p;
 }
 void AuroraProcessor::prepareToPlay(double sr,int){synth.setCurrentPlaybackSampleRate(sr);filter.prepare({sr,512,2});filter.setType(juce::dsp::StateVariableTPTFilterType::lowpass);}
@@ -70,7 +73,24 @@ bool AuroraProcessor::isBusesLayoutSupported(const BusesLayout& l)const{return l
 void AuroraProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBuffer& m){
  juce::ScopedNoDenormals no; b.clear();synth.renderNextBlock(b,m,0,b.getNumSamples());
  filter.setCutoffFrequency(params.getRawParameterValue("cutoff")->load());filter.setResonance(params.getRawParameterValue("res")->load());
+ const float drive = params.getRawParameterValue("drive")->load();
+ if (drive > 0.001f) {
+  const float gain = 1.0f + drive * 12.0f;
+  for (int ch=0; ch<b.getNumChannels(); ++ch)
+   for (int i=0; i<b.getNumSamples(); ++i)
+    b.setSample(ch,i,std::tanh(b.getSample(ch,i)*gain)/std::tanh(gain));
+ }
  juce::dsp::AudioBlock<float> block(b);filter.process(juce::dsp::ProcessContextReplacing<float>(block));
+ const float master = params.getRawParameterValue("master")->load();
+ b.applyGain(master);
+ if (b.getNumChannels() > 1) {
+  const float width = params.getRawParameterValue("width")->load();
+  for (int i=0;i<b.getNumSamples();++i) {
+   const float mid=(b.getSample(0,i)+b.getSample(1,i))*0.5f;
+   const float side=(b.getSample(0,i)-b.getSample(1,i))*0.5f*width*2.0f;
+   b.setSample(0,i,mid+side); b.setSample(1,i,mid-side);
+  }
+ }
 }
 void AuroraProcessor::getStateInformation(juce::MemoryBlock& d){auto x=params.copyState().createXml();copyXmlToBinary(*x,d);}
 void AuroraProcessor::setStateInformation(const void* d,int n){std::unique_ptr<juce::XmlElement>x(getXmlFromBinary(d,n));if(x&&x->hasTagName(params.state.getType()))params.replaceState(juce::ValueTree::fromXml(*x));}
