@@ -1844,6 +1844,23 @@ bool AuroraProcessor::loadSampleFromFile(const juce::File& file, juce::String& e
     asset->rootMidiNote = 60 + bestRoot;
     asset->keyName = juce::String(noteNames[bestRoot]) + (bestMinor ? " minor" : " major");
 
+    // Build the 10 ms RMS energy envelope used by both tempo estimation and slicing.
+    const int analysisWindow = juce::jmax(1, (int)std::round(reader->sampleRate * 0.01));
+    std::vector<float> rms;
+    rms.reserve((size_t)(frames / analysisWindow + 1));
+    float maximumRms = 0.0f;
+    for (int windowStart = 0; windowStart < frames; windowStart += analysisWindow) {
+        const int windowEnd = juce::jmin(frames, windowStart + analysisWindow);
+        double energy = 0.0;
+        for (int i = windowStart; i < windowEnd; ++i) {
+            const float mono = 0.5f * (asset->left[(size_t)i] + asset->right[(size_t)i]);
+            energy += (double)mono * (double)mono;
+        }
+        const float level = (float)std::sqrt(energy / (double)juce::jmax(1, windowEnd - windowStart));
+        rms.push_back(level);
+        maximumRms = juce::jmax(maximumRms, level);
+    }
+
     // 10 ms onset envelope: positive RMS rises are more useful for tempo
     // estimation than the raw energy curve.
     std::vector<float> onset(rms.size(), 0.0f);
