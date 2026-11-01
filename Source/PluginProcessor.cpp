@@ -8,7 +8,7 @@ public: bool appliesToNote(int) override{return true;} bool appliesToChannel(int
 class AuroraProcessor::Voice final : public juce::SynthesiserVoice {
 public:
  bool canPlaySound(juce::SynthesiserSound* s) override{return dynamic_cast<AuroraSound*>(s)!=nullptr;}
- void startNote(int note,float velocity,juce::SynthesiserSound*,int) override{hz=juce::MidiMessage::getMidiNoteInHertz(note);vel=velocity;phase1=phase2=0;env=0;stage=1;}
+ void startNote(int note,float velocity,juce::SynthesiserSound*,int) override{hz=juce::MidiMessage::getMidiNoteInHertz(note);vel=velocity;for(auto& ph:phase1)ph=0;for(auto& ph:phase2)ph=0;env=0;stage=1;}
  void stopNote(float,bool tail) override{if(tail)stage=4;else{clearCurrentNote();env=0;}}
  void pitchWheelMoved(int) override{} void controllerMoved(int,int) override{}
  void renderNextBlock(juce::AudioBuffer<float>& b,int start,int count) override{
@@ -32,7 +32,7 @@ public:
     const float pan=norm*spread*.85f;
     left+=sample*std::sqrt(.5f*(1.0f-pan))*vel*env;
     right+=sample*std::sqrt(.5f*(1.0f+pan))*vel*env;
-    juce::ignoreUnused(ratio2);
+    phase1[u]+=juce::MathConstants<double>::twoPi*freq1/sr;\n    phase2[u]+=juce::MathConstants<double>::twoPi*freq2/sr;\n    phase1[u]=std::fmod(phase1[u],juce::MathConstants<double>::twoPi);\n    phase2[u]=std::fmod(phase2[u],juce::MathConstants<double>::twoPi);
    }
    const float gain=.22f/std::sqrt((float)voices);
    b.addSample(0,start+i,left*gain);if(b.getNumChannels()>1)b.addSample(1,start+i,right*gain);
@@ -51,7 +51,7 @@ private:
   switch(table){case 1:a=square;b=tri;break;case 2:a=tri;b=sine;break;case 3:a=saw;b=square;break;case 4:a=sine;b=std::sin(x*juce::MathConstants<float>::twoPi*2.0f);break;case 5:a=saw;b=std::tanh(saw*3.0f);break;default:a=basic(type);b=basic(type==0?3:0);break;}
   return juce::jmap(pos,a,b);
  }
- AuroraProcessor* processor=nullptr;double hz=440,phase1=0,phase2=0;float vel=0,env=0;int stage=0;
+ AuroraProcessor* processor=nullptr;double hz=440;std::array<double,7> phase1{},phase2{};float vel=0,env=0;int stage=0;
 };
 AuroraProcessor::AuroraProcessor():AudioProcessor(BusesProperties().withOutput("Output",juce::AudioChannelSet::stereo(),true)),params(*this,nullptr,"PARAMS",createLayout()){
  for(int i=0;i<16;++i){auto* v=new Voice();v->setProcessor(this);synth.addVoice(v);}synth.addSound(new AuroraSound());
