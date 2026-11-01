@@ -904,10 +904,11 @@ void AuroraEditor::timerCallback() {
 }
 
 void AuroraEditor::setPage(int page) {
-    currentPage=juce::jlimit(0,2,page);
+    currentPage=juce::jlimit(0,3,page);
     synthTab.setToggleState(currentPage==0,juce::dontSendNotification);
     wtTab.setToggleState(currentPage==1,juce::dontSendNotification);
     fxTab.setToggleState(currentPage==2,juce::dontSendNotification);
+    sampleTab.setToggleState(currentPage==3,juce::dontSendNotification);
     modTab.setVisible(false); seqTab.setVisible(false);
     auto show=[](std::initializer_list<juce::Component*> list,bool visible){
         for(auto* c:list)c->setVisible(visible);
@@ -927,6 +928,7 @@ void AuroraEditor::setPage(int page) {
           &stepAccentButton,&savePatternButton,&loadPatternButton,&selectedStepLabel,&patternStatusLabel},currentPage==1);
     for(auto& b:stepButtons)b.setVisible(currentPage==1);
     updateFxEditor();
+    updateSampleEditor();
     if(currentPage==1)refreshSelectedStepControls();
     startTimerHz(30); repaint(); resized();
 }
@@ -988,6 +990,29 @@ void AuroraEditor::updateFxEditor() {
         case 14: showExtra({ fxFlangerRate, fxFlangerDepth, fxFlangerFeedback, fxFlangerTime, fxFlangerMix }); break;
         default: break;
     }
+}
+
+void AuroraEditor::updateSampleEditor() {
+    const bool visible = currentPage == 3;
+    for (juce::Component* component : std::array<juce::Component*, 12>{
+            &sampleLoadButton, &sampleClearButton, &sampleSliceButton, &sampleModeBox,
+            &sampleRootNote, &sampleMix, &grainSize, &grainDensity,
+            &grainPosition, &grainSpray, &grainPitch, &sampleStatusLabel })
+        component->setVisible(visible);
+}
+
+void AuroraEditor::updateSampleStatus() {
+    const auto sample = proc.getSampleAsset();
+    if (!sample) {
+        sampleStatusLabel.setText("NO AUDIO LOADED  /  IMPORT A WAV OR AIFF LOOP OR SONG",
+                                  juce::dontSendNotification);
+        return;
+    }
+    const int sliceCount = juce::jmax(0, (int)sample->sliceStarts.size() - 1);
+    sampleStatusLabel.setText("FILE: " + sample->fileName + "   /   DETECTED KEY: "
+        + sample->keyName + "   /   " + juce::String(sliceCount) + " SLICES"
+        + (sample->left.size() >= 10000000u ? "   /   FIRST 10M FRAMES LOADED" : ""),
+        juce::dontSendNotification);
 }
 
 void AuroraEditor::parameterChanged(const juce::String& parameterID, float) {
