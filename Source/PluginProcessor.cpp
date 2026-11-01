@@ -545,11 +545,17 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
 
+    // Some hosts may briefly call the processor while reconfiguring I/O.
+    // Never run stateful DSP with an invalid rate, empty block, or non-stereo bus.
+    const int samples = buffer.getNumSamples();
+    if (samples <= 0 || buffer.getNumChannels() != 2
+        || !std::isfinite(sampleRate) || sampleRate < 1000.0)
+        return;
+
     auto value = [this](const char* id) {
         return params.getRawParameterValue(id)->load();
     };
 
-    const int samples = buffer.getNumSamples();
     if ((int)lfo1Block.size() < samples) lfo1Block.resize((size_t)samples);
     if ((int)lfo2Block.size() < samples) lfo2Block.resize((size_t)samples);
     if ((int)lfo3Block.size() < samples) lfo3Block.resize((size_t)samples);
@@ -939,6 +945,11 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         auto& slotBuffer = fxDelayBuffers[(size_t)slot];
         const int slotSize = (int)slotBuffer[0].size();
         int& write = fxDelayWrites[(size_t)slot];
+        // Delay-based inserts must be bypassed until prepareToPlay has allocated
+        // their ring buffers. This also avoids invalid modulo/tap ranges during host reconfiguration.
+        if (slotSize <= 1 || slotBuffer[1].size() != slotBuffer[0].size())
+            continue;
+        write = juce::jlimit(0, slotSize - 1, write);
         for (int i = 0; i < samples; ++i) {
             const float dryLeft = buffer.getSample(0, i);
             const float dryRight = buffer.getSample(1, i);
@@ -960,17 +971,10 @@ void AuroraProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
                     }
                     break;
                 }
-                case 2: { // Saturation with tone tilt and parallel blend.
-                    for (int ch = 0; ch < 2; ++ch) {
-                        const float input = ch == 0 ? dryLeft : dryRight;
-                        auto& toneState = multibandLowStates[(size_t)slot][(size_t)ch];
-                        toneState = (1.0f - satToneCoeff) * input + satToneCoeff * toneState;
-                        const float toned = toneState + (input - toneState) * satToneGain;
-                        const float shaped = saturation > 0.001f
-                            ? std::tanh(toned * saturationGain) / saturationNormaliser : toned;
-                        const float output = juce::jmap(satMix, input, shaped);
-                        if (ch == 0) left = output;
-                        else right = output;
+                case 2: { // Saturation. Keep the lightweight, allocation-free original path.
+                    if (saturation > 0.001f) {
+                        left = std::tanh(left * saturationGain) / saturationNormaliser;
+                        right = std::tanh(right * saturationGain) / saturationNormaliser;
                     }
                     break;
                 }
