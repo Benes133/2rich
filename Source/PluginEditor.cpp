@@ -1170,7 +1170,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
         }
         const int selectedX=52+(selectedStep%8)*61,selectedY=610+(selectedStep/8)*34;
         g.setColour(violet.withAlpha(0.95f));g.drawRoundedRectangle((float)selectedX-1.5f,(float)selectedY-1.5f,57,31,4,1.4f);
-    }else{
+    }else if(currentPage==2){
         panel(32,128,300,598,"FX RACK","SIGNAL FLOW / TOP TO BOTTOM");
         panel(348,128,820,420,"MODULE EDITOR","SELECT AN INSERT TO EDIT ITS CONTROLS");
         panel(348,560,820,166,"MASTER EQ","GLOBAL TONE SHAPING AFTER THE FX CHAIN");
@@ -1230,11 +1230,71 @@ void AuroraEditor::paint(juce::Graphics& g) {
             default: break;
         }
         label(420,636,150,"EQ AMOUNT");label(600,636,150,"LOW");label(780,636,150,"MID");label(960,636,150,"HIGH");
+    } else {
+        panel(32,128,1136,598,"SAMPLE LAB","AUDIO SLICER  /  KEY DETECTION  /  GRANULAR ENGINE");
+        label(52,190,180,"AUDIO SOURCE");
+        label(250,190,870,"FILE / KEY ANALYSIS / AUTOMATIC SLICE COUNT");
+        label(52,258,220,"PLAYBACK ENGINE");
+        label(310,258,210,"ROOT NOTE  /  AUTO KEY");
+        label(550,258,200,"SAMPLE LEVEL");
+        label(800,258,250,"SLICE TRIGGER MAP");
+        label(52,507,110,"GRAIN SIZE");
+        label(178,507,110,"DENSITY");
+        label(304,507,110,"POSITION");
+        label(430,507,110,"SPRAY");
+        label(556,507,110,"PITCH");
+
+        juce::ColourGradient sampleScreen(juce::Colour(0xff080d13),52,330,
+                                           juce::Colour(0xff151c27),52,480,false);
+        g.setGradientFill(sampleScreen);
+        g.fillRoundedRectangle(52,330,1096,150,6);
+        g.setColour(juce::Colour(0xff778393).withAlpha(0.55f));
+        g.drawRoundedRectangle(52.5f,330.5f,1095,149,6,0.8f);
+        for(int i=1;i<16;++i){
+            const float gx=52.0f+(float)i*1096.0f/16.0f;
+            g.setColour(juce::Colour(0xff8793a2).withAlpha(0.16f));
+            g.drawLine(gx,340,gx,470,0.55f);
+        }
+        g.setColour(juce::Colour(0xff8793a2).withAlpha(0.28f));
+        g.drawLine(60,405,1140,405,0.7f);
+        if (const auto sample = proc.getSampleAsset(); sample && !sample->thumbnail.empty()) {
+            const float centerY = 405.0f;
+            for (size_t i = 0; i < sample->thumbnail.size(); ++i) {
+                const float x = 60.0f + (float)i * 1078.0f / (float)sample->thumbnail.size();
+                const float amplitude = juce::jlimit(0.0f,1.0f,sample->thumbnail[i]) * 61.0f;
+                g.setColour(violetHi.withAlpha(0.72f));
+                g.drawLine(x,centerY-amplitude,x,centerY+amplitude,1.0f);
+            }
+            const int totalSamples = juce::jmax(1,(int)sample->left.size());
+            for (size_t slice = 1; slice + 1 < sample->sliceStarts.size(); ++slice) {
+                const float x = 60.0f + (float)sample->sliceStarts[slice] * 1078.0f / (float)totalSamples;
+                g.setColour(neon.withAlpha(0.9f));
+                g.drawLine(x,337,x,473,1.0f);
+                g.fillEllipse(x-2.5f,334.5f,5.0f,5.0f);
+            }
+            g.setColour(white);
+            g.setFont(juce::Font(juce::FontOptions(8.0f,juce::Font::bold)));
+            g.drawText(sample->keyName + "  /  " + juce::String(sample->sliceStarts.size()-1)
+                       + " SLICES  /  MIDI C2 AND UP",68,336,500,12,
+                       juce::Justification::centredLeft);
+        } else {
+            g.setColour(muted);
+            g.setFont(juce::Font(juce::FontOptions(12.0f,juce::Font::bold)));
+            g.drawFittedText("DROP A LOOP, VOCAL, DRUM BREAK OR FULL SONG HERE VIA LOAD AUDIO",
+                             80,385,1040,36,juce::Justification::centred,1);
+        }
+        g.setColour(juce::Colour(0xffa1a5ae).withAlpha(0.22f));
+        g.drawLine(52,492,1148,492,0.8f);
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(8.0f)));
+        g.drawFittedText("GRANULAR: overlapping windowed grains with position, density, size, spray and pitch controls. "
+                         "SAMPLER: MIDI slices from C2; detected root note sets pitch tracking.",
+                         690,540,450,100,juce::Justification::centredLeft,3);
     }
     g.setColour(juce::Colour(0xff9398a3).withAlpha(0.28f));g.drawLine(32,778,1168,778,0.8f);
     g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(7.8f,juce::Font::bold)));
     g.drawText("2RICH  /  TIMAUDIO",36,784,260,12,juce::Justification::centredLeft);
-    g.drawText("VOICE  /  MOTION  /  FX",850,784,318,12,juce::Justification::centredRight);
+    g.drawText("VOICE  /  MOTION  /  FX  /  SAMPLE",850,784,318,12,juce::Justification::centredRight);
 }
 
 void AuroraEditor::resized() {
