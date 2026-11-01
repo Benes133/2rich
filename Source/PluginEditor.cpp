@@ -361,6 +361,10 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     addExtra(lfo3Rate,"lfo3Rate","RATE");
     addExtra(filterAttack,"filterAttack","ATTACK"); addExtra(filterDecay,"filterDecay","DECAY");
     addExtra(filterSustain,"filterSustain","SUSTAIN"); addExtra(filterRelease,"filterRelease","RELEASE");
+    for (auto* slider : { &filterAttack, &filterDecay, &filterSustain, &filterRelease }) {
+        slider->setSliderStyle(juce::Slider::LinearHorizontal);
+        slider->setTextBoxStyle(juce::Slider::TextBoxRight, false, 32, 16);
+    }
     addExtra(filterEnvAmount,"filterEnvAmount","AMOUNT"); filterEnvAmount.setSliderStyle(juce::Slider::LinearHorizontal); filterEnvAmount.setTextBoxStyle(juce::Slider::TextBoxRight,false,42,18);
     addExtra(seqOctaves,"seqOctaves","OCTAVES");
     addExtra(seqGate,"seqGate","GATE");
@@ -895,8 +899,8 @@ void AuroraEditor::paint(juce::Graphics& g) {
         panel(32,128,272,178,"LFO 1","GLOBAL MODULATOR");panel(316,128,272,178,"LFO 2","GLOBAL MODULATOR");
         panel(600,128,272,178,"LFO 3","GLOBAL MODULATOR");panel(884,128,284,178,"FILTER ENVELOPE","PER-VOICE CUTOFF SHAPING");
         label(50,200,90,"RATE");label(150,200,122,"WAVE SHAPE");label(334,200,90,"RATE");label(434,200,122,"WAVE SHAPE");
-        label(618,200,90,"RATE");label(718,200,122,"WAVE SHAPE");label(900,200,54,"A");label(954,200,54,"D");
-        label(1008,200,54,"S");label(1062,200,54,"R");label(910,276,230,"FILTER ENV AMOUNT");
+        label(618,200,90,"RATE");label(718,200,122,"WAVE SHAPE");label(900,200,116,"ATTACK");label(1024,200,116,"DECAY");
+        label(900,235,116,"SUSTAIN");label(1024,235,116,"RELEASE");label(910,277,230,"FILTER ENV AMOUNT");
         panel(32,326,1136,140,"MODULATION MATRIX","FOUR ASSIGNABLE ROUTES  /  SOURCE TO TARGET");
         for(int i=0;i<4;++i){
             int x=48+i*282;
@@ -911,6 +915,7 @@ void AuroraEditor::paint(juce::Graphics& g) {
         panel(32,484,1136,242,"PERFORMANCE SEQUENCER","ARPEGGIATOR / 32 STEP PATTERN  /  HOST SYNC");
         label(52,536,140,"MODE");label(200,536,130,"ARP ORDER");label(338,536,100,"RATE");label(446,536,130,"DIRECTION");
         label(584,536,110,"LENGTH");label(704,536,140,"OCTAVES");label(852,536,140,"GLOBAL GATE");label(1000,536,150,"SWING");
+        label(580,578,330,"PITCH");label(580,612,330,"VELOCITY");label(580,646,330,"STEP GATE");
         const int pageOffset=seqPageBox.getSelectedId()==2?16:0;
         if(lastActiveStep>=pageOffset&&lastActiveStep<pageOffset+16){
             const int local=lastActiveStep-pageOffset,x=52+(local%8)*61,y=610+(local/8)*34;
@@ -959,9 +964,9 @@ void AuroraEditor::resized() {
     place(wavetableStatusLabel,{628,232,520,15});place(wtPosition,{628,393,520,23});
     place(filterTypeBox,{52,520,260,28});place(cutoff,{52,562,116,150});place(res,{184,562,116,150});
     place(attack,{368,535,100,172});place(decay,{480,535,100,172});place(sustain,{592,535,100,172});place(release,{704,535,100,172});
-    const int vx[3]={858,958,1058},vy[3]={518,584,650};
+    const int vx[3]={858,958,1058},vy[3]={524,592,660};
     juce::Slider* voice[9]={&mix,&detune,&sub,&unison,&uniDetune,&uniSpread,&master,&drive,&width};
-    for(int i=0;i<9;++i)place(*voice[i],{vx[i%3],vy[i/3],92,64});
+    for(int i=0;i<9;++i)place(*voice[i],{vx[i%3],vy[i/3],92,60});
 
     // MOTION: LFOs and filter envelope.
     place(lfo1Rate,{50,216,90,82});place(lfo1Shape,{150,224,122,30});
