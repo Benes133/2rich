@@ -162,6 +162,7 @@ AuroraEditor::AuroraEditor(AuroraProcessor& p) : AudioProcessorEditor(&p), proc(
     add(attack, "attack", "ATTACK"); add(decay, "decay", "DECAY");
     add(sustain, "sustain", "SUSTAIN"); add(release, "release", "RELEASE");
     add(master, "master", "MASTER"); add(drive, "drive", "DRIVE"); add(width, "width", "WIDTH");
+    setPage(0);
 }
 
 AuroraEditor::~AuroraEditor() {
