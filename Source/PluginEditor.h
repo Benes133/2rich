@@ -55,7 +55,7 @@ private:
     int selectedFxSlot = 0;
     juce::ToggleButton fxCompEnabledButton { "COMPRESSOR" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aFxCompEnabled;
-    juce::TextButton synthTab{"VOICE"}, wtTab{"MOTION"}, fxTab{"FX"}, sampleTabButton{"SAMPLE"}, modTab{"MOD"}, seqTab{"SEQ"};
+    juce::TextButton synthTab{"VOICE"}, wtTab{"MOTION"}, fxTab{"FX"}, modTab{"MOD"}, seqTab{"SEQ"};
     juce::ComboBox seqModeBox, arpStyleBox, seqRateBox, seqDirectionBox, seqLengthBox;
     juce::ComboBox seqPageBox, seqPatternSlotBox;
     juce::Slider seqOctaves, seqGate, seqSwing;
